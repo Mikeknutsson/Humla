@@ -1,6 +1,6 @@
 "use client";
 import {useRef,useState} from "react";
-import {createBrowserClient} from "@supabase/ssr";
+import {createClient} from "@supabase/supabase-js";
 
 type Row={date?:string;article_number?:string;description?:string;quantity?:number;unit_price?:number;amount?:number;note?:string};
 type Order={order_number?:string;project_reference?:string;title?:string;vehicle?:string;rows?:Row[];total?:number;validation?:{total_matches?:boolean;warnings?:string[]}};
@@ -14,10 +14,10 @@ export default function DocumentImport(){
  async function run(){
   if(!file)return; setBusy(true);setError("");setResult(null);
   try{
-   const supabase=createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+   const url=process.env.NEXT_PUBLIC_SUPABASE_URL; const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY; if(!url||!key)throw new Error("Supabase-konfiguration saknas."); const supabase=createClient(url,key);
    const {data:{session}}=await supabase.auth.getSession(); if(!session)throw new Error("Du behöver vara inloggad för att importera.");
    const fd=new FormData();fd.append("file",file);fd.append("tenant_id",tenant);
-   const res=await fetch(process.env.NEXT_PUBLIC_SUPABASE_URL+"/functions/v1/hub-document-import",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,apikey:process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!},body:fd});
+   const res=await fetch(url+"/functions/v1/hub-document-import",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,apikey:key},body:fd});
    const json=await res.json();if(!res.ok)throw new Error(json.detail||json.error||"Importen misslyckades.");setResult(json);
   }catch(e){setError(e instanceof Error?e.message:"Importen misslyckades.");}finally{setBusy(false)}
  }
