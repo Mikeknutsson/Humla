@@ -115,6 +115,21 @@ on public.kpi_import_rows (tenant_id, vehicle_registration, occurred_on);
 create index if not exists kpi_import_rows_employee_idx
 on public.kpi_import_rows (tenant_id, employee_number, occurred_on);
 
+create index if not exists kpi_import_batches_created_by_idx
+on public.kpi_import_batches (created_by);
+
+create index if not exists kpi_import_rows_vehicle_object_id_idx
+on public.kpi_import_rows (vehicle_object_id);
+
+create index if not exists kpi_import_rows_employee_object_id_idx
+on public.kpi_import_rows (employee_object_id);
+
+create index if not exists kpi_settings_updated_by_idx
+on public.kpi_settings (updated_by);
+
+create index if not exists kpi_targets_created_by_idx
+on public.kpi_targets (created_by);
+
 alter table public.kpi_settings enable row level security;
 alter table public.kpi_targets enable row level security;
 alter table public.kpi_import_batches enable row level security;
