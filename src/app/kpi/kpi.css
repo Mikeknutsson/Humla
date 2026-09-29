@@ -23,3 +23,5 @@ body:has(.kpi-app) > .shell > .sidebar { display: none; }
 body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 
 .period-shortcuts{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.period-shortcuts a{display:inline-flex;align-items:center;justify-content:center;border:1px solid #d8dcdf;border-radius:7px;padding:6px 9px;color:#555f66;text-decoration:none;font-size:10px;font-weight:750;white-space:nowrap}.period-shortcuts a.active{border-color:#e4b91f;background:#fff8db;color:#6c5700}@media(max-width:600px){.period-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.period-shortcuts a{width:100%}}
+
+@media(max-width:600px){.period-bar>div{width:100%;min-width:0}.period-shortcuts{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;width:100%!important}.period-shortcuts a{display:flex!important;width:100%!important;min-width:0!important;padding:8px 6px!important;font-size:11px!important}.period-bar>div>strong{overflow-wrap:anywhere}.period-form input{width:100%;min-width:0}}
