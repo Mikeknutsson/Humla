@@ -1,6 +1,5 @@
 import "server-only";
 import * as XLSX from "xlsx";
-import { PDFParse } from "pdf-parse";
 import type { DataKind, ParsedRow, ParsedTable } from "./schema";
 import { DATA_KINDS } from "./schema";
 
@@ -32,7 +31,8 @@ function parseWorkbook(buffer: Uint8Array): ParsedTable {
 function parsePdfLine(line: string): ParsedRow {
   const date = line.match(/\b(?:20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.](?:20)?\d{2})\b/)?.[0] ?? "";
   const registration = line.toUpperCase().match(/\b[A-ZÅÄÖ]{3}\s?\d{2}[A-Z0-9]\b/)?.[0]?.replace(/\s/g, "") ?? "";
-  const numberTokens = [...line.matchAll(/-?\(?\d[\d\s.]*[,.]\d{1,2}\)?/g)].map((match) => match[0]);
+  const amountText = line.replace(date, "").replace(/\b[A-ZÅÄÖ]{3}\s?\d{2}[A-Z0-9]\b/gi, "");
+  const numberTokens = [...amountText.matchAll(/-?\(?\d[\d\s.]*[,.]\d{1,2}\)?/g)].map((match) => match[0].trim());
   return {
     Radtext: line,
     Datum: date,
@@ -45,6 +45,8 @@ function parsePdfLine(line: string): ParsedRow {
 }
 
 async function parsePdf(buffer: Uint8Array): Promise<ParsedTable> {
+  await import("pdf-parse/worker");
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();

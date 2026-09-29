@@ -3,17 +3,21 @@
 import { useMemo, useState } from "react";
 import {
   BarChart3, CheckCircle2, ChevronRight, Database, FileSpreadsheet, Fuel,
-  Gauge, LayoutDashboard, Menu, RefreshCw, Settings2, ShieldCheck, Truck,
+  Gauge, LayoutDashboard, ListTree, Menu, RefreshCw, Settings2, ShieldCheck, Truck,
   UploadCloud, Users, WalletCards, X, AlertTriangle,
 } from "lucide-react";
 import { DATA_KINDS, type DataKind, type ParsedRow } from "@/lib/kpi/schema";
 import { logout } from "../kpi/login/actions";
+import { AccountMappingManager } from "./account-mapping-manager";
+import type { AccountMapping } from "@/lib/kpi/account-mapping";
 
 type Dashboard = {
   metrics: Record<string, number | string>;
   components: Record<string, number | string>;
   vehicles: Array<Record<string, number | string>>;
   drivers: Array<Record<string, number | string>>;
+  cost_categories: Record<string, number | string>;
+  unmapped_accounts: Array<{ account: string; description?: string | null; row_count: number; amount: number }>;
   quality: Record<string, number | string>;
 };
 
@@ -54,18 +58,19 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   dashboard: Dashboard;
   batches: Batch[];
+  accountMappings: AccountMapping[];
   tenantName: string;
   userName: string;
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "import" | "definitions";
+  initialView?: "overview" | "import" | "definitions" | "accounts";
   serverIssues?: string[];
 }) {
-  const [view] = useState<"overview" | "import" | "definitions">(initialView);
+  const [view] = useState<"overview" | "import" | "definitions" | "accounts">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [file, setFile] = useState<File | null>(null);
@@ -143,6 +148,7 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
       <nav className="nav">
         <a className={view === "overview" ? "active" : ""} href="/kpi" onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Översikt</a>
         <a className={view === "import" ? "active" : ""} href="/kpi?view=import" onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
+        <a className={view === "accounts" ? "active" : ""} href="/kpi?view=accounts" onClick={() => setMobileMenu(false)}><ListTree size={18}/>Kontomappning</a>
         <a className={view === "definitions" ? "active" : ""} href="/kpi?view=definitions" onClick={() => setMobileMenu(false)}><Settings2 size={18}/>Definitioner</a>
       </nav>
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
@@ -150,7 +156,7 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : view === "accounts" ? "Kontomappning" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
       {view === "overview" && <div className="content">
@@ -160,7 +166,7 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
 
         {rows === 0 ? <section className="empty-state"><div className="empty-icon"><FileSpreadsheet size={28}/></div><div><span className="section-kicker">Redo för skarp data</span><h2>Importera första underlaget</h2><p>Dashboarden innehåller ingen demodata. Ladda upp Excel eller PDF för att börja beräkna transportavdelningens nyckeltal.</p></div>{canManage && <a className="primary" href="/kpi?view=import">Öppna dataimport <ChevronRight size={17}/></a>}</section> : <section className="detail-grid">
           <article className="panel"><div className="panel-head"><div><span className="section-kicker">Fordon</span><h2>Intäkt och nyttjande per lastbil</h2></div><Truck size={20}/></div><div className="table-wrap"><table><thead><tr><th>Fordon</th><th>Omsättning</th><th>Kostnad</th><th>Diesel</th><th>Beläggning</th></tr></thead><tbody>{dashboard.vehicles.map((vehicle) => { const available = numeric(vehicle.available_hours); const utilization = available ? numeric(vehicle.occupied_hours) / available * 100 : 0; return <tr key={String(vehicle.vehicle)}><td><strong>{String(vehicle.vehicle)}</strong></td><td>{currency.format(numeric(vehicle.revenue))}</td><td>{currency.format(numeric(vehicle.cost))}</td><td>{currency.format(numeric(vehicle.fuel_cost))}</td><td><span className="progress"><i style={{ width: `${Math.min(utilization,100)}%` }}/></span>{number.format(utilization)} %</td></tr>; })}</tbody></table></div></article>
-          <article className="panel quality-panel"><div className="panel-head"><div><span className="section-kicker">Datakvalitet</span><h2>Underlagets täckning</h2></div><ShieldCheck size={20}/></div><div className="quality-score"><strong>{numeric(dashboard.quality.valid_rows)}</strong><span>giltiga rader av {numeric(dashboard.quality.total_rows)}</span></div><ul><li><span>Rader utan fordonskoppling</span><strong>{numeric(dashboard.quality.rows_without_vehicle)}</strong></li><li><span>Rader utan chaufförskoppling</span><strong>{numeric(dashboard.quality.rows_without_employee)}</strong></li><li><span>Importer i perioden</span><strong>{batches.length}</strong></li></ul></article>
+          <article className="panel quality-panel"><div className="panel-head"><div><span className="section-kicker">Datakvalitet</span><h2>Underlagets täckning</h2></div><ShieldCheck size={20}/></div><div className="quality-score"><strong>{numeric(dashboard.quality.valid_rows)}</strong><span>giltiga rader av {numeric(dashboard.quality.total_rows)}</span></div><ul><li><span>Ej mappade kontorader</span><strong>{numeric(dashboard.quality.rows_without_account_mapping)}</strong></li><li><span>Rader utan fordonskoppling</span><strong>{numeric(dashboard.quality.rows_without_vehicle)}</strong></li><li><span>Rader utan chaufförskoppling</span><strong>{numeric(dashboard.quality.rows_without_employee)}</strong></li><li><span>Importer i perioden</span><strong>{batches.length}</strong></li></ul>{numeric(dashboard.quality.rows_without_account_mapping) > 0 && <a className="quality-link" href="/kpi?view=accounts">Öppna Ej mappade konton <ChevronRight size={14}/></a>}</article>
         </section>}
 
         <section className="panel imports-panel"><div className="panel-head"><div><span className="section-kicker">Spårbarhet</span><h2>Senaste importer</h2></div>{canManage && <a className="secondary" href="/kpi?view=import"><UploadCloud size={16}/>Ny import</a>}</div>{batches.length ? <div className="table-wrap"><table><thead><tr><th>Fil</th><th>Datatyp</th><th>Period</th><th>Rader</th><th>Status</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.file_name ?? "API-leverans"}</strong><small>{new Date(batch.created_at).toLocaleString("sv-SE")}</small></td><td>{DATA_KINDS[batch.data_kind]?.label ?? batch.data_kind}</td><td>{batch.period_start ?? "–"} – {batch.period_end ?? "–"}</td><td>{batch.valid_row_count}/{batch.row_count}</td><td><span className={`status-pill ${batch.status}`}>{statusLabel(batch.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-line">Inga importer är genomförda ännu.</p>}</section>
@@ -175,6 +181,8 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
           {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}</div>}
         </>}
       </div>}
+
+      {view === "accounts" && <div className="content"><AccountMappingManager mappings={accountMappings} unmapped={dashboard.unmapped_accounts ?? []} canManage={canManage}/></div>}
 
       {view === "definitions" && <div className="content definitions-grid">
         <section className="panel"><div className="panel-head"><div><span className="section-kicker">Beräkningsmodell</span><h2>Transportavdelningens sex nyckeltal</h2></div><BarChart3 size={20}/></div><div className="formula-list"><div><strong>Omsättning</strong><code>Σ verifierade intäktsrader</code></div><div><strong>Resultat</strong><code>Omsättning − övriga kostnader − diesel</code></div><div><strong>Intäkt per lastbil</strong><code>Omsättning / intäktsbärande lastbilar</code></div><div><strong>Beläggningsgrad fordon</strong><code>Belagda timmar / tillgängliga timmar</code></div><div><strong>Dieselkostnad</strong><code>Dieselkostnad / omsättning</code></div><div><strong>Debiteringsgrad chaufförer</strong><code>Debiterbara timmar / betalda timmar</code></div></div></section>

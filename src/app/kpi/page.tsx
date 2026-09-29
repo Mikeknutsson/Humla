@@ -34,15 +34,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
-  const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }] = await Promise.all([
+  const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }] = await Promise.all([
     supabase.rpc("kpi_transport_dashboard", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
+    supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
   ]);
 
-  const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], quality: {} };
-  const initialView = query.view === "import" || query.view === "definitions" ? query.view : "overview";
-  const serverIssues = [readError, manageError, dashboardError, batchesError].filter(Boolean).map((error) => error!.message);
-  if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError].filter(Boolean).map((error) => error!.code) });
+  const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
+  const initialView = query.view === "import" || query.view === "definitions" || query.view === "accounts" ? query.view : "overview";
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.message);
+  if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
   return <KpiApp
     dashboard={(dashboard ?? emptyDashboard) as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
@@ -51,6 +52,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     from={from}
     to={to}
     canManage={Boolean(canManage)}
+    accountMappings={(accountMappings ?? []) as never[]}
     initialView={initialView}
     serverIssues={serverIssues}
   />;

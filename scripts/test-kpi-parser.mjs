@@ -1,0 +1,22 @@
+import { registerHooks } from 'node:module';
+import assert from 'node:assert/strict';
+registerHooks({ resolve(s, c, next) {
+  if (s === 'server-only') return { url: 'data:text/javascript,export{}', shortCircuit: true };
+  if (s === './schema') s = './schema.ts';
+  return next(s, c);
+} });
+const { parseImportFile } = await import('../src/lib/kpi/parser.ts');
+const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+const stream = 'BT /F1 12 Tf 50 700 Td (2026-09-01 ABC123 123,45) Tj ET';
+objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+let pdf = '%PDF-1.4\n';
+const offsets = [];
+objects.forEach((object, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${object}\nendobj\n`; });
+const xref = pdf.length;
+pdf += 'xref\n0 6\n0000000000 65535 f \n' + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+const result = await parseImportFile(new File([pdf], 'test.pdf', { type: 'application/pdf' }));
+assert.equal(result.pageCount, 1);
+assert.ok(result.rows.some(r => r.Belopp === '123,45' && r.Registreringsnummer === 'ABC123'));
+const csv = await parseImportFile(new File(['Datum,Summa\n2026-09-01,123\n'], 'test.csv'));
+assert.equal(csv.rows.length, 1);
+console.log('PASS: PDF text extraction, registration/amount separation, CSV parsing');
