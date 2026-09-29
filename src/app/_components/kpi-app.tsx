@@ -31,6 +31,8 @@ type HiredCapacity = { total_revenue?:number; hired_revenue?:number; hired_share
 
 type Efficiency = { revenue?:number; own_revenue?:number; hired_revenue?:number; worked_hours?:number; revenue_per_worked_hour?:number|null; ballast_cost?:number; tipping_cost?:number; direct_material_tipping_cost?:number; contribution_after_material_tipping?:number; result_per_worked_hour_after_material_tipping?:number|null; cost_data_available?:boolean };
 
+type DriverProductivity = { total_hours?:number; productive_hours?:number; unclassified_hours?:number; productive_percent?:number; definition?:string; drivers?:Array<{employee_id:string;driver:string;total_hours:number;productive_hours:number;unclassified_hours:number;productive_percent:number}> };
+
 type TranspaVehicleTime = { reported_hours?: number; available_hours?: number; utilization?: number; vehicle_count?: number; capacity_hours_per_day?: number; vehicles?: Array<{vehicle_id:string;vehicle:string;occupied_hours:number;available_hours:number;utilization:number;time_reports:number}> };
 
 type Batch = {
@@ -73,11 +75,12 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   transpaEvidence: TranspaEvidence | null;
   transpaVehicleTime: TranspaVehicleTime | null;
   efficiency: Efficiency | null;
   hiredCapacity: HiredCapacity | null;
+  driverProductivity: DriverProductivity | null;
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
@@ -119,7 +122,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
     { label: "Beläggningsgrad fordon", value: `${number.format(numeric(transpaVehicleTime?.utilization ?? metrics.vehicle_utilization))} %`, icon: Gauge, tone: "purple" },
     { label: "Inhyrd kapacitet", value: `${number.format(numeric(hiredCapacity?.hired_share_percent))} %`, icon: Truck, tone: "orange", detail: `${currency.format(numeric(hiredCapacity?.hired_revenue))} av ${currency.format(numeric(hiredCapacity?.total_revenue))}` },
     { label: "Dieselkostnad av omsättning", value: `${number.format(numeric(metrics.diesel_share))} %`, icon: Fuel, tone: "orange" },
-    { label: "Debiteringsgrad chaufförer", value: `${number.format(numeric(metrics.driver_billability))} %`, icon: Users, tone: "cyan" },
+    { label: "Intäktskopplad tid chaufför", value: `${number.format(numeric(driverProductivity?.productive_percent))} %`, icon: Users, tone: "cyan", detail: `${number.format(numeric(driverProductivity?.productive_hours))} h av ${number.format(numeric(driverProductivity?.total_hours))} h · ${number.format(numeric(driverProductivity?.unclassified_hours))} h oklassificerat` },
   ];
 
   const selectedDefinition = DATA_KINDS[dataKind];
