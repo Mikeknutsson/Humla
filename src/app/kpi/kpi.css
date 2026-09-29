@@ -31,3 +31,17 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .weekly-panel{margin-top:14px}.weekly-chart{height:190px;display:flex;align-items:stretch;gap:10px;padding:16px 4px 4px;border-bottom:1px solid #e4e6e7;overflow-x:auto}.week-column{min-width:54px;flex:1;display:grid;grid-template-rows:1fr auto;gap:6px;text-align:center}.bars{display:flex;align-items:flex-end;justify-content:center;gap:4px;height:150px}.bars i,.bars b{display:block;width:15px;min-height:3px;border-radius:4px 4px 0 0;background:#c7cbce}.bars b{background:#e5b91f}.week-column>span{font-size:9px;color:#737b80}.chart-legend{display:flex;gap:14px;justify-content:flex-end;padding-top:10px;font-size:9px;color:#687177}.chart-legend span{display:flex;align-items:center;gap:5px}.chart-legend i,.chart-legend b{width:9px;height:9px;border-radius:2px;background:#c7cbce}.chart-legend b{background:#e5b91f}.metrics-grid>a.metric-card{display:block;text-decoration:none;color:inherit}.metrics-grid>a.metric-card:hover{border-color:#d7b332}
 
 .nav-group{margin-top:10px;padding-top:10px;border-top:1px solid #2b2e31}.nav-group-title{display:flex;align-items:center;gap:7px;padding:7px 12px 6px;color:#6f777d;font-size:9px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.nav-group a{padding-left:25px;font-size:12px}
+
+.overview-pulse{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.overview-pulse>a{display:flex;flex-direction:column;gap:5px;padding:15px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:inherit;text-decoration:none;min-width:0}
+.overview-pulse>a:hover{border-color:#d4aa00;transform:translateY(-1px)}
+.overview-pulse span{font-size:12px;color:var(--muted);font-weight:700}
+.overview-pulse strong{font-size:22px;letter-spacing:-.03em}
+.overview-pulse small{font-size:11px;color:var(--muted)}
+.ytd-bars{display:grid;gap:12px}
+.ytd-bars>div{padding:12px 0;border-bottom:1px solid var(--line)}
+.ytd-bars>div:last-child{border-bottom:0}
+.ytd-bars span,.ytd-bars small{display:block;color:var(--muted)}
+.ytd-bars strong{display:block;font-size:20px;margin:3px 0}
+@media(max-width:900px){.overview-pulse{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.overview-pulse{grid-template-columns:1fr 1fr}.overview-pulse strong{font-size:18px}}
