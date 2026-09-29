@@ -22,6 +22,7 @@ export type FieldDefinition = {
 };
 
 const shared: FieldDefinition[] = [
+  { key: "employee_number", label: "Anställningsnummer", aliases: ["anställningsnummer", "anstnr", "anst nr", "employee number"] },
   { key: "occurred_on", label: "Datum", required: true, aliases: ["artikeldatum", "datum", "date", "bokföringsdatum", "fakturadatum", "utförd datum", "period"] },
   { key: "vehicle_registration", label: "Registreringsnummer", aliases: ["regnr", "reg nr", "registreringsnummer", "fordon", "bil", "vehicle"] },
   { key: "project_reference", label: "Projekt/AO", aliases: ["projekt", "projektnummer", "ao", "arbetsorder", "order", "project"] },

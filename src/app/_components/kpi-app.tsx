@@ -11,6 +11,8 @@ import { parseVehicleRules, resolveVehicle } from "@/lib/kpi/vehicle-rules";
 import { logout } from "../kpi/login/actions";
 import { AccountMappingManager } from "./account-mapping-manager";
 import type { AccountMapping } from "@/lib/kpi/account-mapping";
+import {UnitManager} from './unit-manager';
+import type {KpiUnit,UnitReport} from '@/lib/kpi/units';
 
 type Dashboard = {
   metrics: Record<string, number | string>;
@@ -62,7 +64,9 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+  units: KpiUnit[];
+  unitReport: UnitReport;
   dashboard: Dashboard;
   batches: Batch[];
   accountMappings: AccountMapping[];
@@ -71,10 +75,10 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "import" | "definitions" | "accounts";
+  initialView?: "overview" | "import" | "definitions" | "accounts" | "units";
   serverIssues?: string[];
 }) {
-  const [view] = useState<"overview" | "import" | "definitions" | "accounts">(initialView);
+  const [view] = useState<"overview" | "import" | "definitions" | "accounts" | "units">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [automatic, setAutomatic] = useState(true);
@@ -197,6 +201,7 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
         <a className={view === "overview" ? "active" : ""} href="/kpi" onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Översikt</a>
         <a className={view === "import" ? "active" : ""} href="/kpi?view=import" onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
         <a className={view === "accounts" ? "active" : ""} href="/kpi?view=accounts" onClick={() => setMobileMenu(false)}><ListTree size={18}/>Kontomappning</a>
+        <a className={view === "units" ? "active" : ""} href="/kpi?view=units"><Truck size={18}/>Enhetsmappning</a>
         <a className={view === "definitions" ? "active" : ""} href="/kpi?view=definitions" onClick={() => setMobileMenu(false)}><Settings2 size={18}/>Definitioner</a>
       </nav>
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
@@ -204,7 +209,7 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : view === "accounts" ? "Kontomappning" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
       {view === "overview" && <div className="content">
@@ -233,6 +238,7 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
       </div>}
 
       {view === "accounts" && <div className="content"><AccountMappingManager mappings={accountMappings} unmapped={dashboard.unmapped_accounts ?? []} canManage={canManage}/></div>}
+      {view === "units" && <div className="content"><form className="period-form"><input type="hidden" name="view" value="units"/><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button>Visa period</button></form><UnitManager units={units} report={unitReport} canManage={canManage} from={from}/></div>}
 
       {view === "definitions" && <div className="content definitions-grid">
         <section className="panel"><div className="panel-head"><div><span className="section-kicker">Beräkningsmodell</span><h2>Transportavdelningens sex nyckeltal</h2></div><BarChart3 size={20}/></div><div className="formula-list"><div><strong>Omsättning</strong><code>Σ verifierade intäktsrader</code></div><div><strong>Resultat</strong><code>Omsättning − övriga kostnader − diesel</code></div><div><strong>Intäkt per lastbil</strong><code>Omsättning / intäktsbärande lastbilar</code></div><div><strong>Beläggningsgrad fordon</strong><code>Belagda timmar / tillgängliga timmar</code></div><div><strong>Dieselkostnad</strong><code>Dieselkostnad / omsättning</code></div><div><strong>Debiteringsgrad chaufförer</strong><code>Debiterbara timmar / betalda timmar</code></div></div></section>
