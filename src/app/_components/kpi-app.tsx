@@ -29,7 +29,7 @@ type Dashboard = {
 
 type HiredCapacity = { total_revenue?:number; hired_revenue?:number; hired_share_percent?:number; hired_rows?:number; classification?:string; rows?:Array<{id:string;occurred_on:string;vehicle_registration:string;project_reference?:string|null;description?:string|null;amount:number}> };
 
-type Efficiency = { revenue?:number; worked_hours?:number; revenue_per_worked_hour?:number|null; ballast_cost?:number; tipping_cost?:number; direct_material_tipping_cost?:number; contribution_after_material_tipping?:number; result_per_worked_hour_after_material_tipping?:number|null; cost_data_available?:boolean };
+type Efficiency = { revenue?:number; own_revenue?:number; hired_revenue?:number; worked_hours?:number; revenue_per_worked_hour?:number|null; ballast_cost?:number; tipping_cost?:number; direct_material_tipping_cost?:number; contribution_after_material_tipping?:number; result_per_worked_hour_after_material_tipping?:number|null; cost_data_available?:boolean };
 
 type TranspaVehicleTime = { reported_hours?: number; available_hours?: number; utilization?: number; vehicle_count?: number; capacity_hours_per_day?: number; vehicles?: Array<{vehicle_id:string;vehicle:string;occupied_hours:number;available_hours:number;utilization:number;time_reports:number}> };
 
@@ -88,10 +88,10 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "import" | "definitions" | "accounts" | "units" | "transpa";
+  initialView?: "overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa";
   serverIssues?: string[];
 }) {
-  const [view] = useState<"overview" | "import" | "definitions" | "accounts" | "units" | "transpa">(initialView);
+  const [view] = useState<"overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [automatic, setAutomatic] = useState(true);
@@ -115,7 +115,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
     { label: "Omsättning", value: currency.format(numeric(metrics.revenue)), icon: WalletCards, tone: "yellow" },
     { label: "Resultat", value: currency.format(numeric(metrics.result)), icon: BarChart3, tone: numeric(metrics.result) >= 0 ? "green" : "red" },
     { label: "Intäkt per lastbil", value: currency.format(numeric(metrics.revenue_per_vehicle)), icon: Truck, tone: "blue" },
-    { label: "Omsättning / arbetad timme", value: efficiency?.revenue_per_worked_hour != null ? `${currency.format(numeric(efficiency.revenue_per_worked_hour))}/h` : "–", icon: Gauge, tone: "green" },
+    { label: "Omsättning / arbetad timme", value: efficiency?.revenue_per_worked_hour != null ? `${currency.format(numeric(efficiency.revenue_per_worked_hour))}/h` : "–", icon: Gauge, tone: "green", detail: `${currency.format(numeric(efficiency?.own_revenue))} egen omsättning · UE/LASTBIL exkluderad` },
     { label: "Beläggningsgrad fordon", value: `${number.format(numeric(transpaVehicleTime?.utilization ?? metrics.vehicle_utilization))} %`, icon: Gauge, tone: "purple" },
     { label: "Inhyrd kapacitet", value: `${number.format(numeric(hiredCapacity?.hired_share_percent))} %`, icon: Truck, tone: "orange", detail: `${currency.format(numeric(hiredCapacity?.hired_revenue))} av ${currency.format(numeric(hiredCapacity?.total_revenue))}` },
     { label: "Dieselkostnad av omsättning", value: `${number.format(numeric(metrics.diesel_share))} %`, icon: Fuel, tone: "orange" },
@@ -218,7 +218,8 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
       <div className="brand-wrap"><div className="brand-mark">H</div><div><div className="brand">Humla</div><div className="brand-sub">DASHBOARD</div></div><button className="icon-button close-nav" onClick={() => setMobileMenu(false)} aria-label="Stäng meny"><X size={18}/></button></div>
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
-        <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Dashboard</a>\n        <a className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</a>
+        <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Dashboard</a>
+        <a className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</a>
         <a className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
         <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={18}/>Kontomappning</a>
         <a className={view === "units" ? "active" : ""} href={kpiHref("units")}><Truck size={18}/>Enhetsmappning</a>
