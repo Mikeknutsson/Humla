@@ -137,6 +137,33 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
   const validRows = numeric(dashboard.quality?.valid_rows);
   const qualityPercent = rows ? validRows / rows * 100 : null;
   const reviewCount = hubReviews.length;
+  const costCategories = dashboard.cost_categories ?? {};
+  const categoryAmount = (...names: string[]) => Object.entries(costCategories).reduce((sum,[key,value]) => names.some((name) => key.toLocaleLowerCase("sv-SE").includes(name.toLocaleLowerCase("sv-SE"))) ? sum + Math.abs(numeric(value)) : sum, 0);
+  const workedHours = numeric(efficiency?.worked_hours);
+  const commonCost = categoryAmount("gemensam");
+  const overheadCost = categoryAmount("overhead");
+  const personnelCost = categoryAmount("personal", "lön");
+  const serviceCost = categoryAmount("service", "rep");
+  const fixedCost = categoryAmount("fast");
+  const fuelCost = Math.abs(numeric(dashboard.components?.fuel_cost));
+  const otherCost = Math.abs(numeric(dashboard.components?.other_cost));
+  const totalCost = otherCost + fuelCost;
+  const directCost = Math.max(0, totalCost - commonCost - overheadCost);
+  const hasCostData = totalCost > 0;
+  const perHour = (value:number) => hasCostData && workedHours > 0 ? currency.format(value / workedHours) + "/h" : "–";
+  const costCards = [
+    {label:"Total kostnad / arbetad timme",value:perHour(totalCost),detail:hasCostData?currency.format(totalCost)+" total kostnad":"Inväntar kostnadsdata"},
+    {label:"Direkt kostnad / arbetad timme",value:perHour(directCost),detail:hasCostData?"Exkl. identifierat gemensamt och overhead":"Inväntar kostnadsdata"},
+    {label:"Gemensamma kostnader",value:hasCostData?currency.format(commonCost):"–",detail:commonCost>0?"Identifierat som gemensam kostnad":"Inväntar klassificerade gemensamma kostnader"},
+    {label:"Gemensamt / arbetad timme",value:commonCost>0&&workedHours>0?currency.format(commonCost/workedHours)+"/h":"–",detail:commonCost>0?"Gemensamma kostnader / TransPA-timmar":"Inväntar gemensamma kostnader"},
+    {label:"Overhead / arbetad timme",value:overheadCost>0&&workedHours>0?currency.format(overheadCost/workedHours)+"/h":"–",detail:overheadCost>0?currency.format(overheadCost)+" overhead":"Inväntar overheadklassificering"},
+    {label:"Personalkostnad / arbetad timme",value:personnelCost>0&&workedHours>0?currency.format(personnelCost/workedHours)+"/h":"–",detail:personnelCost>0?currency.format(personnelCost):"Inväntar lönekostnad"},
+    {label:"Bränsle / arbetad timme",value:fuelCost>0&&workedHours>0?currency.format(fuelCost/workedHours)+"/h":"–",detail:fuelCost>0?currency.format(fuelCost):"Inväntar bränslekostnad"},
+    {label:"Service & rep. / arbetad timme",value:serviceCost>0&&workedHours>0?currency.format(serviceCost/workedHours)+"/h":"–",detail:serviceCost>0?currency.format(serviceCost):"Inväntar kostnadsdata"},
+    {label:"Fasta kostnader / arbetad timme",value:fixedCost>0&&workedHours>0?currency.format(fixedCost/workedHours)+"/h":"–",detail:fixedCost>0?currency.format(fixedCost):"Inväntar kostnadsdata"},
+    {label:"TB / arbetad timme",value:hasCostData&&workedHours>0?currency.format((currentRevenue-directCost)/workedHours)+"/h":"–",detail:"Omsättning minus direkt kostnad"},
+    {label:"Resultat / arbetad timme",value:hasCostData&&workedHours>0?currency.format(currentResult/workedHours)+"/h":"–",detail:"Resultat / TransPA-timmar"},
+  ];
   const metricCards = [
     { label: "Omsättning", value: currency.format(numeric(metrics.revenue)), icon: WalletCards, tone: "yellow" },
     { label: "Resultat", value: currency.format(numeric(metrics.result)), icon: BarChart3, tone: numeric(metrics.result) >= 0 ? "green" : "red" },
