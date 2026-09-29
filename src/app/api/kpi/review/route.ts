@@ -23,6 +23,13 @@ export async function POST(request: Request) {
  if (!user) return Response.json({error:'Inloggning krävs'}, {status:401});
  try {
   const body = await request.json();
+  if(body.action==='hub_mapping'){
+   const ids=Array.isArray(body.reviewIds)?body.reviewIds:[body.reviewId];
+   if(!ids.length||!body.mappingType||!body.sourceValue||!body.destinationValue)return Response.json({error:'Ofullständig mappning'},{status:400});
+   const results=[];
+   for(const id of ids){const {data,error}=await db.rpc('hub_remember_mapping_v1',{p_review_id:id,p_mapping_type:body.mappingType,p_source_value:body.sourceValue,p_destination_value:body.destinationValue,p_destination_external_id:body.destinationExternalId??null,p_remember:body.remember!==false});if(error)return Response.json({error:error.message},{status:400});results.push(data)}
+   return Response.json({ok:true,results});
+  }
   if (!/^[a-f0-9-]{36}$/i.test(body.id ?? '') || !body.values || typeof body.values !== 'object' || typeof body.reason !== 'string') return Response.json({error:'Ogiltiga uppgifter'}, {status:400});
   const {data,error} = await db.rpc('kpi_approve_review',{p_row_id:body.id,p_values:body.values,p_reason:body.reason});
   if(error) return Response.json({error:error.message}, {status:400});
