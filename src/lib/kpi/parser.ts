@@ -24,7 +24,9 @@ function parseWorkbook(buffer: Uint8Array): ParsedTable {
   const nonEmpty = matrix.filter((row) => row.some((cell) => String(cell ?? "").trim()));
   if (!nonEmpty.length) throw new Error("Filen innehåller inga datarader.");
   const headers = uniqueHeaders(nonEmpty[0]);
-  const dataRows = nonEmpty.slice(1).filter((values) => values.filter((cell) => String(cell ?? "").trim()).length >= 2);
+  const workify = ['Ordernummer', 'Artikelnummer', 'Artikeldatum', 'Summa', 'Fakturerad'].every(h => headers.includes(h));
+  // Workify emits attachment-only continuation rows; these are not transactions.
+  const dataRows = nonEmpty.slice(1).filter(values => !workify || values.some((value, i) => String(value ?? '').trim() && !['Platser', 'FilUrl'].includes(headers[i])));
   if (dataRows.length > MAX_ROWS) throw new Error("Filen innehåller fler än 20 000 rader. Dela upp filen; inga rader har importerats.");
   const rows = dataRows.map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
   return { headers, rows, sheetName };
@@ -72,6 +74,7 @@ export async function parseImportFile(file: File): Promise<ParsedTable> {
 function numberValue(value: string | undefined) {
   if (!value?.trim()) return null;
   let text = value.trim().replace(/[A-Za-zÅÄÖåäö€$£]/g, "").replace(/\s/g, "");
+  if (!/\d/.test(text)) return null;
   const negative = /^\(.*\)$/.test(text);
   text = text.replace(/[()]/g, "");
   if (text.includes(",") && text.includes(".")) {
@@ -129,6 +132,9 @@ export function normalizeRows(table: ParsedTable, kind: DataKind, mapping: Recor
     for (const key of required) {
       const value = row[key as keyof typeof row];
       if (value === null || value === "") errors.push(`${key} saknas eller är ogiltigt`);
+    }
+    for (const key of ['available_hours', 'occupied_hours', 'paid_hours', 'billable_hours'] as const) {
+      if (row[key] !== null && row[key]! < 0) { errors.push(`${key} får inte vara negativt`); row[key] = null; }
     }
     if (row.occupied_hours !== null && row.available_hours !== null && row.occupied_hours > row.available_hours) errors.push("belagd tid överstiger tillgänglig tid");
     if (row.billable_hours !== null && row.paid_hours !== null && row.billable_hours > row.paid_hours) errors.push("debiterbar tid överstiger betald tid");
