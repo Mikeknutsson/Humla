@@ -36,13 +36,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
-  const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }, { data: transpaVehicleTime, error: transpaVehicleTimeError }, { data: efficiency, error: efficiencyError }, { data: hiredCapacity, error: hiredCapacityError }] = await Promise.all([
+  const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }, { data: transpaVehicleTime, error: transpaVehicleTimeError }, { data: efficiency, error: efficiencyError }, { data: hiredCapacity, error: hiredCapacityError }, { data: driverProductivity, error: driverProductivityError }] = await Promise.all([
     supabase.rpc("kpi_transport_dashboard", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
     supabase.rpc("kpi_transpa_vehicle_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.rpc("kpi_transport_efficiency", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.rpc("kpi_hired_capacity_share", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
+    supabase.rpc("kpi_driver_productive_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
   ]);
 
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
@@ -52,7 +53,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
   return <KpiApp
     dashboard={(dashboard ?? emptyDashboard) as typeof emptyDashboard}
@@ -69,6 +70,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     transpaVehicleTime={transpaVehicleTime}
     efficiency={efficiency}
     hiredCapacity={hiredCapacity}
+    driverProductivity={driverProductivity}
     initialView={initialView}
     serverIssues={serverIssues}
   />;
