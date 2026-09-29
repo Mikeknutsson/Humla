@@ -7,6 +7,7 @@ import {
   UploadCloud, Users, WalletCards, X, AlertTriangle,
 } from "lucide-react";
 import { DATA_KINDS, type DataKind, type ParsedRow } from "@/lib/kpi/schema";
+import { logout } from "../kpi/login/actions";
 
 type Dashboard = {
   metrics: Record<string, number | string>;
@@ -53,7 +54,7 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, tenantName, userName, from, to, canManage }: {
+export function KpiApp({ dashboard, batches, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   dashboard: Dashboard;
   batches: Batch[];
   tenantName: string;
@@ -61,8 +62,10 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
   from: string;
   to: string;
   canManage: boolean;
+  initialView?: "overview" | "import" | "definitions";
+  serverIssues?: string[];
 }) {
-  const [view, setView] = useState<"overview" | "import" | "definitions">("overview");
+  const [view] = useState<"overview" | "import" | "definitions">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [file, setFile] = useState<File | null>(null);
@@ -138,28 +141,29 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
       <div className="brand-wrap"><div className="brand-mark">H</div><div><div className="brand">Humla</div><div className="brand-sub">KPI</div></div><button className="icon-button close-nav" onClick={() => setMobileMenu(false)} aria-label="Stäng meny"><X size={18}/></button></div>
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
-        <button className={view === "overview" ? "active" : ""} onClick={() => { setView("overview"); setMobileMenu(false); }}><LayoutDashboard size={18}/>Översikt</button>
-        <button className={view === "import" ? "active" : ""} onClick={() => { setView("import"); setMobileMenu(false); }}><UploadCloud size={18}/>Dataimport</button>
-        <button className={view === "definitions" ? "active" : ""} onClick={() => { setView("definitions"); setMobileMenu(false); }}><Settings2 size={18}/>Definitioner</button>
+        <a className={view === "overview" ? "active" : ""} href="/kpi" onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Översikt</a>
+        <a className={view === "import" ? "active" : ""} href="/kpi?view=import" onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
+        <a className={view === "definitions" ? "active" : ""} href="/kpi?view=definitions" onClick={() => setMobileMenu(false)}><Settings2 size={18}/>Definitioner</a>
       </nav>
-      <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Humla Hub</strong><span>Datakälla ansluten</span></div><span className="live-dot"/></div>
-      <div className="user-block"><div className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0,2)}</div><div><strong>{userName}</strong><span>Behörig användare</span></div></div>
+      <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
+      <div className="user-block"><div className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0,2)}</div><div><strong>{userName}</strong><span>KPI-användare</span></div><form action={logout}><button className="logout-button" type="submit">Logga ut</button></form></div>
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla / KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
       {view === "overview" && <div className="content">
         <section className="period-bar"><div><span className="section-kicker">Rapportperiod</span><strong>{from} – {to}</strong></div><form className="period-form"><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button type="submit"><RefreshCw size={15}/>Uppdatera</button></form></section>
 
         <section className="metrics-grid">{metricCards.map(({ label, value, icon: Icon, tone }) => <article className="metric-card" key={label}><div className={`metric-icon ${tone}`}><Icon size={20}/></div><span>{label}</span><strong>{value}</strong><small>{rows ? "Beräknat från importerade underlag" : "Inväntar verifierat underlag"}</small></article>)}</section>
 
-        {rows === 0 ? <section className="empty-state"><div className="empty-icon"><FileSpreadsheet size={28}/></div><div><span className="section-kicker">Redo för skarp data</span><h2>Importera första underlaget</h2><p>Dashboarden innehåller ingen demodata. Ladda upp Excel eller PDF för att börja beräkna transportavdelningens nyckeltal.</p></div>{canManage && <button className="primary" onClick={() => setView("import")}>Öppna dataimport <ChevronRight size={17}/></button>}</section> : <section className="detail-grid">
+        {rows === 0 ? <section className="empty-state"><div className="empty-icon"><FileSpreadsheet size={28}/></div><div><span className="section-kicker">Redo för skarp data</span><h2>Importera första underlaget</h2><p>Dashboarden innehåller ingen demodata. Ladda upp Excel eller PDF för att börja beräkna transportavdelningens nyckeltal.</p></div>{canManage && <a className="primary" href="/kpi?view=import">Öppna dataimport <ChevronRight size={17}/></a>}</section> : <section className="detail-grid">
           <article className="panel"><div className="panel-head"><div><span className="section-kicker">Fordon</span><h2>Intäkt och nyttjande per lastbil</h2></div><Truck size={20}/></div><div className="table-wrap"><table><thead><tr><th>Fordon</th><th>Omsättning</th><th>Kostnad</th><th>Diesel</th><th>Beläggning</th></tr></thead><tbody>{dashboard.vehicles.map((vehicle) => { const available = numeric(vehicle.available_hours); const utilization = available ? numeric(vehicle.occupied_hours) / available * 100 : 0; return <tr key={String(vehicle.vehicle)}><td><strong>{String(vehicle.vehicle)}</strong></td><td>{currency.format(numeric(vehicle.revenue))}</td><td>{currency.format(numeric(vehicle.cost))}</td><td>{currency.format(numeric(vehicle.fuel_cost))}</td><td><span className="progress"><i style={{ width: `${Math.min(utilization,100)}%` }}/></span>{number.format(utilization)} %</td></tr>; })}</tbody></table></div></article>
           <article className="panel quality-panel"><div className="panel-head"><div><span className="section-kicker">Datakvalitet</span><h2>Underlagets täckning</h2></div><ShieldCheck size={20}/></div><div className="quality-score"><strong>{numeric(dashboard.quality.valid_rows)}</strong><span>giltiga rader av {numeric(dashboard.quality.total_rows)}</span></div><ul><li><span>Rader utan fordonskoppling</span><strong>{numeric(dashboard.quality.rows_without_vehicle)}</strong></li><li><span>Rader utan chaufförskoppling</span><strong>{numeric(dashboard.quality.rows_without_employee)}</strong></li><li><span>Importer i perioden</span><strong>{batches.length}</strong></li></ul></article>
         </section>}
 
-        <section className="panel imports-panel"><div className="panel-head"><div><span className="section-kicker">Spårbarhet</span><h2>Senaste importer</h2></div>{canManage && <button className="secondary" onClick={() => setView("import")}><UploadCloud size={16}/>Ny import</button>}</div>{batches.length ? <div className="table-wrap"><table><thead><tr><th>Fil</th><th>Datatyp</th><th>Period</th><th>Rader</th><th>Status</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.file_name ?? "API-leverans"}</strong><small>{new Date(batch.created_at).toLocaleString("sv-SE")}</small></td><td>{DATA_KINDS[batch.data_kind]?.label ?? batch.data_kind}</td><td>{batch.period_start ?? "–"} – {batch.period_end ?? "–"}</td><td>{batch.valid_row_count}/{batch.row_count}</td><td><span className={`status-pill ${batch.status}`}>{statusLabel(batch.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-line">Inga importer är genomförda ännu.</p>}</section>
+        <section className="panel imports-panel"><div className="panel-head"><div><span className="section-kicker">Spårbarhet</span><h2>Senaste importer</h2></div>{canManage && <a className="secondary" href="/kpi?view=import"><UploadCloud size={16}/>Ny import</a>}</div>{batches.length ? <div className="table-wrap"><table><thead><tr><th>Fil</th><th>Datatyp</th><th>Period</th><th>Rader</th><th>Status</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.file_name ?? "API-leverans"}</strong><small>{new Date(batch.created_at).toLocaleString("sv-SE")}</small></td><td>{DATA_KINDS[batch.data_kind]?.label ?? batch.data_kind}</td><td>{batch.period_start ?? "–"} – {batch.period_end ?? "–"}</td><td>{batch.valid_row_count}/{batch.row_count}</td><td><span className={`status-pill ${batch.status}`}>{statusLabel(batch.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-line">Inga importer är genomförda ännu.</p>}</section>
       </div>}
 
       {view === "import" && <div className="content import-layout">
@@ -174,8 +178,8 @@ export function KpiApp({ dashboard, batches, tenantName, userName, from, to, can
 
       {view === "definitions" && <div className="content definitions-grid">
         <section className="panel"><div className="panel-head"><div><span className="section-kicker">Beräkningsmodell</span><h2>Transportavdelningens sex nyckeltal</h2></div><BarChart3 size={20}/></div><div className="formula-list"><div><strong>Omsättning</strong><code>Σ verifierade intäktsrader</code></div><div><strong>Resultat</strong><code>Omsättning − övriga kostnader − diesel</code></div><div><strong>Intäkt per lastbil</strong><code>Omsättning / intäktsbärande lastbilar</code></div><div><strong>Beläggningsgrad fordon</strong><code>Belagda timmar / tillgängliga timmar</code></div><div><strong>Dieselkostnad</strong><code>Dieselkostnad / omsättning</code></div><div><strong>Debiteringsgrad chaufförer</strong><code>Debiterbara timmar / betalda timmar</code></div></div></section>
-        <section className="panel architecture-panel"><div className="panel-head"><div><span className="section-kicker">API-förberedd</span><h2>Samma datakontrakt – ny transportväg</h2></div><Database size={20}/></div><div className="flow"><div><FileSpreadsheet size={20}/><span>PDF / Excel<strong>Manuell import nu</strong></span></div><ChevronRight/><div><Database size={20}/><span>KPI-datakontrakt<strong>Validerad data</strong></span></div><ChevronRight/><div><LayoutDashboard size={20}/><span>Humla KPI<strong>Samma beräkningar</strong></span></div></div><p>När respektive API aktiveras ersätter Humla Hub filtransporten. KPI-appen fortsätter läsa samma normaliserade fält och behöver inte byggas om.</p></section>
-        <section className="panel governance"><div><ShieldCheck size={20}/><span><strong>KPI äger reglerna</strong>Definitioner, mål och fördelningar ligger i KPI-domänen – inte i Humla Hub.</span></div><div><Database size={20}/><span><strong>Hub äger källdata</strong>API-inhämtning, identitet, provenance och dublettskydd ligger fortsatt i Humla Hub.</span></div></section>
+        <section className="panel architecture-panel"><div className="panel-head"><div><span className="section-kicker">API-förberedd</span><h2>Samma datakontrakt – ny transportväg</h2></div><Database size={20}/></div><div className="flow"><div><FileSpreadsheet size={20}/><span>PDF / Excel<strong>Manuell import nu</strong></span></div><ChevronRight/><div><Database size={20}/><span>KPI-datakontrakt<strong>Validerad data</strong></span></div><ChevronRight/><div><LayoutDashboard size={20}/><span>Humla KPI<strong>Samma beräkningar</strong></span></div></div><p>När respektive API aktiveras ersätter datamotorn filtransporten. KPI-appen fortsätter läsa samma normaliserade fält och behöver inte byggas om.</p></section>
+        <section className="panel governance"><div><ShieldCheck size={20}/><span><strong>KPI äger reglerna</strong>Definitioner, mål och fördelningar ligger i KPI-appen.</span></div><div><Database size={20}/><span><strong>Datamotorn äger källdata</strong>API-inhämtning, identitet, provenance och dublettskydd hanteras bakom kulisserna.</span></div></section>
       </div>}
     </main>
   </div></div>;

@@ -24,7 +24,8 @@ function parseWorkbook(buffer: Uint8Array): ParsedTable {
   const nonEmpty = matrix.filter((row) => row.some((cell) => String(cell ?? "").trim()));
   if (!nonEmpty.length) throw new Error("Filen innehåller inga datarader.");
   const headers = uniqueHeaders(nonEmpty[0]);
-  const rows = nonEmpty.slice(1, MAX_ROWS + 1).map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
+  const dataRows = nonEmpty.slice(1).filter((values) => values.filter((cell) => String(cell ?? "").trim()).length >= 2);
+  const rows = dataRows.slice(0, MAX_ROWS).map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
   return { headers, rows, sheetName };
 }
 
