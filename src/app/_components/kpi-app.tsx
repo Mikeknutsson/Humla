@@ -27,6 +27,8 @@ type Dashboard = {
   quality: Record<string, number | string>;
 };
 
+type Efficiency = { revenue?:number; worked_hours?:number; revenue_per_worked_hour?:number|null; ballast_cost?:number; tipping_cost?:number; direct_material_tipping_cost?:number; contribution_after_material_tipping?:number; result_per_worked_hour_after_material_tipping?:number|null; cost_data_available?:boolean };
+
 type TranspaVehicleTime = { reported_hours?: number; available_hours?: number; utilization?: number; vehicle_count?: number; capacity_hours_per_day?: number; vehicles?: Array<{vehicle_id:string;vehicle:string;occupied_hours:number;available_hours:number;utilization:number;time_reports:number}> };
 
 type Batch = {
@@ -69,9 +71,10 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   transpaEvidence: TranspaEvidence | null;
   transpaVehicleTime: TranspaVehicleTime | null;
+  efficiency: Efficiency | null;
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
@@ -104,6 +107,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
     { label: "Omsättning", value: currency.format(numeric(metrics.revenue)), icon: WalletCards, tone: "yellow" },
     { label: "Resultat", value: currency.format(numeric(metrics.result)), icon: BarChart3, tone: numeric(metrics.result) >= 0 ? "green" : "red" },
     { label: "Intäkt per lastbil", value: currency.format(numeric(metrics.revenue_per_vehicle)), icon: Truck, tone: "blue" },
+    { label: "Omsättning / arbetad timme", value: efficiency?.revenue_per_worked_hour != null ? `${currency.format(numeric(efficiency.revenue_per_worked_hour))}/h` : "–", icon: Gauge, tone: "green" },
     { label: "Beläggningsgrad fordon", value: `${number.format(numeric(transpaVehicleTime?.utilization ?? metrics.vehicle_utilization))} %`, icon: Gauge, tone: "purple" },
     { label: "Dieselkostnad av omsättning", value: `${number.format(numeric(metrics.diesel_share))} %`, icon: Fuel, tone: "orange" },
     { label: "Debiteringsgrad chaufförer", value: `${number.format(numeric(metrics.driver_billability))} %`, icon: Users, tone: "cyan" },
