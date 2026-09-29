@@ -107,7 +107,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
   useEffect(() => { localStorage.setItem("humla:kpi:period", JSON.stringify({ from, to })); }, [from, to]);
   const periodQuery = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   const kpiHref = (nextView?: string) => `/kpi?${nextView ? `view=${nextView}&` : ""}${periodQuery}`;
-  const fiscalYears = Array.from({ length: 4 }, (_, index) => { const endYear = Number(to.slice(0,4)) + 1 - index; const startYear = endYear - 1; return { label: `${startYear}/${endYear}`, from: `${startYear}-09-01`, to: `${endYear}-08-31` }; });
+  const selectedDate = new Date(`${to}T00:00:00Z`); const selectedFiscalStartYear = selectedDate.getUTCMonth() >= 8 ? selectedDate.getUTCFullYear() : selectedDate.getUTCFullYear() - 1; const fiscalYears = Array.from({ length: 4 }, (_, index) => { const startYear = selectedFiscalStartYear - index; const endYear = startYear + 1; return { label: `${startYear}/${endYear}`, from: `${startYear}-09-01`, to: `${endYear}-08-31` }; });
 
   const metrics = dashboard.metrics ?? {};
   const rows = numeric(dashboard.quality?.total_rows);
