@@ -76,7 +76,7 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   transpaEvidence: TranspaEvidence | null;
   transpaVehicleTime: TranspaVehicleTime | null;
   efficiency: Efficiency | null;
@@ -86,6 +86,8 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
+  overviewPrevious: Dashboard | null;
+  overviewPeriod: {current:{from:string;to:string};previous:{from:string;to:string};label:string};
   batches: Batch[];
   accountMappings: AccountMapping[];
   tenantName: string;
@@ -241,7 +243,12 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
       {view === "review" && <div className="content"><HubReview initial={hubReviews as never[]}/></div>}
-      {(view === "overview" || view === "kpi") && <div className="content">
+      {view === "overview" && <div className="content">
+        <section className="overview-hero"><div><span className="section-kicker">Verksamhetsår {overviewPeriod.label}</span><h2>Översikt t.o.m. {overviewPeriod.current.to}</h2><p>Jämför {overviewPeriod.current.from} – {overviewPeriod.current.to} med samma antal dagar föregående verksamhetsår.</p></div><span className="asof">Senaste kompletta dag</span></section>
+        <section className="metrics-grid">{metricCards.slice(0,6).map(({label,value,icon:Icon,tone,detail})=>{const prev=numeric(overviewPrevious?.metrics?.[label==="Omsättning"?"revenue":label==="Resultat"?"result":""]);const current=label==="Omsättning"?numeric(metrics.revenue):label==="Resultat"?numeric(metrics.result):0;const change=prev&&current?(current/prev-1)*100:null;return <a className="metric-card overview-card" href={kpiHref("kpi")} key={label}><div className={`metric-icon ${tone}`}><Icon size={20}/></div><span>{label}</span><strong>{value}</strong><small>{change!=null?`${change>=0?"+":""}${number.format(change)} % mot fg. år`:detail??"Öppna KPI för analys"}</small></a>})}</section>
+        <section className="overview-grid"><article className="panel"><div className="panel-head"><div><span className="section-kicker">Jämförelse</span><h2>YTD mot föregående verksamhetsår</h2></div></div><div className="ytd-bars"><div><span>Omsättning</span><strong>{currency.format(numeric(metrics.revenue))}</strong><small>Fg. år {currency.format(numeric(overviewPrevious?.metrics?.revenue))}</small></div><div><span>Resultat</span><strong>{currency.format(numeric(metrics.result))}</strong><small>Fg. år {currency.format(numeric(overviewPrevious?.metrics?.result))}</small></div></div></article><article className="panel"><div className="panel-head"><div><span className="section-kicker">Snabbläge</span><h2>Datakvalitet</h2></div></div><p>{numeric(dashboard.quality.valid_rows)} giltiga rader · {numeric(dashboard.quality.rows_without_vehicle)} utan fordonskoppling · {numeric(dashboard.quality.rows_without_employee)} utan chaufförskoppling.</p><a className="quality-link" href={kpiHref("review")}>Öppna granskning <ChevronRight size={14}/></a></article></section>
+      </div>}
+      {view === "kpi" && <div className="content">
         <section className="period-bar"><div><span className="section-kicker">Rapportperiod</span><strong>{from} – {to}</strong><div className="period-shortcuts">{fiscalYears.map((year) => <a key={year.label} className={from === year.from && to === year.to ? "active" : ""} href={`/kpi?${view === "kpi" ? "view=kpi&" : ""}from=${year.from}&to=${year.to}`}>{year.label}</a>)}</div></div><form className="period-form">{view === "kpi" && <input type="hidden" name="view" value="kpi"/>}<label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button type="submit"><RefreshCw size={15}/>Uppdatera</button></form></section>
 
         <section className="metrics-grid">{metricCards.map(({ label, value, icon: Icon, tone, detail }) => <article className="metric-card" key={label}><div className={`metric-icon ${tone}`}><Icon size={20}/></div><span>{label}</span><strong>{value}</strong><small>{detail ? detail : label === "Beläggningsgrad fordon" && transpaVehicleTime?.reported_hours ? `${number.format(numeric(transpaVehicleTime.reported_hours))} / ${number.format(numeric(transpaVehicleTime.available_hours))} h · TransPA` : rows ? "Beräknat från importerade underlag" : "Inväntar verifierat underlag"}</small></article>)}</section>
