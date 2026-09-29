@@ -46,7 +46,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]);
 
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
-  const initialView = query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || (query.view === "transpa" && canManage) ? query.view : "overview";
+  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || (query.view === "transpa" && canManage) ? query.view : "overview";
   const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
     supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).order('name'),
     supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
