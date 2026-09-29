@@ -5,6 +5,8 @@ import { KpiApp } from "../_components/kpi-app";
 
 export const dynamic = "force-dynamic";
 
+function ymd(d:Date){return d.toISOString().slice(0,10)}
+function overviewPeriods(month=9,day=1){const now=new Date();const yesterday=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));const currentStartCandidate=new Date(Date.UTC(yesterday.getUTCFullYear(),month-1,day));const sy=yesterday<currentStartCandidate?yesterday.getUTCFullYear()-1:yesterday.getUTCFullYear();const currentFrom=new Date(Date.UTC(sy,month-1,day));const previousFrom=new Date(Date.UTC(sy-1,month-1,day));const elapsed=Math.round((yesterday.getTime()-currentFrom.getTime())/86400000);const previousTo=new Date(previousFrom.getTime()+elapsed*86400000);return{current:{from:ymd(currentFrom),to:ymd(yesterday)},previous:{from:ymd(previousFrom),to:ymd(previousTo)},label:`${sy}/${String(sy+1).slice(-2)}`}}
 function fiscalPeriod(month = 9, day = 1) {
   const now = new Date();
   const currentStart = new Date(Date.UTC(now.getUTCFullYear(), month - 1, day));
@@ -47,16 +49,19 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]);
 
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
-  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
+
+  const {data:previousDashboard,error:previousDashboardError}=initialView==='overview' ? await supabase.rpc("kpi_transport_dashboard",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.previous.from,p_to:overviewPeriod.previous.to}) : {data:null,error:null};
   const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
     supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).order('name'),
     supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
   return <KpiApp
+    overviewPrevious={(previousDashboard ?? null) as never}
+    overviewPeriod={overviewPeriod}
     dashboard={(dashboard ?? emptyDashboard) as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
