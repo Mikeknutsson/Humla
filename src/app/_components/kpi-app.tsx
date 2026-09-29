@@ -164,7 +164,7 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
     {label:"TB / arbetad timme",value:hasCostData&&workedHours>0?currency.format((currentRevenue-directCost)/workedHours)+"/h":"–",detail:"Omsättning minus direkt kostnad"},
     {label:"Resultat / arbetad timme",value:hasCostData&&workedHours>0?currency.format(currentResult/workedHours)+"/h":"–",detail:"Resultat / TransPA-timmar"},
   ];
-  const metricCards = [
+  const vehicleCount = numeric(transpaVehicleTime?.vehicle_count);\n  const reportedHours = numeric(transpaVehicleTime?.reported_hours);\n  const availableHours = numeric(transpaVehicleTime?.available_hours);\n  const utilization = numeric(transpaVehicleTime?.utilization ?? metrics.vehicle_utilization);\n  const hiredShare = numeric(hiredCapacity?.hired_share_percent);\n  const productivePercent = numeric(driverProductivity?.productive_percent);\n  const productiveHours = numeric(driverProductivity?.productive_hours);\n  const unclassifiedHours = numeric(driverProductivity?.unclassified_hours);\n  const missingVehicle = numeric(dashboard.quality?.rows_without_vehicle);\n  const missingEmployee = numeric(dashboard.quality?.rows_without_employee);\n  const unmappedAccounts = numeric(dashboard.quality?.rows_without_account_mapping);\n  const metricCards = [
     { label: "Omsättning", value: currency.format(numeric(metrics.revenue)), icon: WalletCards, tone: "yellow" },
     { label: "Resultat", value: currency.format(numeric(metrics.result)), icon: BarChart3, tone: numeric(metrics.result) >= 0 ? "green" : "red" },
     { label: "Intäkt per lastbil", value: currency.format(numeric(metrics.revenue_per_vehicle)), icon: Truck, tone: "blue" },
