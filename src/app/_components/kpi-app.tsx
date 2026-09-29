@@ -27,7 +27,9 @@ type Dashboard = {
   quality: Record<string, number | string>;
 };
 
-type TranspaVehicleTime = { reported_hours?: number; available_hours?: number; utilization?: number; vehicle_count?: number; capacity_hours_per_day?: number; vehicles?: Array<{vehicle_id:string;vehicle:string;occupied_hours:number;available_hours:number;utilization:number;time_reports:number}> };\n\ntype Batch = {
+type TranspaVehicleTime = { reported_hours?: number; available_hours?: number; utilization?: number; vehicle_count?: number; capacity_hours_per_day?: number; vehicles?: Array<{vehicle_id:string;vehicle:string;occupied_hours:number;available_hours:number;utilization:number;time_reports:number}> };
+
+type Batch = {
   error_summary?: Array<{ row?: number; errors?: string[]; message?: string }>;
   column_mapping?: Record<string, string>;
   id: string;
@@ -68,7 +70,8 @@ function statusLabel(status: string) {
 }
 
 export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
-  transpaEvidence: TranspaEvidence | null;\n  transpaVehicleTime: TranspaVehicleTime | null;
+  transpaEvidence: TranspaEvidence | null;
+  transpaVehicleTime: TranspaVehicleTime | null;
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
