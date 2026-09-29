@@ -40,6 +40,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
     supabase.rpc("kpi_transpa_vehicle_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.rpc("kpi_transport_efficiency", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
+    supabase.rpc("kpi_hired_capacity_share", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
   ]);
 
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
@@ -49,7 +50,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
   return <KpiApp
     dashboard={(dashboard ?? emptyDashboard) as typeof emptyDashboard}
@@ -65,6 +66,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     transpaEvidence={transpaEvidence}
     transpaVehicleTime={transpaVehicleTime}
     efficiency={efficiency}
+    hiredCapacity={hiredCapacity}
     initialView={initialView}
     serverIssues={serverIssues}
   />;
