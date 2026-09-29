@@ -27,6 +27,8 @@ type Dashboard = {
   quality: Record<string, number | string>;
 };
 
+type HiredCapacity = { total_revenue?:number; hired_revenue?:number; hired_share_percent?:number; hired_rows?:number; classification?:string; rows?:Array<{id:string;occurred_on:string;vehicle_registration:string;project_reference?:string|null;description?:string|null;amount:number}> };
+
 type Efficiency = { revenue?:number; worked_hours?:number; revenue_per_worked_hour?:number|null; ballast_cost?:number; tipping_cost?:number; direct_material_tipping_cost?:number; contribution_after_material_tipping?:number; result_per_worked_hour_after_material_tipping?:number|null; cost_data_available?:boolean };
 
 type TranspaVehicleTime = { reported_hours?: number; available_hours?: number; utilization?: number; vehicle_count?: number; capacity_hours_per_day?: number; vehicles?: Array<{vehicle_id:string;vehicle:string;occupied_hours:number;available_hours:number;utilization:number;time_reports:number}> };
@@ -71,10 +73,11 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   transpaEvidence: TranspaEvidence | null;
   transpaVehicleTime: TranspaVehicleTime | null;
   efficiency: Efficiency | null;
+  hiredCapacity: HiredCapacity | null;
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
@@ -114,6 +117,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
     { label: "Intäkt per lastbil", value: currency.format(numeric(metrics.revenue_per_vehicle)), icon: Truck, tone: "blue" },
     { label: "Omsättning / arbetad timme", value: efficiency?.revenue_per_worked_hour != null ? `${currency.format(numeric(efficiency.revenue_per_worked_hour))}/h` : "–", icon: Gauge, tone: "green" },
     { label: "Beläggningsgrad fordon", value: `${number.format(numeric(transpaVehicleTime?.utilization ?? metrics.vehicle_utilization))} %`, icon: Gauge, tone: "purple" },
+    { label: "Inhyrd kapacitet", value: `${number.format(numeric(hiredCapacity?.hired_share_percent))} %`, icon: Truck, tone: "orange", detail: `${currency.format(numeric(hiredCapacity?.hired_revenue))} av ${currency.format(numeric(hiredCapacity?.total_revenue))}` },
     { label: "Dieselkostnad av omsättning", value: `${number.format(numeric(metrics.diesel_share))} %`, icon: Fuel, tone: "orange" },
     { label: "Debiteringsgrad chaufförer", value: `${number.format(numeric(metrics.driver_billability))} %`, icon: Users, tone: "cyan" },
   ];
@@ -232,7 +236,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
       {view === "overview" && <div className="content">
         <section className="period-bar"><div><span className="section-kicker">Rapportperiod</span><strong>{from} – {to}</strong><div className="period-shortcuts">{fiscalYears.map((year) => <a key={year.label} className={from === year.from && to === year.to ? "active" : ""} href={`/kpi?from=${year.from}&to=${year.to}`}>{year.label}</a>)}</div></div><form className="period-form"><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button type="submit"><RefreshCw size={15}/>Uppdatera</button></form></section>
 
-        <section className="metrics-grid">{metricCards.map(({ label, value, icon: Icon, tone }) => <article className="metric-card" key={label}><div className={`metric-icon ${tone}`}><Icon size={20}/></div><span>{label}</span><strong>{value}</strong><small>{label === "Beläggningsgrad fordon" && transpaVehicleTime?.reported_hours ? `${number.format(numeric(transpaVehicleTime.reported_hours))} / ${number.format(numeric(transpaVehicleTime.available_hours))} h · TransPA` : rows ? "Beräknat från importerade underlag" : "Inväntar verifierat underlag"}</small></article>)}</section>
+        <section className="metrics-grid">{metricCards.map(({ label, value, icon: Icon, tone, detail }) => <article className="metric-card" key={label}><div className={`metric-icon ${tone}`}><Icon size={20}/></div><span>{label}</span><strong>{value}</strong><small>{detail ? detail : label === "Beläggningsgrad fordon" && transpaVehicleTime?.reported_hours ? `${number.format(numeric(transpaVehicleTime.reported_hours))} / ${number.format(numeric(transpaVehicleTime.available_hours))} h · TransPA` : rows ? "Beräknat från importerade underlag" : "Inväntar verifierat underlag"}</small></article>)}</section>
 
         {rows === 0 ? <section className="empty-state"><div className="empty-icon"><FileSpreadsheet size={28}/></div><div><span className="section-kicker">Redo för skarp data</span><h2>Importera första underlaget</h2><p>Dashboarden innehåller ingen demodata. Ladda upp Excel eller PDF för att börja beräkna transportavdelningens nyckeltal.</p></div>{canManage && <a className="primary" href={kpiHref("import")}>Öppna dataimport <ChevronRight size={17}/></a>}</section> : <section className="detail-grid">
           <article className="panel"><div className="panel-head"><div><span className="section-kicker">Fordon</span><h2>Intäkt och nyttjande per lastbil</h2></div><Truck size={20}/></div><div className="table-wrap"><table><thead><tr><th>Fordon</th><th>Omsättning</th><th>Kostnad</th><th>Diesel</th><th>Beläggning</th></tr></thead><tbody>{dashboard.vehicles.map((vehicle) => { const transpa = transpaVehicleTime?.vehicles?.find((item) => item.vehicle === String(vehicle.vehicle)); const available = transpa ? numeric(transpa.available_hours) : numeric(vehicle.available_hours); const occupied = transpa ? numeric(transpa.occupied_hours) : numeric(vehicle.occupied_hours); const utilization = available ? occupied / available * 100 : 0; return <tr key={String(vehicle.vehicle)}><td><strong>{String(vehicle.vehicle)}</strong>{transpa && <small>{number.format(occupied)} h TransPA</small>}</td><td>{currency.format(numeric(vehicle.revenue))}</td><td>{currency.format(numeric(vehicle.cost))}</td><td>{currency.format(numeric(vehicle.fuel_cost))}</td><td><span className="progress"><i style={{ width: `${Math.min(utilization,100)}%` }}/></span>{number.format(utilization)} %</td></tr>; })}</tbody></table></div></article>
