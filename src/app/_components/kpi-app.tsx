@@ -1,6 +1,7 @@
 "use client";
 
 import { ImportReview } from "./import-review";
+import { HubReview } from "./hub-review";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -75,12 +76,13 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   transpaEvidence: TranspaEvidence | null;
   transpaVehicleTime: TranspaVehicleTime | null;
   efficiency: Efficiency | null;
   hiredCapacity: HiredCapacity | null;
   driverProductivity: DriverProductivity | null;
+  hubReviews: Array<{id:string;review_type:string;activity_kind?:string;confidence?:number;proposed_matches?:unknown;payload?:unknown;reason_code?:string}>;
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
@@ -91,10 +93,10 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa";
+  initialView?: "overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa" | "review";
   serverIssues?: string[];
 }) {
-  const [view] = useState<"overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa">(initialView);
+  const [view] = useState<"overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa" | "review">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [automatic, setAutomatic] = useState(true);
@@ -224,6 +226,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
         <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Dashboard</a>
         <a className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</a>
         <a className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
+        <a className={view === "review" ? "active" : ""} href={kpiHref("review")} onClick={() => setMobileMenu(false)}><CheckCircle2 size={18}/>Granskning & mappning</a>
         <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={18}/>Kontomappning</a>
         <a className={view === "units" ? "active" : ""} href={kpiHref("units")}><Truck size={18}/>Enhetsmappning</a>
         {canManage&&<a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")}><Truck size={18}/>TransPA-underlag</a>}
@@ -234,9 +237,10 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "overview" ? "Dashboard" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "overview" ? "Dashboard" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
+      {view === "review" && <div className="content"><HubReview initial={hubReviews as never[]}/></div>}
       {(view === "overview" || view === "kpi") && <div className="content">
         <section className="period-bar"><div><span className="section-kicker">Rapportperiod</span><strong>{from} – {to}</strong><div className="period-shortcuts">{fiscalYears.map((year) => <a key={year.label} className={from === year.from && to === year.to ? "active" : ""} href={`/kpi?${view === "kpi" ? "view=kpi&" : ""}from=${year.from}&to=${year.to}`}>{year.label}</a>)}</div></div><form className="period-form">{view === "kpi" && <input type="hidden" name="view" value="kpi"/>}<label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button type="submit"><RefreshCw size={15}/>Uppdatera</button></form></section>
 
