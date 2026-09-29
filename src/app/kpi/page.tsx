@@ -13,14 +13,16 @@ function fiscalPeriod(month = 9, day = 1) {
   return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; view?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; view?: string; auth_retry?: string }> }) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (!user) redirect("/kpi/login");
 
+  const query = await searchParams;
   const { data: member, error: memberError } = await supabase.from("hub_tenant_members").select("tenant_id,display_name,role").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
   if (!member) {
     console.error("[kpi] workspace lookup failed", { auth: authError?.code, member: memberError?.code });
+    if (query.auth_retry !== "1") redirect("/kpi?auth_retry=1");
     return <main className="access-denied"><div><span>!</span><h1>Din session fungerar, men KPI-arbetsytan kunde inte öppnas</h1><p>Ingen aktiv KPI-arbetsyta kunde läsas för användaren.</p><a className="primary" href="/kpi/login?stay=1">Hantera KPI-sessionen</a></div></main>;
   }
   const { data: tenant } = await supabase.from("hub_tenants").select("name").eq("id", member.tenant_id).maybeSingle();
@@ -29,7 +31,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const { data: canManage, error: manageError } = await supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.manage" });
   const { data: settings } = await supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle();
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const query = await searchParams;
   const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
