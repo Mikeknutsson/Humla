@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 registerHooks({ resolve(s, c, next) {
   if (s === 'server-only') return { url: 'data:text/javascript,export{}', shortCircuit: true };
   if (s === './schema') s = './schema.ts';
+  if (s === './vehicle-rules') s = './vehicle-rules.ts';
   return next(s, c);
 } });
 const { parseImportFile } = await import('../src/lib/kpi/parser.ts');
@@ -20,3 +21,30 @@ assert.ok(result.rows.some(r => r.Belopp === '123,45' && r.Registreringsnummer =
 const csv = await parseImportFile(new File(['Datum,Summa\n2026-09-01,123\n'], 'test.csv'));
 assert.equal(csv.rows.length, 1);
 console.log('PASS: PDF text extraction, registration/amount separation, CSV parsing');
+const { detectDataKind, suggestMapping } = await import('../src/lib/kpi/schema.ts');
+const { parseVehicleRules, resolveVehicle } = await import('../src/lib/kpi/vehicle-rules.ts');
+const { normalizeRows } = await import('../src/lib/kpi/parser.ts');
+assert.equal(detectDataKind(['Datum', 'Belopp']), null);
+assert.equal(detectDataKind(['Datum', 'Liter', 'Bränslekostnad']), 'fuel');
+assert.equal(detectDataKind(['Intäkt', 'Konto', 'Kostnad']), null);
+assert.equal(suggestMapping(['RegNr', 'Fordon'], 'revenue').vehicle_registration, 'RegNr');
+const rules = parseVehicleRules('Projekt;9018;ABC123', ['Projekt']);
+assert.equal(resolveVehicle({ Projekt: '9018' }, '9018', rules).registration, 'ABC123');
+assert.equal(resolveVehicle({ Projekt: '90180' }, '9018', rules).registration, null);
+assert.ok(resolveVehicle({ Projekt: '9018' }, 'DEF456', rules).error);
+assert.throws(() => parseVehicleRules('Projekt;9018;ABC123\nProjekt;9018;DEF456', ['Projekt']));
+const unmapped = normalizeRows({ headers: ['Datum', 'Summa', 'Fordon'], rows: [{ Datum: '2026-09-01', Summa: '100', Fordon: '9018' }] }, 'revenue', { occurred_on: 'Datum', amount: 'Summa', vehicle_registration: 'Fordon' });
+assert.equal(unmapped[0].is_valid, false);
+assert.equal(unmapped[0].vehicle_registration, null);
+console.log('PASS: ambiguous kinds rejected, exact vehicle rules, conflicts rejected, numeric vehicle held for review');
+if (process.argv[2]) {
+  const { readFile } = await import('node:fs/promises');
+  const table = await parseImportFile(new File([await readFile(process.argv[2])], 'workify.xlsx'));
+  assert.equal(detectDataKind(table.headers), 'revenue');
+  const mapping = suggestMapping(table.headers, 'revenue');
+  assert.equal(mapping.occurred_on, 'Artikeldatum');
+  assert.equal(mapping.vehicle_registration, 'RegNr');
+  assert.equal(mapping.amount, 'Summa');
+  const rows = normalizeRows(table, 'revenue', mapping);
+  console.log(JSON.stringify({ test: 'Workify identification and normalization', rows: rows.length, valid: rows.filter(r => r.is_valid).length, review: rows.filter(r => !r.is_valid).length, mapping }));
+}

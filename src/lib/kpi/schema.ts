@@ -22,11 +22,11 @@ export type FieldDefinition = {
 };
 
 const shared: FieldDefinition[] = [
-  { key: "occurred_on", label: "Datum", required: true, aliases: ["datum", "date", "bokföringsdatum", "fakturadatum", "utförd datum", "period"] },
+  { key: "occurred_on", label: "Datum", required: true, aliases: ["artikeldatum", "datum", "date", "bokföringsdatum", "fakturadatum", "utförd datum", "period"] },
   { key: "vehicle_registration", label: "Registreringsnummer", aliases: ["regnr", "reg nr", "registreringsnummer", "fordon", "bil", "vehicle"] },
   { key: "project_reference", label: "Projekt/AO", aliases: ["projekt", "projektnummer", "ao", "arbetsorder", "order", "project"] },
   { key: "cost_center", label: "Kostnadsställe", aliases: ["kostnadsställe", "kst", "cost center", "costcenter"] },
-  { key: "description", label: "Beskrivning", aliases: ["beskrivning", "text", "benämning", "artikel", "description", "radtext"] },
+  { key: "description", label: "Beskrivning", aliases: ["artikelnamn", "beskrivning", "text", "benämning", "artikel", "description", "radtext"] },
 ];
 
 export const DATA_KINDS: Record<DataKind, { label: string; description: string; fields: FieldDefinition[] }> = {
@@ -66,7 +66,25 @@ export const DATA_KINDS: Record<DataKind, { label: string; description: string; 
 export function suggestMapping(headers: string[], kind: DataKind) {
   const normalized = headers.map((header) => ({ header, value: header.toLocaleLowerCase("sv").replace(/[_-]+/g, " ").trim() }));
   return Object.fromEntries(DATA_KINDS[kind].fields.map((field) => {
-    const match = normalized.find(({ value }) => field.aliases.some((alias) => value === alias || value.includes(alias)));
+    const exactAlias = field.aliases.find((alias) => normalized.some(({ value }) => value === alias));
+    const exact = normalized.filter(({ value }) => value === exactAlias);
+    const partial = normalized.filter(({ value }) => field.aliases.some((alias) => alias.length >= 5 && value.includes(alias)));
+    const candidates = exact.length ? exact : partial;
+    const match = candidates.length === 1 ? candidates[0] : undefined;
     return [field.key, match?.header ?? ""];
   }));
+}
+
+/** Only distinctive column signatures may select a kind; generic amounts are ambiguous. */
+export function detectDataKind(headers: string[]): DataKind | null {
+  const h = headers.map((value) => value.toLocaleLowerCase("sv").replace(/[_-]+/g, " ").trim());
+  const has = (...names: string[]) => names.some((name) => h.includes(name));
+  const candidates: DataKind[] = [];
+  if (has("anställningsnummer", "anstnr", "employee number") && has("betalda timmar", "arbetade timmar", "paid hours")) candidates.push("driver_time");
+  if (has("tillgängliga timmar", "available hours") && has("belagda timmar", "occupied hours")) candidates.push("vehicle_activity");
+  if (has("liter", "volym") && has("bränslekostnad", "dieselkostnad")) candidates.push("fuel");
+  if (has("konto", "kontonummer", "account") && has("kostnad", "kostnadsbelopp", "debet")) candidates.push("cost");
+  const workify = ["ordernummer", "orderstatus", "artikeldatum", "artikelnummer", "kundpris", "summa", "fakturerad"].every((name) => h.includes(name));
+  if (has("intäkt", "omsättning", "intäktsbelopp") || workify) candidates.push("revenue");
+  return candidates.length === 1 ? candidates[0] : null;
 }

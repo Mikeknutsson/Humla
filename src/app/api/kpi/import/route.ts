@@ -25,8 +25,9 @@ export async function POST(request: Request) {
     const file = formData.get("file");
     const kind = String(formData.get("dataKind") ?? "") as DataKind;
     if (!(file instanceof File)) return Response.json({ error: "Ingen fil valdes." }, { status: 400 });
-    if (!DATA_KINDS[kind]) return Response.json({ error: "Ogiltig datatyp." }, { status: 400 });
+    if (!Object.hasOwn(DATA_KINDS, kind)) return Response.json({ error: "Ogiltig datatyp." }, { status: 400 });
     const mapping = JSON.parse(String(formData.get("mapping") ?? "{}")) as Record<string, string>;
+    if (!mapping || Array.isArray(mapping) || typeof mapping !== "object" || Object.values(mapping).some((value) => typeof value !== "string")) return Response.json({ error: "Ogiltig kolumnmappning." }, { status: 400 });
     for (const definition of DATA_KINDS[kind].fields.filter((field) => field.required)) {
       if (!mapping[definition.key]) return Response.json({ error: `Mappa det obligatoriska fältet ${definition.label}.` }, { status: 400 });
     }

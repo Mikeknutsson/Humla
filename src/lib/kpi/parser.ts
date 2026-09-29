@@ -2,6 +2,7 @@ import "server-only";
 import * as XLSX from "xlsx";
 import type { DataKind, ParsedRow, ParsedTable } from "./schema";
 import { DATA_KINDS } from "./schema";
+import { parseVehicleRules, resolveVehicle } from "./vehicle-rules";
 
 const MAX_ROWS = 20_000;
 
@@ -24,7 +25,8 @@ function parseWorkbook(buffer: Uint8Array): ParsedTable {
   if (!nonEmpty.length) throw new Error("Filen innehåller inga datarader.");
   const headers = uniqueHeaders(nonEmpty[0]);
   const dataRows = nonEmpty.slice(1).filter((values) => values.filter((cell) => String(cell ?? "").trim()).length >= 2);
-  const rows = dataRows.slice(0, MAX_ROWS).map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
+  if (dataRows.length > MAX_ROWS) throw new Error("Filen innehåller fler än 20 000 rader. Dela upp filen; inga rader har importerats.");
+  const rows = dataRows.map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
   return { headers, rows, sheetName };
 }
 
@@ -59,7 +61,7 @@ async function parsePdf(buffer: Uint8Array): Promise<ParsedTable> {
 }
 
 export async function parseImportFile(file: File): Promise<ParsedTable> {
-  if (file.size > 20 * 1024 * 1024) throw new Error("Filen är större än 20 MB.");
+  if (file.size > 4 * 1024 * 1024) throw new Error("Filen är större än 4 MB. Dela upp den före import.");
   const extension = file.name.split(".").pop()?.toLowerCase();
   const buffer = new Uint8Array(await file.arrayBuffer());
   if (extension === "pdf" || file.type === "application/pdf") return parsePdf(buffer);
@@ -98,15 +100,17 @@ function dateValue(value: string | undefined) {
 }
 
 export function normalizeRows(table: ParsedTable, kind: DataKind, mapping: Record<string, string>) {
+  const rules = parseVehicleRules(mapping.__vehicle_rules ?? "", table.headers);
   const field = (row: ParsedRow, key: string) => mapping[key] ? row[mapping[key]]?.trim() ?? "" : "";
   const required = DATA_KINDS[kind].fields.filter((item) => item.required).map((item) => item.key);
   return table.rows.map((source, index) => {
     const occurredOn = dateValue(field(source, "occurred_on"));
+    const vehicle = resolveVehicle(source, field(source, "vehicle_registration"), rules);
     const row = {
       row_number: index + 1,
       data_kind: kind,
       occurred_on: occurredOn,
-      vehicle_registration: field(source, "vehicle_registration").toUpperCase().replace(/[^A-Z0-9ÅÄÖ]/g, "") || null,
+      vehicle_registration: vehicle.registration,
       employee_number: field(source, "employee_number") || null,
       project_reference: field(source, "project_reference") || null,
       cost_center: field(source, "cost_center") || null,
@@ -121,6 +125,7 @@ export function normalizeRows(table: ParsedTable, kind: DataKind, mapping: Recor
       source_data: source,
     };
     const errors: string[] = [];
+    if (vehicle.error) errors.push(vehicle.error);
     for (const key of required) {
       const value = row[key as keyof typeof row];
       if (value === null || value === "") errors.push(`${key} saknas eller är ogiltigt`);

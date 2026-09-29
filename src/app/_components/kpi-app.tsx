@@ -6,7 +6,8 @@ import {
   Gauge, LayoutDashboard, ListTree, Menu, RefreshCw, Settings2, ShieldCheck, Truck,
   UploadCloud, Users, WalletCards, X, AlertTriangle,
 } from "lucide-react";
-import { DATA_KINDS, type DataKind, type ParsedRow } from "@/lib/kpi/schema";
+import { DATA_KINDS, suggestMapping, type DataKind, type ParsedRow } from "@/lib/kpi/schema";
+import { parseVehicleRules, resolveVehicle } from "@/lib/kpi/vehicle-rules";
 import { logout } from "../kpi/login/actions";
 import { AccountMappingManager } from "./account-mapping-manager";
 import type { AccountMapping } from "@/lib/kpi/account-mapping";
@@ -22,6 +23,8 @@ type Dashboard = {
 };
 
 type Batch = {
+  error_summary?: Array<{ row?: number; errors?: string[]; message?: string }>;
+  column_mapping?: Record<string, string>;
   id: string;
   data_kind: DataKind;
   file_name: string | null;
@@ -41,6 +44,7 @@ type Preview = {
   sheetName?: string;
   pageCount?: number;
   suggestedMapping: Record<string, string>;
+  detectedKind: DataKind | null;
 };
 
 const currency = new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 });
@@ -73,6 +77,10 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
   const [view] = useState<"overview" | "import" | "definitions" | "accounts">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
+  const [automatic, setAutomatic] = useState(true);
+  const [kindConfirmed, setKindConfirmed] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [vehicleRules, setVehicleRules] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -92,20 +100,54 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
 
   const selectedDefinition = DATA_KINDS[dataKind];
   const requiredComplete = useMemo(() => selectedDefinition.fields.filter((field) => field.required).every((field) => mapping[field.key]), [mapping, selectedDefinition]);
+  const rulePreview = useMemo(() => {
+    if (!preview) return { error: null, rows: [] };
+    try {
+      const rules = parseVehicleRules(vehicleRules, preview.headers);
+      return { error: null, rows: preview.rows.slice(0, 12).map((row) => {
+        const raw = row[mapping.vehicle_registration] ?? "";
+        return { raw, ...resolveVehicle(row, raw, rules) };
+      }) };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Ogiltiga kopplingar", rows: [] };
+    }
+  }, [preview, vehicleRules, mapping]);
+
+  function selectFiles(files: File[]) {
+    if (busy || !files.length) return;
+    setFile(files[0]);
+    setPendingFiles(files.slice(1));
+    setPreview(null);
+    setMapping({});
+    setVehicleRules("");
+    setKindConfirmed(!automatic);
+    setMessage(null);
+  }
 
   async function analyse() {
     if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setMessage({ type: "error", text: "Filen överstiger 4 MB. Dela upp filen före uppladdning." });
+      return;
+    }
     setBusy(true);
     setMessage(null);
     const body = new FormData();
     body.set("file", file);
-    body.set("dataKind", dataKind);
+    body.set("dataKind", automatic ? "auto" : dataKind);
     try {
-      const response = await fetch("/api/kpi/parse", { method: "POST", body });
+      const response = await fetch("/api/kpi/parse", { method: "POST", body, signal: AbortSignal.timeout(60_000) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Filen kunde inte analyseras.");
       setPreview(result);
       setMapping(result.suggestedMapping);
+      if (result.detectedKind) {
+        setDataKind(result.detectedKind);
+        setKindConfirmed(true);
+      } else {
+        setKindConfirmed(false);
+        setMessage({ type: "error", text: "Datatypen är osäker. Välj rätt datatyp ovan och kontrollera kolumnerna. Inget har sparats." });
+      }
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Filen kunde inte analyseras." });
     } finally {
@@ -114,21 +156,26 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
   }
 
   async function importFile() {
-    if (!file || !preview || !requiredComplete) return;
+    if (!file || !preview || !requiredComplete || !kindConfirmed || rulePreview.error) return;
     setBusy(true);
     setMessage(null);
     const body = new FormData();
     body.set("file", file);
     body.set("dataKind", dataKind);
-    body.set("mapping", JSON.stringify(mapping));
+    body.set("mapping", JSON.stringify({ ...mapping, __vehicle_rules: vehicleRules }));
     try {
-      const response = await fetch("/api/kpi/import", { method: "POST", body });
+      const response = await fetch("/api/kpi/import", { method: "POST", body, signal: AbortSignal.timeout(60_000) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Importen misslyckades.");
-      setMessage({ type: "success", text: `${result.validRows} av ${result.rows} rader importerades och sparades.` });
-      setTimeout(() => window.location.reload(), 900);
+      setMessage({ type: "success", text: `${file.name}: ${result.validRows} giltiga och ${result.invalidRows} rader för granskning sparades. ${pendingFiles.length ? "Nästa fil ligger redo för analys." : "Klart. Öppna Översikt för uppdaterade nyckeltal."}` });
+      setFile(pendingFiles[0] ?? null);
+      setPendingFiles((current) => current.slice(1));
+      setPreview(null);
+      setMapping({});
+      setVehicleRules("");
+      setKindConfirmed(false);
     } catch (error) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Importen misslyckades." });
+      setMessage({ type: "error", text: error instanceof Error && error.name === "TimeoutError" ? "Svaret dröjde. Kontrollera Senaste importer innan du försöker igen; servern kan fortfarande ha sparat filen." : error instanceof Error ? error.message : "Importen misslyckades." });
     } finally {
       setBusy(false);
     }
@@ -136,8 +183,9 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
 
   function chooseKind(next: DataKind) {
     setDataKind(next);
-    setPreview(null);
-    setMapping({});
+    setAutomatic(false);
+    setKindConfirmed(true);
+    setMapping(preview ? suggestMapping(preview.headers, next) : {});
     setMessage(null);
   }
 
@@ -169,15 +217,17 @@ export function KpiApp({ dashboard, batches, accountMappings, tenantName, userNa
           <article className="panel quality-panel"><div className="panel-head"><div><span className="section-kicker">Datakvalitet</span><h2>Underlagets täckning</h2></div><ShieldCheck size={20}/></div><div className="quality-score"><strong>{numeric(dashboard.quality.valid_rows)}</strong><span>giltiga rader av {numeric(dashboard.quality.total_rows)}</span></div><ul><li><span>Ej mappade kontorader</span><strong>{numeric(dashboard.quality.rows_without_account_mapping)}</strong></li><li><span>Rader utan fordonskoppling</span><strong>{numeric(dashboard.quality.rows_without_vehicle)}</strong></li><li><span>Rader utan chaufförskoppling</span><strong>{numeric(dashboard.quality.rows_without_employee)}</strong></li><li><span>Importer i perioden</span><strong>{batches.length}</strong></li></ul>{numeric(dashboard.quality.rows_without_account_mapping) > 0 && <a className="quality-link" href="/kpi?view=accounts">Öppna Ej mappade konton <ChevronRight size={14}/></a>}</article>
         </section>}
 
-        <section className="panel imports-panel"><div className="panel-head"><div><span className="section-kicker">Spårbarhet</span><h2>Senaste importer</h2></div>{canManage && <a className="secondary" href="/kpi?view=import"><UploadCloud size={16}/>Ny import</a>}</div>{batches.length ? <div className="table-wrap"><table><thead><tr><th>Fil</th><th>Datatyp</th><th>Period</th><th>Rader</th><th>Status</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.file_name ?? "API-leverans"}</strong><small>{new Date(batch.created_at).toLocaleString("sv-SE")}</small></td><td>{DATA_KINDS[batch.data_kind]?.label ?? batch.data_kind}</td><td>{batch.period_start ?? "–"} – {batch.period_end ?? "–"}</td><td>{batch.valid_row_count}/{batch.row_count}</td><td><span className={`status-pill ${batch.status}`}>{statusLabel(batch.status)}</span></td></tr>)}</tbody></table></div> : <p className="muted-line">Inga importer är genomförda ännu.</p>}</section>
+        <section className="panel imports-panel"><div className="panel-head"><div><span className="section-kicker">Spårbarhet</span><h2>Senaste importer</h2></div>{canManage && <a className="secondary" href="/kpi?view=import"><UploadCloud size={16}/>Ny import</a>}</div>{batches.length ? <div className="table-wrap"><table><thead><tr><th>Fil</th><th>Datatyp</th><th>Period</th><th>Rader</th><th>Status</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{batch.file_name ?? "API-leverans"}</strong><small>{new Date(batch.created_at).toLocaleString("sv-SE")}</small></td><td>{DATA_KINDS[batch.data_kind]?.label ?? batch.data_kind}</td><td>{batch.period_start ?? "–"} – {batch.period_end ?? "–"}</td><td>{batch.valid_row_count}/{batch.row_count}</td><td><span className={`status-pill ${batch.status}`}>{statusLabel(batch.status)}</span>{batch.error_summary?.length ? <details><summary>Granska radfel</summary><p>{batch.invalid_row_count} ogiltiga rader. Visar högst 50 fel från importen. Rätta originalet och granska dublettrisken före ny import; redigering av sparade rader är ännu inte tillgänglig.</p><ul>{batch.error_summary.map((issue, index) => <li key={index}>{issue.row ? `Datarad ${issue.row}: ` : ""}{issue.errors?.join(", ") ?? issue.message}</li>)}</ul></details> : null}</td></tr>)}</tbody></table></div> : <p className="muted-line">Inga importer är genomförda ännu.</p>}</section>
       </div>}
 
       {view === "import" && <div className="content import-layout">
         {!canManage ? <section className="empty-state"><AlertTriangle size={28}/><div><h2>Du saknar importbehörighet</h2><p>Behörigheten <code>kpi.manage</code> krävs för att lägga in underlag.</p></div></section> : <>
+          <section className="panel"><h2>Gemensam import</h2><p>Släpp PDF, Excel eller CSV i samma inkorg. Filerna behandlas en i taget, med kontroll före sparande. Osäkra datatyper väljs manuellt.</p><label><input type="checkbox" checked={automatic} disabled={busy} onChange={(event) => { setAutomatic(event.target.checked); setPreview(null); setKindConfirmed(!event.target.checked); }}/> Identifiera datatyp automatiskt</label>{file && <button className="secondary" disabled={busy} onClick={() => { setFile(pendingFiles[0] ?? null); setPendingFiles((current) => current.slice(1)); setPreview(null); setMapping({}); setVehicleRules(""); setKindConfirmed(false); }}>Hoppa över aktuell fil</button>}{pendingFiles.length > 0 && <p>{pendingFiles.length} filer väntar: {pendingFiles.map((item) => item.name).join(", ")}</p>}</section>
           <section className="import-steps"><span className="active">1. Datatyp</span><span className={file ? "active" : ""}>2. Fil</span><span className={preview ? "active" : ""}>3. Kolumnmappning</span><span>4. Import</span></section>
-          <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 1</span><h2>Välj vilket underlag du importerar</h2></div></div><div className="kind-grid">{(Object.entries(DATA_KINDS) as [DataKind, typeof DATA_KINDS[DataKind]][]).map(([key, item]) => <button className={dataKind === key ? "selected" : ""} key={key} onClick={() => chooseKind(key)}><span>{item.label}</span><small>{item.description}</small></button>)}</div></section>
-          <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 2</span><h2>Ladda upp originalfil</h2></div><span className="file-types">PDF · XLSX · XLS · CSV</span></div><label className={`dropzone ${file ? "has-file" : ""}`}><input type="file" accept=".pdf,.xlsx,.xls,.csv" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(null); setMessage(null); }}/><UploadCloud size={30}/>{file ? <><strong>{file.name}</strong><span>{number.format(file.size / 1024)} kB</span></> : <><strong>Välj eller släpp en fil här</strong><span>Originalfilen sparas privat för full spårbarhet. Max 20 MB.</span></>}</label><div className="actions"><button className="primary" disabled={!file || busy} onClick={analyse}>{busy ? "Analyserar…" : "Analysera fil"}</button></div></section>
-          {preview && <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 3</span><h2>Kontrollera kolumnmappningen</h2></div><span className="row-count">{preview.totalRows} rader hittades</span></div><div className="mapping-grid">{selectedDefinition.fields.map((field) => <label key={field.key}><span>{field.label}{field.required && <b>*</b>}</span><select value={mapping[field.key] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Inte mappad</option>{preview.headers.map((header) => <option value={header} key={header}>{header}</option>)}</select></label>)}</div><div className="preview-table"><table><thead><tr>{preview.headers.slice(0,8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.rows.slice(0,6).map((row, index) => <tr key={index}>{preview.headers.slice(0,8).map((header) => <td key={header}>{row[header] || "–"}</td>)}</tr>)}</tbody></table></div><div className="import-confirm"><div><ShieldCheck size={19}/><p><strong>Fail-closed import</strong><span>Ogiltiga eller osäkert mappade rader påverkar inte nyckeltalen.</span></p></div><button className="primary" disabled={!requiredComplete || busy} onClick={importFile}>{busy ? "Importerar…" : "Importera och spara"}</button></div></section>}
+          <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 1</span><h2>Välj vilket underlag du importerar</h2></div></div><div className="kind-grid">{(Object.entries(DATA_KINDS) as [DataKind, typeof DATA_KINDS[DataKind]][]).map(([key, item]) => <button className={dataKind === key ? "selected" : ""} key={key} disabled={busy} onClick={() => chooseKind(key)}><span>{item.label}</span><small>{item.description}</small></button>)}</div></section>
+          <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 2</span><h2>Ladda upp originalfil</h2></div><span className="file-types">PDF · XLSX · XLS · CSV</span></div><label className={`dropzone ${file ? "has-file" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); selectFiles(Array.from(event.dataTransfer.files)); }}><input type="file" multiple disabled={busy} accept=".pdf,.xlsx,.xls,.csv" onChange={(event) => selectFiles(Array.from(event.target.files ?? []))}/><UploadCloud size={30}/>{file ? <><strong>{file.name}</strong><span>{number.format(file.size / 1024)} kB</span></> : <><strong>Välj eller släpp en fil här</strong><span>Originalfilen sparas privat för full spårbarhet. Max 4 MB per fil.</span></>}</label><div className="actions"><button className="primary" disabled={!file || busy} onClick={analyse}>{busy ? "Analyserar…" : "Analysera fil"}</button></div></section>
+          {preview && <section className="panel"><h2>Fordonskopplingar för denna import</h2><p>Koppla enhetsnummer eller projektnummer till regnummer. En regel per rad: <code>Kolumnnamn;exakt värde;regnummer</code>. Reglerna gäller endast denna import och sparas med dess underlag. Projekt som avser flera fordon ska inte kopplas till ett enda fordon.</p><textarea disabled={busy} aria-label="Fordonskopplingar" rows={6} style={{ width: "100%", fontFamily: "monospace" }} value={vehicleRules} onChange={(event) => setVehicleRules(event.target.value)} placeholder="Använd ett kolumnnamn från filen;enhetsnummer;regnummer"/><p>Kontrollerade svenska regnummer stöds. Andra beteckningar kräver granskning. Detta verifierar inte permanent Humla Object ID.</p>{batches.some((batch) => batch.column_mapping?.__vehicle_rules) && <label>Återanvänd från tidigare import <select defaultValue="" onChange={(event) => { const previous = batches.find((batch) => batch.id === event.target.value); if (previous) setVehicleRules(previous.column_mapping?.__vehicle_rules ?? ""); }}><option value="">Välj underlag och kontrollera giltigheten</option>{batches.filter((batch) => batch.column_mapping?.__vehicle_rules).map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>}{rulePreview.error && <p role="alert">{rulePreview.error}</p>}<div className="table-wrap"><table><thead><tr><th>Fordonsvärde i fil</th><th>Regnummer efter koppling</th><th>Kontroll (första 12 rader)</th></tr></thead><tbody>{rulePreview.rows.map((row, index) => <tr key={index}><td>{row.raw || "–"}</td><td>{row.registration || "Ej kopplad"}</td><td>{row.error ?? (row.registration ? "Entydig koppling" : "Ingen fordonsuppgift")}</td></tr>)}</tbody></table></div></section>}
+          {preview && <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 3</span><h2>Kontrollera kolumnmappningen</h2></div><span className="row-count">{preview.totalRows} rader hittades</span></div><div className="mapping-grid">{selectedDefinition.fields.map((field) => <label key={field.key}><span>{field.label}{field.required && <b>*</b>}</span><select value={mapping[field.key] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Inte mappad</option>{preview.headers.map((header) => <option value={header} key={header}>{header}</option>)}</select></label>)}</div><div className="preview-table"><table><thead><tr>{preview.headers.slice(0,8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.rows.slice(0,6).map((row, index) => <tr key={index}>{preview.headers.slice(0,8).map((header) => <td key={header}>{row[header] || "–"}</td>)}</tr>)}</tbody></table></div><div className="import-confirm"><div><ShieldCheck size={19}/><p><strong>Fail-closed import</strong><span>Ogiltiga eller osäkert mappade rader påverkar inte nyckeltalen.</span></p></div><button className="primary" disabled={!requiredComplete || !kindConfirmed || !!rulePreview.error || busy} onClick={importFile}>{busy ? "Importerar…" : "Importera och spara"}</button></div></section>}
           {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}</div>}
         </>}
       </div>}
