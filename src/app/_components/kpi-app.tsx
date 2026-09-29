@@ -229,11 +229,13 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
         <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Dashboard</a>
         <a className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</a>
         <a className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
-        <a className={view === "review" ? "active" : ""} href={kpiHref("review")} onClick={() => setMobileMenu(false)}><CheckCircle2 size={18}/>Granskning & mappning</a>
-        <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={18}/>Kontomappning</a>
-        <a className={view === "units" ? "active" : ""} href={kpiHref("units")}><Truck size={18}/>Enhetsmappning</a>
-        {canManage&&<a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")}><Truck size={18}/>TransPA-underlag</a>}
-        <a className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} onClick={() => setMobileMenu(false)}><Settings2 size={18}/>Definitioner</a>
+        {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
+          <a className={view === "review" ? "active" : ""} href={kpiHref("review")} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning & mappning</a>
+          <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontomappning</a>
+          <a className={view === "units" ? "active" : ""} href={kpiHref("units")} onClick={() => setMobileMenu(false)}><Truck size={17}/>Enhetsmappning</a>
+          <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
+          <a className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-definitioner</a>
+        </div>}
       </nav>
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
       <div className="user-block"><div className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0,2)}</div><div><strong>{userName}</strong><span>KPI-användare</span></div><form action={logout}><button className="logout-button" type="submit">Logga ut</button></form></div>
