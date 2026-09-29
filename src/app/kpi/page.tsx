@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { KpiApp } from "../_components/kpi-app";
 
@@ -19,6 +20,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   if (!user) redirect("/kpi/login");
 
   const query = await searchParams;
+  const cookieStore = await cookies();
   const { data: member, error: memberError } = await supabase.from("hub_tenant_members").select("tenant_id,display_name,role").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
   if (!member) {
     console.error("[kpi] workspace lookup failed", { auth: authError?.code, member: memberError?.code });
