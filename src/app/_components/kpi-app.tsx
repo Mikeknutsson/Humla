@@ -13,6 +13,7 @@ import { parseVehicleRules, resolveVehicle } from "@/lib/kpi/vehicle-rules";
 import { logout } from "../kpi/login/actions";
 import { AccountMappingManager } from "./account-mapping-manager";
 import type { AccountMapping } from "@/lib/kpi/account-mapping";
+import {TranspaEvidencePanel, type TranspaEvidence} from './transpa-evidence';
 import {UnitManager} from './unit-manager';
 import type {KpiUnit,UnitReport} from '@/lib/kpi/units';
 
@@ -66,7 +67,8 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, batches, accountMappings, units, unitReport, transpaEvidence, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+  transpaEvidence: TranspaEvidence | null;
   units: KpiUnit[];
   unitReport: UnitReport;
   dashboard: Dashboard;
@@ -77,10 +79,10 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "import" | "definitions" | "accounts" | "units";
+  initialView?: "overview" | "import" | "definitions" | "accounts" | "units" | "transpa";
   serverIssues?: string[];
 }) {
-  const [view] = useState<"overview" | "import" | "definitions" | "accounts" | "units">(initialView);
+  const [view] = useState<"overview" | "import" | "definitions" | "accounts" | "units" | "transpa">(initialView);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [automatic, setAutomatic] = useState(true);
@@ -204,6 +206,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
         <a className={view === "import" ? "active" : ""} href="/kpi?view=import" onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
         <a className={view === "accounts" ? "active" : ""} href="/kpi?view=accounts" onClick={() => setMobileMenu(false)}><ListTree size={18}/>Kontomappning</a>
         <a className={view === "units" ? "active" : ""} href="/kpi?view=units"><Truck size={18}/>Enhetsmappning</a>
+        {canManage&&<a className={view === "transpa" ? "active" : ""} href="/kpi?view=transpa"><Truck size={18}/>TransPA-underlag</a>}
         <a className={view === "definitions" ? "active" : ""} href="/kpi?view=definitions" onClick={() => setMobileMenu(false)}><Settings2 size={18}/>Definitioner</a>
       </nav>
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
@@ -211,7 +214,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">KPI / Transport</span><h1>{view === "overview" ? "Transportstyrning" : view === "import" ? "Dataimport" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
       {view === "overview" && <div className="content">
@@ -242,6 +245,7 @@ export function KpiApp({ dashboard, batches, accountMappings, units, unitReport,
       {view === "accounts" && <div className="content"><AccountMappingManager mappings={accountMappings} unmapped={dashboard.unmapped_accounts ?? []} canManage={canManage}/></div>}
       {view === "units" && <div className="content"><form className="period-form"><input type="hidden" name="view" value="units"/><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button>Visa period</button></form><UnitManager units={units} report={unitReport} canManage={canManage} from={from} to={to}/></div>}
 
+      {view === "transpa" && canManage && <TranspaEvidencePanel data={transpaEvidence} from={from} to={to}/>}
       {view === "definitions" && <div className="content definitions-grid">
         <section className="panel"><div className="panel-head"><div><span className="section-kicker">Beräkningsmodell</span><h2>Transportavdelningens sex nyckeltal</h2></div><BarChart3 size={20}/></div><div className="formula-list"><div><strong>Omsättning</strong><code>Σ verifierade intäktsrader</code></div><div><strong>Resultat</strong><code>Omsättning − övriga kostnader − diesel</code></div><div><strong>Intäkt per lastbil</strong><code>Omsättning / intäktsbärande lastbilar</code></div><div><strong>Beläggningsgrad fordon</strong><code>Belagda timmar / tillgängliga timmar</code></div><div><strong>Dieselkostnad</strong><code>Dieselkostnad / omsättning</code></div><div><strong>Debiteringsgrad chaufförer</strong><code>Debiterbara timmar / betalda timmar</code></div></div></section>
         <section className="panel architecture-panel"><div className="panel-head"><div><span className="section-kicker">API-förberedd</span><h2>Samma datakontrakt – ny transportväg</h2></div><Database size={20}/></div><div className="flow"><div><FileSpreadsheet size={20}/><span>PDF / Excel<strong>Manuell import nu</strong></span></div><ChevronRight/><div><Database size={20}/><span>KPI-datakontrakt<strong>Validerad data</strong></span></div><ChevronRight/><div><LayoutDashboard size={20}/><span>Humla KPI<strong>Samma beräkningar</strong></span></div></div><p>När respektive API aktiveras ersätter datamotorn filtransporten. KPI-appen fortsätter läsa samma normaliserade fält och behöver inte byggas om.</p></section>
