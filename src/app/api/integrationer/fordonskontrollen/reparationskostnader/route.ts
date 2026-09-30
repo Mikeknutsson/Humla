@@ -6,9 +6,9 @@ export async function GET(){
  if(!member)return Response.json({error:"Arbetsyta saknas"},{status:403});
  const {data:allowed}=await db.rpc("hub_has_permission",{p_tenant_id:member.tenant_id,p_permission:"kpi.read"});
  if(!allowed)return Response.json({error:"Behörighet saknas"},{status:403});
- const {data,error}=await db.from("hub_fordonskontrollen_cost_outbox").select("id,external_vehicle_id,occurred_on,amount,account,description,status,external_reference,error_message").eq("tenant_id",member.tenant_id).order("occurred_on",{ascending:false}).limit(500);
+ const {data,error}=await db.from("hub_fordonskontrollen_cost_outbox").select("id,external_vehicle_id,vehicle_object_id,occurred_on,amount,account,description,status,external_reference,error_message").eq("tenant_id",member.tenant_id).order("occurred_on",{ascending:false}).limit(500);
  if(error)return Response.json({error:error.message},{status:500});
- return Response.json({rows:data});
+ const ids=[...new Set((data??[]).map(x=>x.vehicle_object_id))];const {data:vehicles,error:vehicleError}=ids.length?await db.from("hub_objects").select("id,data").eq("tenant_id",member.tenant_id).in("id",ids):{data:[],error:null};if(vehicleError)return Response.json({error:vehicleError.message},{status:500});const names=new Map((vehicles??[]).map(v=>[v.id,{registration:v.data?.registration_number??"",name:v.data?.vehicle_name??v.data?.name??v.data?.model??""}]));return Response.json({rows:(data??[]).map(row=>({...row,vehicle:names.get(row.vehicle_object_id)??null}))});
 }
 export async function POST(req:Request){
  const db=await createClient();const {data:{user}}=await db.auth.getUser();
