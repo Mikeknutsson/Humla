@@ -37,14 +37,6 @@ export async function POST(request: Request) {
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const table = await parseImportFile(new File([bytes], file.name, { type: file.type }));
     let normalized = normalizeRows(table, kind, mapping);
-    if (kind === "next_historical_time") {
-      const transportRoles = new Set(["K.CH","L.CH","MA","UEA","UEM","ÖT-1","ÖT-2","ÖT-3","ÖT-4","ÖT-5","ÖT-6"]);
-      normalized = normalized.map((row) => {
-        const role = String(row.description ?? "").trim().toUpperCase();
-        if (transportRoles.has(role)) return row;
-        return { ...row, is_valid: false, validation_errors: [...row.validation_errors, "Rollen ingår inte i Transportens historiska tid"] };
-      });
-    }
     if (kind === 'revenue' && isWorkify(table)) {
       const { data: rules, error } = await supabase.from('kpi_workify_article_rules').select('id,article_number,project_reference,cost_center,source_hash').eq('tenant_id', member.tenant_id).eq('enabled', true);
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
