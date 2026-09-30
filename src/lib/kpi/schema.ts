@@ -98,7 +98,7 @@ export function detectDataKind(headers: string[]): DataKind | null {
   else if (has("anställningsnummer", "anstnr", "employee number") && has("betalda timmar", "arbetade timmar", "paid hours")) candidates.push("driver_time");
   if (has("tillgängliga timmar", "available hours") && has("belagda timmar", "occupied hours")) candidates.push("vehicle_activity");
   if (has("liter", "volym") && has("bränslekostnad", "dieselkostnad")) candidates.push("fuel");
-  if (has("konto", "kontonummer", "account") && has("kostnad", "kostnadsbelopp", "debet")) candidates.push("cost");
+  if (has("konto", "kontonummer", "account") && has("kostnad", "kostnadsbelopp", "debet", "belopp", "saldo", "utfall")) candidates.push("cost");
   const workify = ["ordernummer", "orderstatus", "artikeldatum", "artikelnummer", "kundpris", "summa", "fakturerad"].every((name) => h.includes(name));
   if (has("intäkt", "omsättning", "intäktsbelopp") || workify) candidates.push("revenue");
   return candidates.length === 1 ? candidates[0] : null;
