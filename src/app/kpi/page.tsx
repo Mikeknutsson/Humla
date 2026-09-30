@@ -122,7 +122,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
-  const personnelHourlyCost = 34000 / (40 * 52 / 12) * 1.3592;
+  const {data:personnelSalarySettings}=await supabase.from("kpi_personnel_salary_settings").select("transpa_employee_id,monthly_salary,weekly_hours,overtime_multiplier,employer_contribution_pct,pension_pct,other_overhead_pct,is_default").eq("tenant_id",member.tenant_id);\n  const defaultPersonnelSetting=personnelSalarySettings?.find((row)=>row.is_default)||null;\n  const personnelMonthlySalary=Number(defaultPersonnelSetting?.monthly_salary??34000);\n  const personnelWeeklyHours=Number(defaultPersonnelSetting?.weekly_hours??40);\n  const personnelLoadFactor=1+(Number(defaultPersonnelSetting?.employer_contribution_pct??31.42)+Number(defaultPersonnelSetting?.pension_pct??4.5)+Number(defaultPersonnelSetting?.other_overhead_pct??0))/100;\n  const personnelHourlyCost = personnelMonthlySalary / (personnelWeeklyHours * 52 / 12) * personnelLoadFactor;
   const transpaPersonnelRows = Array.isArray(transpaVehicleTime?.vehicles) ? transpaVehicleTime.vehicles as Array<{vehicle?:string;occupied_hours?:number|string}> : [];
   const transpaPersonnelHours = transpaPersonnelRows.reduce((sum,row)=>sum+Number(row.occupied_hours??0),0);
   const personnelCostTotal = transpaPersonnelHours * personnelHourlyCost;
