@@ -2,7 +2,6 @@
 
 import { ImportReview } from "./import-review";
 import { HubReview } from "./hub-review";
-import { ControlQuickView } from "./control-quick-view";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -289,23 +288,24 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
       <div className="brand-wrap"><div className="brand-mark">H</div><div><div className="brand">Humla</div><div className="brand-sub">DASHBOARD</div></div><button className="icon-button close-nav" onClick={() => setMobileMenu(false)} aria-label="Stäng meny"><X size={18}/></button></div>
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
-        <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Dashboard</a>
+        <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Översikt</a>
         <a className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</a>
         <a className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
         {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
-          <a className={view === "review" ? "active" : ""} href={kpiHref("review")} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning & mappning</a>
+
           <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontomappning</a>
           <a className={view === "units" ? "active" : ""} href={kpiHref("units")} onClick={() => setMobileMenu(false)}><Truck size={17}/>Enhetsmappning</a>
           <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
           <a className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-definitioner</a>
         </div>}
       </nav>
+      {canManage&&<div className="nav-group"><span className="nav-group-title"><ShieldCheck size={15}/>ADMIN</span><a href="/kpi/kontrollpanel" onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Kontrollpanel</a><a href={kpiHref("review")} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning & mappning</a></div>}
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
       <div className="user-block"><div className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0,2)}</div><div><strong>{userName}</strong><span>KPI-användare</span></div><form action={logout}><button className="logout-button" type="submit">Logga ut</button></form></div>
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "overview" ? "Dashboard" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "overview" ? "Översikt" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
       {view === "review" && <div className="content"><HubReview initial={hubReviews as never[]}/></div>}
@@ -318,7 +318,6 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
         <section className="panel cost-efficiency-panel"><div className="panel-head"><div><span className="section-kicker">Kostnad & effektivitet</span><h2>Kostnad per arbetad timme</h2></div><small>{workedHours>0?`${number.format(workedHours)} arbetade timmar i underlaget`:"Inväntar TransPA-tid"}</small></div><div className="cost-kpi-grid">{costCards.map((item)=><a href={kpiHref("kpi")} className="cost-kpi" key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>{item.detail}</small></a>)}</div></section>
                 <section className="panel weekly-panel"><div className="panel-head"><div><span className="section-kicker">Löpande vecka</span><h2>Omsättning per vecka</h2></div><small>Aktuellt år mot föregående år</small></div><div className="weekly-chart">{(overviewWeekly?.weeks??[]).map((w,i)=>{const max=Math.max(...(overviewWeekly?.weeks??[]).flatMap(x=>[numeric(x.revenue),numeric(x.previous_revenue)]),1);return <div className="week-column" key={w.week_start}><div className="bars"><i title={currency.format(numeric(w.previous_revenue))} style={{height:`${Math.max(3,numeric(w.previous_revenue)/max*100)}%`}}/><b title={currency.format(numeric(w.revenue))} style={{height:`${Math.max(3,numeric(w.revenue)/max*100)}%`}}/></div><span>v{isoWeek(w.week_start)}</span></div>})}</div><div className="chart-legend"><span><i/>Föregående år</span><span><b/>Aktuellt år</span></div></section>
         <section className="overview-grid"><article className="panel"><div className="panel-head"><div><span className="section-kicker">Jämförelse</span><h2>YTD mot föregående verksamhetsår</h2></div></div><div className="ytd-bars"><div><span>Omsättning</span><strong>{currency.format(currentRevenue)}</strong><small>Fg. år {currency.format(previousRevenue)}{revenueChange != null ? ` · ${revenueChange >= 0 ? "+" : ""}${number.format(revenueChange)} %` : ""}</small></div><div><span>Resultat</span><strong>{currency.format(currentResult)}</strong><small>Fg. år {currency.format(previousResult)}</small></div><div><span>Resultatmarginal</span><strong>{resultMargin == null ? "–" : `${number.format(resultMargin)} %`}</strong><small>{previousMargin == null ? "Fg. år saknas" : `Fg. år ${number.format(previousMargin)} %`}</small></div></div></article><article className="panel"><div className="panel-head"><div><span className="section-kicker">Snabbläge</span><h2>Datakvalitet</h2></div></div><p>{numeric(dashboard.quality.valid_rows)} giltiga rader · {numeric(dashboard.quality.rows_without_vehicle)} utan fordonskoppling · {numeric(dashboard.quality.rows_without_employee)} utan chaufförskoppling.</p><a className="quality-link" href={kpiHref("review")}>Öppna granskning <ChevronRight size={14}/></a></article></section>
-        <ControlQuickView />
       </div>}
       {view === "kpi" && <div className="content">
         <section className="period-bar"><div><span className="section-kicker">Rapportperiod</span><strong>{from} – {to}</strong><div className="period-shortcuts">{fiscalYears.map((year) => <a key={year.label} className={from === year.from && to === year.to ? "active" : ""} href={`/kpi?${view === "kpi" ? "view=kpi&" : ""}from=${year.from}&to=${year.to}`}>{year.label}</a>)}</div></div><form className="period-form">{view === "kpi" && <input type="hidden" name="view" value="kpi"/>}<label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button type="submit"><RefreshCw size={15}/>Uppdatera</button></form></section>
