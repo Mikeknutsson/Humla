@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 function normalizeProjectReference(value: string | null | undefined) {
-  return String(value ?? "").trim().replace(/\.0+$/, "").toUpperCase();
+  return String(value ?? "").normalize("NFKC").trim().toUpperCase().replace(/^(?:PROJEKT(?:NR|NUMMER)?|PROJECT|NR)\s*[:#-]?\s*/i, "").replace(/\s+/g, "").replace(/\.0+$/, "");
 }
 
 function safeName(value: string) {
@@ -46,16 +46,24 @@ export async function POST(request: Request) {
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
       normalized = allocateWorkify(normalized, rules ?? []);
     }
-    const projectRefs = [...new Set(normalized.map((row) => normalizeProjectReference(row.project_reference)).filter(Boolean))];
+    // Match source project numbers regardless of harmless Excel/text formatting.\n    // Never infer a vehicle from a partial or approximate project number.\n    const projectRefs = [...new Set(normalized.map((row) => normalizeProjectReference(row.project_reference)).filter(Boolean))];
     if (projectRefs.length) {
       const { data: projectMappings, error: projectMappingError } = await supabase
         .from("kpi_project_unit_mappings")
         .select("project_reference,vehicle_registration")
         .eq("tenant_id", member.tenant_id)
-        .eq("enabled", true)
-        .in("project_reference", projectRefs);
+        .eq("enabled", true);
       if (projectMappingError) throw new Error("Projekt-/fordonsregistret kunde inte läsas.");
-      const vehicleByProject = new Map((projectMappings ?? []).filter((item) => item.vehicle_registration).map((item) => [normalizeProjectReference(item.project_reference), item.vehicle_registration]));
+      const vehicleByProject = new Map<string, string>();
+      const conflicts = new Set<string>();
+      for (const item of projectMappings ?? []) {
+        if (!item.vehicle_registration) continue;
+        const key = normalizeProjectReference(item.project_reference);
+        const registration = String(item.vehicle_registration).toUpperCase().replace(/[\s-]/g, "");
+        if (vehicleByProject.has(key) && vehicleByProject.get(key) !== registration) conflicts.add(key);
+        else vehicleByProject.set(key, registration);
+      }
+      for (const key of conflicts) vehicleByProject.delete(key);
       normalized = normalized.map((row) => row.vehicle_registration || !row.project_reference ? row : { ...row, vehicle_registration: vehicleByProject.get(normalizeProjectReference(row.project_reference)) ?? null });
     }
     let validRows = normalized.filter((row) => row.is_valid);
