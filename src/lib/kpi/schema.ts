@@ -26,7 +26,7 @@ const shared: FieldDefinition[] = [
   { key: "employee_number", label: "Anställningsnummer", aliases: ["anställningsnummer", "anstnr", "anst nr", "employee number"] },
   { key: "occurred_on", label: "Datum", required: true, aliases: ["artikeldatum", "datum", "date", "bokföringsdatum", "fakturadatum", "utförd datum", "period"] },
   { key: "vehicle_registration", label: "Registreringsnummer", aliases: ["regnr", "reg nr", "registreringsnummer", "fordon", "bil", "vehicle"] },
-  { key: "project_reference", label: "Projekt/AO", aliases: ["projekt", "projektnummer", "ao", "arbetsorder", "order", "project"] },
+  { key: "project_reference", label: "Projekt/AO", aliases: ["projekt", "projektnr", "projekt nr", "projektnummer", "ao", "arbetsorder", "order", "project"] },
   { key: "cost_center", label: "Kostnadsställe", aliases: ["kostnadsställe", "kst", "cost center", "costcenter"] },
   { key: "description", label: "Beskrivning", aliases: ["artikelnamn", "beskrivning", "text", "benämning", "artikel", "description", "radtext"] },
 ];
@@ -53,8 +53,8 @@ export const DATA_KINDS: Record<DataKind, { label: string; description: string; 
     fields: [...shared, { key: "available_hours", label: "Tillgängliga timmar", required: true, aliases: ["tillgängliga timmar", "kapacitet", "available hours", "möjliga timmar"] }, { key: "occupied_hours", label: "Belagda timmar", required: true, aliases: ["belagda timmar", "bokade timmar", "aktiv tid", "occupied hours"] }],
   },
   next_historical_time: {
-    label: "Historisk tid från NEXT",
-    description: "Historisk projekttid som fyller luckor före/vid övergången till TransPA.",
+    label: "NEXT – historiska timmar (utan kostnad)",
+    description: "Enbart arbetade timmar för beläggning och timnyckeltal. Kostnader hämtas separat från NEXT-kostnadsbelopp; ingen lönekostnad beräknas här.",
     fields: [
       { key: "occurred_on", label: "Datum", required: true, aliases: ["datum", "date"] },
       { key: "employee_number", label: "Namn/person", required: true, aliases: ["namn", "person", "medarbetare"] },
