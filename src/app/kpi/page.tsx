@@ -50,6 +50,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.rpc("kpi_driver_productive_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
   ]);
 
+  const [{data:salarySettings},{data:transpaPersons}]=await Promise.all([
+    supabase.from("kpi_personnel_salary_settings").select("transpa_employee_id,monthly_salary,weekly_hours,overtime_multiplier,is_default").eq("tenant_id",member.tenant_id),
+    supabase.from("hub_transpa_persons").select("transpa_employee_id,employee_number,display_name,is_active").eq("tenant_id",member.tenant_id).order("display_name")
+  ]);
+
   // NEXT repair costs are displayed separately until accounting mappings and
   // vehicle allocations are verified; do not add these totals to KPI result.
   const {data:repairRows,error:repairError}=await supabase.from("hub_fordonskontrollen_cost_outbox")
@@ -124,7 +129,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   }:baseDashboard;
   // Personnel cost fallback: until verified TransPA salary facts arrive, use reported
   // TransPA vehicle hours × configurable standard hourly personnel cost.
-  const {data:salarySettings}=await supabase.from("kpi_personnel_salary_settings").select("transpa_employee_id,monthly_salary,weekly_hours,overtime_multiplier,is_default").eq("tenant_id",member.tenant_id);
   const defaultSalary=(salarySettings??[]).find((s:any)=>s.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5};
   const personnelStandardHourlyCost=Number(defaultSalary.monthly_salary)/(Number(defaultSalary.weekly_hours)*52/12);
   // Use the selected KPI period (not the current month). The RPC above receives from/to,
