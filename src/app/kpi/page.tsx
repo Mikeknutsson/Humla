@@ -123,7 +123,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
   const personnelHourlyCost = 34000 / (40 * 52 / 12) * 1.3592;
-  const transpaPersonnelHours = Array.isArray(transpaVehicleTime?.vehicles) ? transpaVehicleTime.vehicles.length : 0;
+  const transpaPersonnelRows = Array.isArray(transpaVehicleTime?.vehicles) ? transpaVehicleTime.vehicles as Array<{vehicle?:string;occupied_hours?:number|string}> : [];
+  const transpaPersonnelHours = transpaPersonnelRows.reduce((sum,row)=>sum+Number(row.occupied_hours??0),0);
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
