@@ -36,7 +36,7 @@ export async function GET() {
       registration: d.registration_number ?? null,
       liters: typeof d.quantity_liters === "number" ? d.quantity_liters : null,
       // Source prices are informational until reconciled with NEXT 5360.
-      sourceAmountUnverified: d.source_amount ?? null,
+      provisionalCostSek: typeof d.source_amount === "number" && Number.isFinite(d.source_amount) ? d.source_amount : null,
       priceStatus: d.price_status ?? "source_unverified",
       updatedAt: item.updated_at,
     };
@@ -50,8 +50,9 @@ export async function GET() {
       Date.now() - new Date(connection.last_success_at).getTime() < 2 * 60 * 60 * 1000,
     count: transactions.length,
     liters: transactions.reduce((sum, item) => sum + (item.liters ?? 0), 0),
-    bookedCostSek: null,
-    bookedCostSource: "NEXT account 5360 (pending reconciliation)",
+    provisionalBsmartCostSek: transactions.reduce((sum, item) => sum + (item.provisionalCostSek ?? 0), 0),
+    costSource: "B.Smart source_amount; provisional until source price is verified",
+    nextAccount5360: "reconciliation_only_no_additional_cost",
     transactions,
   }, { headers: { "Cache-Control": "no-store" } });
 }
