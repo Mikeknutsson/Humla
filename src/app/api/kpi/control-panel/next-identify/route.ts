@@ -7,7 +7,8 @@ export async function POST(){
  if(!m)return Response.json({error:"Organisation saknas"},{status:403});
  const {data:allowed}=await s.rpc("hub_has_permission",{p_tenant_id:m.tenant_id,p_permission:"kpi.manage"});
  if(!allowed)return Response.json({error:"Behörighet saknas"},{status:403});
+ const matched=await s.rpc("hub_match_next_vehicle_projects");if(matched.error)return Response.json({error:matched.error.message},{status:400});
  const {data,error}=await s.rpc("kpi_identify_next_costs");
  if(error)return Response.json({error:error.message},{status:400});
- return Response.json(data);
+ return Response.json({...data,linked:matched.data?.linked??0});
 }
