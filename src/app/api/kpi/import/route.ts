@@ -73,8 +73,18 @@ export async function POST(request: Request) {
         else vehicleByProject.set(key, registration);
       }
       for (const key of conflicts) vehicleByProject.delete(key);
-      normalized = normalized.map((row) => row.vehicle_registration || !row.project_reference ? row : { ...row, vehicle_registration: vehicleByProject.get(normalizeProjectReference(row.project_reference)) ?? null });
+      normalized = normalized.map((row) => {
+        const registration = row.vehicle_registration || (row.project_reference ? vehicleByProject.get(normalizeProjectReference(row.project_reference)) : null);
+        if (!registration) return row;
+        // A verified exact project mapping resolves the otherwise misleading
+        // descriptive vehicle-text error in NEXT exports.
+        const errors = row.validation_errors.filter((error) => error !== "Fordonsbeteckning saknar verifierad regnummerkoppling");
+        return { ...row, vehicle_registration: registration, validation_errors: errors, is_valid: errors.length === 0 };
+      });
     }
+    // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
+    // That is a description, not a registration. Unmapped rows stay in review,
+    // while verified project mappings above release their corresponding rows.
     let validRows = normalized.filter((row) => row.is_valid);
     const dates = validRows.map((row) => row.occurred_on).filter((value): value is string => Boolean(value)).sort();
     batchId = randomUUID();
