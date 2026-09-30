@@ -42,6 +42,18 @@ export async function POST(request: Request) {
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
       normalized = allocateWorkify(normalized, rules ?? []);
     }
+    const projectRefs = [...new Set(normalized.map((row) => row.project_reference).filter((value): value is string => Boolean(value)))];
+    if (projectRefs.length) {
+      const { data: projectMappings, error: projectMappingError } = await supabase
+        .from("kpi_project_unit_mappings")
+        .select("project_reference,vehicle_registration")
+        .eq("tenant_id", member.tenant_id)
+        .eq("enabled", true)
+        .in("project_reference", projectRefs);
+      if (projectMappingError) throw new Error("Projekt-/fordonsregistret kunde inte läsas.");
+      const vehicleByProject = new Map((projectMappings ?? []).filter((item) => item.vehicle_registration).map((item) => [item.project_reference, item.vehicle_registration]));
+      normalized = normalized.map((row) => row.vehicle_registration || !row.project_reference ? row : { ...row, vehicle_registration: vehicleByProject.get(row.project_reference) ?? null });
+    }
     let validRows = normalized.filter((row) => row.is_valid);
     const dates = validRows.map((row) => row.occurred_on).filter((value): value is string => Boolean(value)).sort();
     batchId = randomUUID();
