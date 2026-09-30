@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     // Match source project numbers regardless of harmless Excel/text formatting.
     // Never infer a vehicle from a partial or approximate project number.
     const projectRefs = [...new Set(normalized.map((row) => normalizeProjectReference(row.project_reference)).filter(Boolean))];
-    if (projectRefs.length) {
+    if (projectRefs.length && kind !== "cost") {
       const { data: projectMappings, error: projectMappingError } = await supabase
         .from("kpi_project_unit_mappings")
         .select("project_reference,vehicle_registration")
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         return { ...row, vehicle_registration: registration, validation_errors: errors, is_valid: errors.length === 0 };
       });
     }
-    // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
+    // NEXT costs must not be assigned to vehicles merely because a project number matches.\n    // Descriptive verification text is not a vehicle identity; leave such costs\n    // unallocated for explicit classification as vehicle, shared or other.\n    if (kind === "cost") normalized = normalized.map((row) => {\n      const errors = row.validation_errors.filter((error) => error !== "Fordonsbeteckning saknar verifierad regnummerkoppling");\n      return { ...row, validation_errors: errors, is_valid: errors.length === 0,\n        allocation: { allocation_status: row.vehicle_registration ? "vehicle_direct" : "unallocated_review", allocation_type: row.vehicle_registration ? "vehicle" : null } };\n    });\n    // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
     // That is a description, not a registration. Unmapped rows stay in review,
     // while verified project mappings above release their corresponding rows.
     let validRows = normalized.filter((row) => row.is_valid);
