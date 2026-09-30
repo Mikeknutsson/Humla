@@ -122,6 +122,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
+  const defaultPersonnelMonthlySalary=34000;
+  const defaultPersonnelWeeklyHours=40;
+  const defaultEmployerContributionPct=31.42;
+  const defaultPensionPct=4.5;
+  const personnelHourlyCost=(defaultPersonnelMonthlySalary/(defaultPersonnelWeeklyHours*52/12))*(1+(defaultEmployerContributionPct+defaultPensionPct)/100);
+  const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v:any)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
+  const personnelTotal=[...transpaHoursByVehicle.values()].reduce((sum,h)=>sum+(Number.isFinite(h)?h:0),0)*personnelHourlyCost;
+  const personnelDashboard={...displayDashboard,metrics:{...displayDashboard.metrics,result:Number(displayDashboard.metrics.result??0)-personnelTotal},vehicles:displayDashboard.vehicles.map(v=>{const personnel=(transpaHoursByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)*personnelHourlyCost;return {...v,personnel_cost:personnel};}),cost_categories:{...displayDashboard.cost_categories,"Personalkostnad – schablon":personnelTotal}};
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
@@ -145,7 +153,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     overviewPrevious={(previousDashboard ?? null) as never}
     overviewPeriod={overviewPeriod}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
-    dashboard={displayDashboard as typeof emptyDashboard}
+    dashboard={personnelDashboard as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
     userName={member.display_name ?? user.email ?? "Användare"}
