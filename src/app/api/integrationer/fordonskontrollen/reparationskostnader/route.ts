@@ -24,3 +24,6 @@ export async function POST(req:Request){
  if(error)return Response.json({error:error.message},{status:500});
  return Response.json({updated:data?.length??0,note:"Godkända rader ligger i kö. Ingen överföring till Fordonskontrollen sker förrän skriv-API har verifierats."});
 }
+export async function PUT(){
+ return Response.json({error:"Automatisk överföring är spärrad tills Fordonskontrollens kostnads-API och idempotens är verifierade."},{status:409});
+}
