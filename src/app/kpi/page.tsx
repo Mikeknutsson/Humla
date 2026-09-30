@@ -127,7 +127,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const defaultEmployerContributionPct=31.42;
   const defaultPensionPct=4.5;
   const personnelHourlyCost=(defaultPersonnelMonthlySalary/(defaultPersonnelWeeklyHours*52/12))*(1+(defaultEmployerContributionPct+defaultPensionPct)/100);
-  const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v:any)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
+  const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v: Record<string, unknown>)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
   const personnelTotal=[...transpaHoursByVehicle.values()].reduce((sum,h)=>sum+(Number.isFinite(h)?h:0),0)*personnelHourlyCost;
   const personnelDashboard={...displayDashboard,metrics:{...displayDashboard.metrics,result:Number(displayDashboard.metrics.result??0)-personnelTotal},vehicles:displayDashboard.vehicles.map(v=>{const personnel=(transpaHoursByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)*personnelHourlyCost;return {...v,personnel_cost:personnel};}),cost_categories:{...displayDashboard.cost_categories,"Personalkostnad – schablon":personnelTotal}};
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
