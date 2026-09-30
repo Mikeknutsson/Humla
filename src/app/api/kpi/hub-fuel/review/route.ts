@@ -11,6 +11,7 @@ export async function POST(req:Request){
  if(typeof id!=="string"||!["approved","rejected"].includes(status)||typeof note!=="string"||note.trim().length<3||cost!==null&&cost!==undefined&&(typeof cost!=="number"||!Number.isFinite(cost)||cost<=0))return Response.json({error:"Invalid review"},{status:400});
  const {data:source}=await s.from("kpi_bsmart_fuel_checked_v1").select("hub_object_id").eq("tenant_id",m.tenant_id).eq("hub_object_id",id).maybeSingle();
  if(!source)return Response.json({error:"Transaction not found"},{status:404});
+ if(status==="approved"&&cost==null)return Response.json({error:"Ange korrigerad totalkostnad innan godkännande"},{status:400});
  const {error}=await s.from("kpi_bsmart_cost_reviews").upsert({tenant_id:m.tenant_id,hub_object_id:id,status,corrected_cost_sek:cost??null,note:note.trim(),reviewed_by:user.id,reviewed_at:new Date().toISOString()},{onConflict:"tenant_id,hub_object_id"});
  if(error)return Response.json({error:error.message},{status:400});
  return Response.json({ok:true});
