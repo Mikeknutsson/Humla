@@ -20,7 +20,7 @@ export async function GET() {
     .select("status,last_success_at,last_error_at").eq("tenant_id", member.tenant_id)
     .eq("connector_type", "piusi_bsmart").maybeSingle();
   if (connectionError) return Response.json({ error: "B.Smart-anslutningen kunde inte läsas." }, { status: 500 });
-  const { data: objects, error } = await supabase.from("kpi_bsmart_fuel_checked_v1")
+  const { data: objects, error } = await supabase.from("kpi_bsmart_fuel_reviewed_v2")
     .select("*").eq("tenant_id", member.tenant_id)
     .order("updated_at", { ascending: false }).limit(5000);
   if (error) return Response.json({ error: "Tankningar kunde inte hämtas från Humla Hub." }, { status: 500 });
@@ -34,6 +34,7 @@ export async function GET() {
     rawCostSek: item.bsmart_cost_sek == null ? null : Number(item.bsmart_cost_sek),
     reviewReason: item.review_reason,
     costStatus: item.cost_status,
+    reviewNote: item.review_note,
     priceStatus: item.price_status,
     updatedAt: item.updated_at,
   }));
