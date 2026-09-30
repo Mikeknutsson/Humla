@@ -35,7 +35,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const { data: canManage, error: manageError } = await supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.manage" });
   const { data: settings } = await supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle();
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "personnel" && canManage) || (query.view === "transpa" && canManage) ? query.view : "overview";
+  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
   const overviewPeriod = overviewPeriods(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
   const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
@@ -48,11 +48,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.rpc("kpi_transport_efficiency", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.rpc("kpi_hired_capacity_share", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.rpc("kpi_driver_productive_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
-  ]);
-
-  const [{data:salarySettings},{data:transpaPersons}]=await Promise.all([
-    supabase.from("kpi_personnel_salary_settings").select("transpa_employee_id,monthly_salary,weekly_hours,overtime_multiplier,employer_contribution_pct,pension_pct,other_overhead_pct,is_default").eq("tenant_id",member.tenant_id),
-    supabase.from("hub_transpa_persons").select("transpa_employee_id,employee_number,display_name,is_active").eq("tenant_id",member.tenant_id).order("display_name")
   ]);
 
   // NEXT repair costs are displayed separately until accounting mappings and
@@ -120,20 +115,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     cost_categories:Record<string,number|string>;unmapped_accounts:Array<{account:string;description?:string|null;row_count:number;amount:number}>;quality:Record<string,number|string>;
   };
   const hasMappedCosts=Number(baseDashboard.components.other_cost??0)!==0||Number(baseDashboard.components.fuel_cost??0)!==0;
-  const costDashboard=!nextCostError&&!hasMappedCosts?{
+  const displayDashboard=!nextCostError&&!hasMappedCosts?{
     ...baseDashboard,
     metrics:{...baseDashboard.metrics,result:Number(baseDashboard.metrics.result??0)-mappedNextCost-mappedFuelCost,diesel_share:Number(baseDashboard.metrics.revenue??0)>0?mappedFuelCost/Number(baseDashboard.metrics.revenue)*100:0},
     components:{...baseDashboard.components,other_cost:mappedNextCost,fuel_cost:mappedFuelCost},
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
-  const defaultSalary=(salarySettings??[]).find((s:any)=>s.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5,employer_contribution_pct:31.42,pension_pct:4.5,other_overhead_pct:0};
-  const personnelBaseHourlyCost=Number(defaultSalary.monthly_salary)/(Number(defaultSalary.weekly_hours)*52/12);
-  const personnelStandardHourlyCost=personnelBaseHourlyCost*(1+(Number(defaultSalary.employer_contribution_pct??31.42)+Number(defaultSalary.pension_pct??4.5)+Number(defaultSalary.other_overhead_pct??0))/100);
-  const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v:any)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
-  const hasActualPersonnelCost=Object.entries(costDashboard.cost_categories??{}).some(([key,value])=>(key.toLocaleLowerCase("sv-SE").includes("personal")||key.toLocaleLowerCase("sv-SE").includes("lön"))&&Number(value??0)!==0);
-  const standardPersonnelTotal=hasActualPersonnelCost?0:[...transpaHoursByVehicle.values()].reduce((sum,h)=>sum+(Number.isFinite(h)?h:0),0)*personnelStandardHourlyCost;
-  const displayDashboard=hasActualPersonnelCost?costDashboard:{...costDashboard,metrics:{...costDashboard.metrics,result:Number(costDashboard.metrics.result??0)-standardPersonnelTotal},vehicles:costDashboard.vehicles.map(v=>{const personnel=(transpaHoursByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)*personnelStandardHourlyCost;const revenue=Number(v.revenue??0),other=Number(v.cost??0),fuel=Number(v.fuel_cost??0);return {...v,personnel_cost:personnel,personnel_cost_source:"Schablon",vehicle_result:revenue-other-fuel-personnel};}),cost_categories:{...costDashboard.cost_categories,"Personalkostnad – schablon":standardPersonnelTotal}};
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
@@ -165,8 +153,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     to={to}
     canManage={Boolean(canManage)}
     accountMappings={(accountMappings ?? []) as never[]}
-    salarySettings={(salarySettings ?? []) as never[]}
-    salaryPersons={(transpaPersons ?? []) as never[]}
     units={(units ?? []) as never[]}
     unitReport={unitReport ?? {units:[],quality:{},conflict_rows:[]}}
     transpaEvidence={transpaEvidence}
