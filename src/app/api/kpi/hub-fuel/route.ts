@@ -20,27 +20,20 @@ export async function GET() {
     .select("status,last_success_at,last_error_at").eq("tenant_id", member.tenant_id)
     .eq("connector_type", "piusi_bsmart").maybeSingle();
   if (connectionError) return Response.json({ error: "B.Smart-anslutningen kunde inte läsas." }, { status: 500 });
-  const { data: objects, error } = await supabase.from("hub_objects")
-    .select("id,data,updated_at").eq("tenant_id", member.tenant_id)
-    .eq("object_type", "FuelTransaction").order("updated_at", { ascending: false }).limit(5000);
+  const { data: objects, error } = await supabase.from("kpi_bsmart_fuel_v1")
+    .select("*").eq("tenant_id", member.tenant_id)
+    .order("updated_at", { ascending: false }).limit(5000);
   if (error) return Response.json({ error: "Tankningar kunde inte hämtas från Humla Hub." }, { status: 500 });
-  const transactions = (objects ?? []).filter((item) => {
-    const d = item.data as Record<string, unknown> | null;
-    return d?.source_system === "piusi_bsmart";
-  }).map((item) => {
-    const d = item.data as Record<string, unknown>;
-    return {
-      id: item.id,
-      transactionId: String(d.transaction_id ?? ""),
-      occurredAt: d.transaction_date ?? null,
-      registration: d.registration_number ?? null,
-      liters: typeof d.quantity_liters === "number" ? d.quantity_liters : null,
-      // Source prices are informational until reconciled with NEXT 5360.
-      provisionalCostSek: typeof d.source_amount === "number" && Number.isFinite(d.source_amount) ? d.source_amount : null,
-      priceStatus: d.price_status ?? "source_unverified",
-      updatedAt: item.updated_at,
-    };
-  });
+  const transactions = (objects ?? []).map((item) => ({
+    id: item.hub_object_id,
+    transactionId: item.transaction_id,
+    occurredAt: item.occurred_at,
+    registration: item.vehicle_registration,
+    liters: item.liters == null ? null : Number(item.liters),
+    provisionalCostSek: item.bsmart_cost_sek == null ? null : Number(item.bsmart_cost_sek),
+    priceStatus: item.price_status,
+    updatedAt: item.updated_at,
+  }));
   return Response.json({
     source: "humla_hub/piusi_bsmart",
     connectionStatus: connection?.status ?? "not_configured",
