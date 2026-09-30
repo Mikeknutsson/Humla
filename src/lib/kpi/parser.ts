@@ -118,7 +118,7 @@ export function normalizeRows(table: ParsedTable, kind: DataKind, mapping: Recor
       project_reference: field(source, "project_reference") || null,
       cost_center: field(source, "cost_center") || null,
       account: field(source, "account") || null,
-      description: field(source, "description") || null,
+      description: (kind === "next_historical_time" ? field(source, "time_role") : field(source, "description")) || null,
       quantity: numberValue(field(source, "quantity")),
       amount: numberValue(field(source, "amount")),
       available_hours: numberValue(field(source, "available_hours")),
