@@ -122,6 +122,25 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
+  // Ensure the TransPA salary subscription is registered from an authenticated server session.
+  // The endpoint is idempotent upstream; 409 means an existing subscription already exists.
+  if(canManage){
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      if(session?.access_token){
+        const projectUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if(projectUrl){
+          const response=await fetch(projectUrl+"/functions/v1/transpa-salary-subscribe",{
+            method:"POST",
+            headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+            body:JSON.stringify({})
+          });
+          if(!response.ok) console.error("[kpi] TransPA salary subscription",response.status);
+        }
+      }
+    }catch(error){console.error("[kpi] TransPA salary subscription failed",error);}
+  }
+
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
