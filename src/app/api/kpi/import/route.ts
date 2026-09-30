@@ -6,6 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+function normalizeProjectReference(value: string | null | undefined) {
+  return String(value ?? "").trim().replace(/\.0+$/, "").toUpperCase();
+}
+
 function safeName(value: string) {
   return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
 }
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
       normalized = allocateWorkify(normalized, rules ?? []);
     }
-    const projectRefs = [...new Set(normalized.map((row) => row.project_reference).filter((value): value is string => Boolean(value)))];
+    const projectRefs = [...new Set(normalized.map((row) => normalizeProjectReference(row.project_reference)).filter(Boolean))];
     if (projectRefs.length) {
       const { data: projectMappings, error: projectMappingError } = await supabase
         .from("kpi_project_unit_mappings")
@@ -51,8 +55,8 @@ export async function POST(request: Request) {
         .eq("enabled", true)
         .in("project_reference", projectRefs);
       if (projectMappingError) throw new Error("Projekt-/fordonsregistret kunde inte läsas.");
-      const vehicleByProject = new Map((projectMappings ?? []).filter((item) => item.vehicle_registration).map((item) => [item.project_reference, item.vehicle_registration]));
-      normalized = normalized.map((row) => row.vehicle_registration || !row.project_reference ? row : { ...row, vehicle_registration: vehicleByProject.get(row.project_reference) ?? null });
+      const vehicleByProject = new Map((projectMappings ?? []).filter((item) => item.vehicle_registration).map((item) => [normalizeProjectReference(item.project_reference), item.vehicle_registration]));
+      normalized = normalized.map((row) => row.vehicle_registration || !row.project_reference ? row : { ...row, vehicle_registration: vehicleByProject.get(normalizeProjectReference(row.project_reference)) ?? null });
     }
     let validRows = normalized.filter((row) => row.is_valid);
     const dates = validRows.map((row) => row.occurred_on).filter((value): value is string => Boolean(value)).sort();
