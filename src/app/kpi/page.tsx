@@ -62,51 +62,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   },{approved:0,pending:0,approvedCount:0,pendingCount:0});
   const sek=(n:number)=>new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK",maximumFractionDigits:0}).format(n);
 
-  // Read-only NEXT allocation: use only unique project -> registration mappings.
-  // No raw imports or accounting approvals are modified. Internal transfers are
-  // excluded from consolidated cost to prevent double counting.
-  const nextCostRows:Array<{id:string;amount:number;account:string|null;allocation:{allocation_reference?:string;allocation_status?:string}|null}>=[];
-  let nextCostError="";
-  const nextCostPages=await Promise.all(Array.from({length:17},(_,page)=>supabase.from("kpi_import_rows").select("id,amount,account,allocation")
-    .eq("tenant_id",member.tenant_id).eq("data_kind","cost").eq("is_valid",true)
-    .gte("occurred_on",from).lte("occurred_on",to).order("id").range(page*900,page*900+899)));
-  for(const result of nextCostPages){
-    if(result.error){nextCostError=result.error.message;break;}
-    nextCostRows.push(...(result.data??[]) as typeof nextCostRows);
-    if((result.data??[]).length<900)break;
-  }
-  const projectRefs=[...new Set(nextCostRows.map(r=>r.allocation?.allocation_reference).filter((x):x is string=>Boolean(x)))];
-  const vehicleMappings=new Map<string,string[]>();
-  for(let i=0;i<projectRefs.length;i+=100){
-    const result=await supabase.from("kpi_project_unit_mappings").select("project_reference,vehicle_registration")
-      .eq("tenant_id",member.tenant_id).eq("enabled",true).in("project_reference",projectRefs.slice(i,i+100));
-    if(result.error){nextCostError=result.error.message;break;}
-    for(const m of result.data??[]){
-      const regs=vehicleMappings.get(m.project_reference)??[];
-      const reg=String(m.vehicle_registration??"").trim().toUpperCase();
-      if(reg&&!regs.includes(reg))regs.push(reg);
-      vehicleMappings.set(m.project_reference,regs);
-    }
-  }
-  const internalAccounts=new Set(["4015","4425"]);
-  const fuelAccounts=new Set(["5360","5621","5631"]);
-  const byVehicle=new Map<string,number>();
-  const fuelByVehicle=new Map<string,number>();
-  let mappedNextCost=0,mappedFuelCost=0,unallocatedNextCost=0;
-  if(!nextCostError)for(const row of nextCostRows){
-    if(internalAccounts.has(String(row.account??"")))continue;
-    const regs=vehicleMappings.get(row.allocation?.allocation_reference??"")??[];
-    const amount=Number(row.amount??0);
-    if(regs.length===1&&row.allocation?.allocation_status==="identified"){
-      if(fuelAccounts.has(String(row.account??""))){
-        fuelByVehicle.set(regs[0],(fuelByVehicle.get(regs[0])??0)+amount);
-        mappedFuelCost+=amount;
-      }else{
-        byVehicle.set(regs[0],(byVehicle.get(regs[0])??0)+amount);
-        mappedNextCost+=amount;
-      }
-    }else unallocatedNextCost+=amount;
-  }
+  // Humla Hub owns NEXT cost allocation. KPI only consumes the calculated result.
+  const {data:nextCostHub,error:nextCostHubError}=await supabase.rpc("hub_kpi_next_vehicle_costs_v1",{p_tenant_id:member.tenant_id,p_from:from,p_to:to});
+  const nextCostError=nextCostHubError?.message??"";
+  const hubVehicleCosts=Array.isArray(nextCostHub?.vehicles)?nextCostHub.vehicles as Array<{vehicle?:string;cost?:number|string;fuel_cost?:number|string}>:[];
+  const byVehicle=new Map(hubVehicleCosts.map(row=>[String(row.vehicle??"").trim().toUpperCase(),Number(row.cost??0)]));
+  const fuelByVehicle=new Map(hubVehicleCosts.map(row=>[String(row.vehicle??"").trim().toUpperCase(),Number(row.fuel_cost??0)]));
+  const mappedNextCost=Number(nextCostHub?.mapped_other_cost??0);
+  const mappedFuelCost=Number(nextCostHub?.mapped_fuel_cost??0);
+  const unallocatedNextCost=Number(nextCostHub?.unallocated_cost??0);
   // Dashboard previously had no account mappings and displayed zero costs.
   // The overlay is provisional; do not add it again once mapped KPI costs exist.
   const baseDashboard=(dashboard??{metrics:{},components:{},vehicles:[],drivers:[],cost_categories:{},unmapped_accounts:[],quality:{}}) as {
@@ -137,7 +101,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError, nextCostHubError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
   return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}>{nextCostError?`NEXT-kostnader kunde inte fördelas: ${nextCostError}`:`NEXT: ${sek(mappedNextCost)} preliminärt fördelat på fordon; ${sek(unallocatedNextCost)} återstår att granska. Interna överföringar ingår inte.`}</div><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
     <div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
