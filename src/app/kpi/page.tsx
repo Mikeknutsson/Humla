@@ -78,7 +78,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:Array<Record<string,number|string>>;drivers:Array<Record<string,number|string>>;
     cost_categories:Record<string,number|string>;unmapped_accounts:Array<{account:string;description?:string|null;row_count:number;amount:number}>;quality:Record<string,number|string>;
   };
-  const hubCostCategories: Record<string, number> = Object.fromEntries((hubDashboard.cost_categories??[]).map(row=>[String(row.category),Number(row.amount??0)]));
+  const hubCostCategories: Record<string, number> = {};\n  for (const row of (hubDashboard.cost_categories ?? [])) hubCostCategories[String(row.category)] = Number(row.amount ?? 0);
   const transpaPersonnel=Number(hubDashboard.components?.transpa_personnel_cost??0);
   hubCostCategories.personnel=Number(hubCostCategories.personnel??0)+transpaPersonnel;
   const displayDashboard={
