@@ -150,7 +150,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     overviewPrevious={(previousDashboard ?? null) as never}
     overviewPeriod={overviewPeriod}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
-    dashboard={{...displayDashboard, metrics:{...displayDashboard.metrics,result:personnelResult}} as typeof emptyDashboard}
+    dashboard={displayDashboard as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
     userName={member.display_name ?? user.email ?? "Användare"}
