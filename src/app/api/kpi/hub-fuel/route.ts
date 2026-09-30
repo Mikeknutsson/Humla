@@ -20,7 +20,7 @@ export async function GET() {
     .select("status,last_success_at,last_error_at").eq("tenant_id", member.tenant_id)
     .eq("connector_type", "piusi_bsmart").maybeSingle();
   if (connectionError) return Response.json({ error: "B.Smart-anslutningen kunde inte läsas." }, { status: 500 });
-  const { data: objects, error } = await supabase.from("kpi_bsmart_fuel_v1")
+  const { data: objects, error } = await supabase.from("kpi_bsmart_fuel_checked_v1")
     .select("*").eq("tenant_id", member.tenant_id)
     .order("updated_at", { ascending: false }).limit(5000);
   if (error) return Response.json({ error: "Tankningar kunde inte hämtas från Humla Hub." }, { status: 500 });
@@ -30,7 +30,10 @@ export async function GET() {
     occurredAt: item.occurred_at,
     registration: item.vehicle_registration,
     liters: item.liters == null ? null : Number(item.liters),
-    provisionalCostSek: item.bsmart_cost_sek == null ? null : Number(item.bsmart_cost_sek),
+    provisionalCostSek: item.accepted_cost_sek == null ? null : Number(item.accepted_cost_sek),
+    rawCostSek: item.bsmart_cost_sek == null ? null : Number(item.bsmart_cost_sek),
+    reviewReason: item.review_reason,
+    costStatus: item.cost_status,
     priceStatus: item.price_status,
     updatedAt: item.updated_at,
   }));
@@ -44,6 +47,8 @@ export async function GET() {
     count: transactions.length,
     liters: transactions.reduce((sum, item) => sum + (item.liters ?? 0), 0),
     provisionalBsmartCostSek: transactions.reduce((sum, item) => sum + (item.provisionalCostSek ?? 0), 0),
+    manualReviewCount: transactions.filter(item => item.reviewReason).length,
+    excludedSuspiciousCostSek: transactions.filter(item => item.reviewReason).reduce((sum,item) => sum + (item.rawCostSek ?? 0),0),
     costSource: "B.Smart source_amount; provisional until source price is verified",
     nextAccount5360: "reconciliation_only_no_additional_cost",
     transactions,
