@@ -240,7 +240,7 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
         setKindConfirmed(true);
       } else {
         setKindConfirmed(false);
-        setMessage({ type: "error", text: "Datatypen är osäker. Välj rätt datatyp ovan och kontrollera kolumnerna. Inget har sparats." });
+        setMessage({ type: "info", text: "Humla kunde inte avgöra datatypen säkert. Välj källa/datatype för filen; oklara rader hanteras separat och stoppar inte övriga rader." });
       }
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Filen kunde inte analyseras." });
