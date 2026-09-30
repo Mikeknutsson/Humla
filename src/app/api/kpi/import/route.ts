@@ -46,7 +46,9 @@ export async function POST(request: Request) {
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
       normalized = allocateWorkify(normalized, rules ?? []);
     }
-    // Match source project numbers regardless of harmless Excel/text formatting.\n    // Never infer a vehicle from a partial or approximate project number.\n    const projectRefs = [...new Set(normalized.map((row) => normalizeProjectReference(row.project_reference)).filter(Boolean))];
+    // Match source project numbers regardless of harmless Excel/text formatting.
+    // Never infer a vehicle from a partial or approximate project number.
+    const projectRefs = [...new Set(normalized.map((row) => normalizeProjectReference(row.project_reference)).filter(Boolean))];
     if (projectRefs.length) {
       const { data: projectMappings, error: projectMappingError } = await supabase
         .from("kpi_project_unit_mappings")
