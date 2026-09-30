@@ -3,7 +3,7 @@ export type DataKind =
   | "cost"
   | "fuel"
   | "vehicle_activity"
-  | "driver_time";
+  | "driver_time"\n  | "next_historical_time";
 
 export type ParsedRow = Record<string, string>;
 
@@ -51,6 +51,18 @@ export const DATA_KINDS: Record<DataKind, { label: string; description: string; 
     description: "Tillgänglig och belagd tid per fordon och dag.",
     fields: [...shared, { key: "available_hours", label: "Tillgängliga timmar", required: true, aliases: ["tillgängliga timmar", "kapacitet", "available hours", "möjliga timmar"] }, { key: "occupied_hours", label: "Belagda timmar", required: true, aliases: ["belagda timmar", "bokade timmar", "aktiv tid", "occupied hours"] }],
   },
+  next_historical_time: {
+    label: "Historisk tid från NEXT",
+    description: "Historisk projekttid som fyller luckor före/vid övergången till TransPA.",
+    fields: [
+      { key: "occurred_on", label: "Datum", required: true, aliases: ["datum", "date"] },
+      { key: "employee_number", label: "Namn/person", required: true, aliases: ["namn", "person", "medarbetare"] },
+      { key: "project_reference", label: "Projektnr", aliases: ["projektnr", "projektnummer", "projekt"] },
+      { key: "project_name", label: "Projektnamn", aliases: ["projektnamn", "projekt namn"] },
+      { key: "paid_hours", label: "Timmar", required: true, aliases: ["timmar", "tid", "arbetade timmar"] },
+      { key: "time_role", label: "Roll", required: true, aliases: ["roll", "tidroll", "tidkod"] },
+    ],
+  },
   driver_time: {
     label: "Chaufförstid",
     description: "Betalda och debiterbara timmar per chaufför.",
@@ -81,7 +93,7 @@ export function detectDataKind(headers: string[]): DataKind | null {
   const h = headers.map((value) => value.toLocaleLowerCase("sv").replace(/[_-]+/g, " ").trim());
   const has = (...names: string[]) => names.some((name) => h.includes(name));
   const candidates: DataKind[] = [];
-  if (has("anställningsnummer", "anstnr", "employee number") && has("betalda timmar", "arbetade timmar", "paid hours")) candidates.push("driver_time");
+  if (has("namn") && has("projektnr", "projektnummer") && has("projektnamn") && has("timmar") && has("roll")) candidates.push("next_historical_time");\n  else if (has("anställningsnummer", "anstnr", "employee number") && has("betalda timmar", "arbetade timmar", "paid hours")) candidates.push("driver_time");
   if (has("tillgängliga timmar", "available hours") && has("belagda timmar", "occupied hours")) candidates.push("vehicle_activity");
   if (has("liter", "volym") && has("bränslekostnad", "dieselkostnad")) candidates.push("fuel");
   if (has("konto", "kontonummer", "account") && has("kostnad", "kostnadsbelopp", "debet")) candidates.push("cost");
