@@ -96,7 +96,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError, nextCostHubError, personnelHubError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError, nextCostHubError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
   return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}>{nextCostError?`NEXT-kostnader kunde inte fördelas: ${nextCostError}`:`NEXT: ${sek(mappedNextCost)} preliminärt fördelat på fordon; ${sek(unallocatedNextCost)} återstår att granska. Interna överföringar ingår inte.`}</div><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
     <div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
@@ -109,7 +109,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     overviewPrevious={(previousDashboard ?? null) as never}
     overviewPeriod={overviewPeriod}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
-    dashboard={{...displayDashboard,components:{...displayDashboard.components,personnel_cost:Number(personnelHub?.total_personnel_cost??0)},vehicles:displayDashboard.vehicles.map(v=>{const p=(personnelHub?.vehicles??[]).find((x:{vehicle?:string})=>String(x.vehicle??"").trim().toUpperCase()===String(v.vehicle??"").trim().toUpperCase());return {...v,personnel_cost:Number(p?.personnel_cost??0)}})} as typeof emptyDashboard}
+    dashboard={displayDashboard as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
     userName={member.display_name ?? user.email ?? "Användare"}
