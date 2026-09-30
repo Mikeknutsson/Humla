@@ -3,7 +3,8 @@ export type DataKind =
   | "cost"
   | "fuel"
   | "vehicle_activity"
-  | "driver_time"\n  | "next_historical_time";
+  | "driver_time"
+  | "next_historical_time";
 
 export type ParsedRow = Record<string, string>;
 
@@ -93,7 +94,8 @@ export function detectDataKind(headers: string[]): DataKind | null {
   const h = headers.map((value) => value.toLocaleLowerCase("sv").replace(/[_-]+/g, " ").trim());
   const has = (...names: string[]) => names.some((name) => h.includes(name));
   const candidates: DataKind[] = [];
-  if (has("namn") && has("projektnr", "projektnummer") && has("projektnamn") && has("timmar") && has("roll")) candidates.push("next_historical_time");\n  else if (has("anställningsnummer", "anstnr", "employee number") && has("betalda timmar", "arbetade timmar", "paid hours")) candidates.push("driver_time");
+  if (has("namn") && has("projektnr", "projektnummer") && has("projektnamn") && has("timmar") && has("roll")) candidates.push("next_historical_time");
+  else if (has("anställningsnummer", "anstnr", "employee number") && has("betalda timmar", "arbetade timmar", "paid hours")) candidates.push("driver_time");
   if (has("tillgängliga timmar", "available hours") && has("belagda timmar", "occupied hours")) candidates.push("vehicle_activity");
   if (has("liter", "volym") && has("bränslekostnad", "dieselkostnad")) candidates.push("fuel");
   if (has("konto", "kontonummer", "account") && has("kostnad", "kostnadsbelopp", "debet")) candidates.push("cost");
