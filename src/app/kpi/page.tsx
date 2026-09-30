@@ -35,7 +35,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const { data: canManage, error: manageError } = await supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.manage" });
   const { data: settings } = await supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle();
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
+  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "personnel" && canManage) || (query.view === "transpa" && canManage) ? query.view : "overview";
   const overviewPeriod = overviewPeriods(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
   const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
@@ -127,19 +127,54 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
-  // Personnel cost fallback: until verified TransPA salary facts arrive, use reported
-  // TransPA vehicle hours × configurable standard hourly personnel cost.
   const defaultSalary=(salarySettings??[]).find((s:any)=>s.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5};
   const personnelStandardHourlyCost=Number(defaultSalary.monthly_salary)/(Number(defaultSalary.weekly_hours)*52/12);
-  // Use the selected KPI period (not the current month). The RPC above receives from/to,
-  // so historical periods such as the full 2025/26 financial year are calculated from
-  // the corresponding TransPA hours.
   const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v:any)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
   const hasActualPersonnelCost=Object.entries(costDashboard.cost_categories??{}).some(([key,value])=>(key.toLocaleLowerCase("sv-SE").includes("personal")||key.toLocaleLowerCase("sv-SE").includes("lön"))&&Number(value??0)!==0);
   const standardPersonnelTotal=hasActualPersonnelCost?0:[...transpaHoursByVehicle.values()].reduce((sum,h)=>sum+(Number.isFinite(h)?h:0),0)*personnelStandardHourlyCost;
-  const displayDashboard=hasActualPersonnelCost?costDashboard:{
-    ...costDashboard,
-    metrics:{...costDashboard.metrics,result:Number(costDashboard.metrics.result??0)-standardPersonnelTotal},
-    vehicles:costDashboard.vehicles.map(v=>({...v,personnel_cost:(transpaHoursByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)*personnelStandardHourlyCost,personnel_cost_source:"Schablon"})),
-    cost_categories:{...costDashboard.cost_categories,"Personalkostnad – schablon":standardPersonnelTotal}
-  };
+  const displayDashboard=hasActualPersonnelCost?costDashboard:{...costDashboard,metrics:{...costDashboard.metrics,result:Number(costDashboard.metrics.result??0)-standardPersonnelTotal},vehicles:costDashboard.vehicles.map(v=>({...v,personnel_cost:(transpaHoursByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)*personnelStandardHourlyCost,personnel_cost_source:"Schablon"})),cost_categories:{...costDashboard.cost_categories,"Personalkostnad – schablon":standardPersonnelTotal}};
+  const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
+
+  const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
+  const {data:previousDashboard,error:previousDashboardError}=initialView==='overview' ? await supabase.rpc("kpi_transport_dashboard",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.previous.from,p_to:overviewPeriod.previous.to}) : {data:null,error:null};
+  const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
+    supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).eq('origin','manual').order('name'),
+    supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
+  ]) : [{data:[],error:null},{data:null,error:null}];
+  const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
+  const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError].filter(Boolean).map((error) => error!.message);
+  if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
+  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}>{nextCostError?`NEXT-kostnader kunde inte fördelas: ${nextCostError}`:`NEXT: ${sek(mappedNextCost)} preliminärt fördelat på fordon; ${sek(unallocatedNextCost)} återstår att granska. Interna överföringar ingår inte.`}</div><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
+    <div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
+      <div><strong>Reparationskostnader från NEXT</strong><div style={{fontSize:12}}>Separat uppföljning – inte dubbelräknade i resultatet</div></div>
+      <div><div style={{fontSize:12}}>Granskade för möjlig export</div><strong>{repairError?"Kunde inte läsas":sek(repairTotals.approved)}</strong><div style={{fontSize:12}}>{repairTotals.approvedCount} poster</div></div>
+      <div><div style={{fontSize:12}}>Väntar på granskning</div><strong>{repairError?"Kunde inte läsas":sek(repairTotals.pending)}</strong><div style={{fontSize:12}}>{repairTotals.pendingCount} poster</div></div>
+      <a style={{fontWeight:600}} href={`/kpi/reparationskostnader?from=${from}&to=${to}`}>Visa fördelning och detaljer →</a>
+    </div>
+  </section><KpiApp
+    overviewPrevious={(previousDashboard ?? null) as never}
+    overviewPeriod={overviewPeriod}
+    overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
+    dashboard={displayDashboard as typeof emptyDashboard}
+    batches={(batches ?? []) as never[]}
+    tenantName={tenant?.name ?? "Humla"}
+    userName={member.display_name ?? user.email ?? "Användare"}
+    from={from}
+    to={to}
+    canManage={Boolean(canManage)}
+    accountMappings={(accountMappings ?? []) as never[]}
+    salarySettings={(salarySettings ?? []) as never[]}
+    salaryPersons={(transpaPersons ?? []) as never[]}
+    units={(units ?? []) as never[]}
+    unitReport={unitReport ?? {units:[],quality:{},conflict_rows:[]}}
+    transpaEvidence={transpaEvidence}
+    transpaVehicleTime={transpaVehicleTime}
+    efficiency={efficiency}
+    hiredCapacity={hiredCapacity}
+    driverProductivity={driverProductivity}
+    hubReviews={(hubReviews ?? []) as never[]}
+    initialView={initialView}
+    serverIssues={serverIssues}
+  /></>;
+}
