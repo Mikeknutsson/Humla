@@ -74,7 +74,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
   const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
-  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}>
+  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
     <div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
       <div><strong>Reparationskostnader från NEXT</strong><div style={{fontSize:12}}>Separat uppföljning – inte dubbelräknade i resultatet</div></div>
       <div><div style={{fontSize:12}}>Granskade för möjlig export</div><strong>{repairError?"Kunde inte läsas":sek(repairTotals.approved)}</strong><div style={{fontSize:12}}>{repairTotals.approvedCount} poster</div></div>
