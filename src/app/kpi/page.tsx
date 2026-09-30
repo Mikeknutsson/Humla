@@ -55,7 +55,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
   const {data:previousDashboard,error:previousDashboardError}=initialView==='overview' ? await supabase.rpc("kpi_transport_dashboard",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.previous.from,p_to:overviewPeriod.previous.to}) : {data:null,error:null};
   const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
-    supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).order('name'),
+    supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).eq('origin','manual').order('name'),
     supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
