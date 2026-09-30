@@ -82,7 +82,18 @@ export async function POST(request: Request) {
         return { ...row, vehicle_registration: registration, validation_errors: errors, is_valid: errors.length === 0 };
       });
     }
-    // NEXT costs must not be assigned to vehicles merely because a project number matches.\n    // Descriptive verification text is not a vehicle identity; leave such costs\n    // unallocated for explicit classification as vehicle, shared or other.\n    if (kind === "cost") normalized = normalized.map((row) => {\n      const errors = row.validation_errors.filter((error) => error !== "Fordonsbeteckning saknar verifierad regnummerkoppling");\n      return { ...row, validation_errors: errors, is_valid: errors.length === 0,\n        allocation: { allocation_status: row.vehicle_registration ? "vehicle_direct" : "unallocated_review", allocation_type: row.vehicle_registration ? "vehicle" : null } };\n    });\n    // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
+    // A NEXT project reference is not evidence of a vehicle allocation.
+    // Keep unassigned cost rows in review until explicitly classified.
+    if (kind === "cost") normalized = normalized.map((row) => {
+      const errors = row.validation_errors.filter((error) => error !== "Fordonsbeteckning saknar verifierad regnummerkoppling");
+      const verifiedVehicle = row.vehicle_registration && /^[A-Z]{3}[0-9]{2}[A-Z0-9]$/.test(row.vehicle_registration);
+      return { ...row, vehicle_registration: verifiedVehicle ? row.vehicle_registration : null,
+        validation_errors: verifiedVehicle ? errors : [...errors, "Kostnadsfördelning behöver granskas"],
+        is_valid: Boolean(verifiedVehicle) && errors.length === 0,
+        allocation: { allocation_status: verifiedVehicle ? "vehicle_direct" : "unallocated_review",
+          allocation_type: verifiedVehicle ? "vehicle" : null } };
+    });
+    // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
     // That is a description, not a registration. Unmapped rows stay in review,
     // while verified project mappings above release their corresponding rows.
     let validRows = normalized.filter((row) => row.is_valid);
