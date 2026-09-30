@@ -108,7 +108,7 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
   serverIssues?: string[];
 }) {
   const [view] = useState<"overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa" | "review">(initialView);
-  const personnelHourlyCost = 34000 / (40 * 52 / 12) * 1.3592;
+  const [personnelMonthlySalary] = useState(34000);\n  const [personnelWeeklyHours] = useState(40);\n  const [personnelEmployerPct] = useState(31.42);\n  const [personnelPensionPct] = useState(4.5);\n  const personnelHourlyCost = personnelMonthlySalary / (personnelWeeklyHours * 52 / 12) * (1 + (personnelEmployerPct + personnelPensionPct) / 100);
   const personnelCostByVehicle = new Map((transpaVehicleTime?.vehicles ?? []).map((row) => [String(row.vehicle).trim().toUpperCase(), numeric(row.occupied_hours) * personnelHourlyCost]));
   const [mobileMenu, setMobileMenu] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
