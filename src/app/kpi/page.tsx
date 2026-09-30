@@ -62,7 +62,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
   const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
-  return <KpiApp
+  return <><div style={{padding:"10px 22px",background:"#f5f5f5"}}><a href={`/kpi/reparationskostnader?from=${from}&to=${to}`}>Visa reparationskostnader från NEXT →</a></div><KpiApp
     overviewPrevious={(previousDashboard ?? null) as never}
     overviewPeriod={overviewPeriod}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
@@ -84,5 +84,5 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     hubReviews={(hubReviews ?? []) as never[]}
     initialView={initialView}
     serverIssues={serverIssues}
-  />;
+  /></>;
 }
