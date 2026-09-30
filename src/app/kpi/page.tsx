@@ -41,7 +41,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
   const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }, { data: transpaVehicleTime, error: transpaVehicleTimeError }, { data: efficiency, error: efficiencyError }, { data: hiredCapacity, error: hiredCapacityError }, { data: driverProductivity, error: driverProductivityError }] = await Promise.all([
-    supabase.rpc("kpi_transport_dashboard", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
+    supabase.rpc("hub_kpi_transport_dashboard_v4", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
     supabase.rpc("kpi_transpa_vehicle_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
@@ -73,19 +73,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const unallocatedNextCost=Number(nextCostHub?.unallocated_cost??0);
   // Dashboard previously had no account mappings and displayed zero costs.
   // The overlay is provisional; do not add it again once mapped KPI costs exist.
-  const baseDashboard=(dashboard??{metrics:{},components:{},vehicles:[],drivers:[],cost_categories:{},unmapped_accounts:[],quality:{}}) as {
+  const hubDashboard=(dashboard??{metrics:{},components:{},cost_categories:[],revenue_categories:[]}) as { cost_categories?:Array<{category:string;amount:number|string}>; revenue_categories?:Array<Record<string,number|string>>; metrics:Record<string,number|string>;components:Record<string,number|string>; };\n  const { data: legacyDashboard } = await supabase.rpc("kpi_transport_dashboard", { p_tenant_id: member.tenant_id, p_from: from, p_to: to });\n  const baseDashboard=(legacyDashboard??{metrics:{},components:{},vehicles:[],drivers:[],cost_categories:{},unmapped_accounts:[],quality:{}}) as {
     metrics:Record<string,number|string>;components:Record<string,number|string>;
     vehicles:Array<Record<string,number|string>>;drivers:Array<Record<string,number|string>>;
     cost_categories:Record<string,number|string>;unmapped_accounts:Array<{account:string;description?:string|null;row_count:number;amount:number}>;quality:Record<string,number|string>;
   };
-  const hasMappedCosts=Number(baseDashboard.components.other_cost??0)!==0||Number(baseDashboard.components.fuel_cost??0)!==0;
-  const displayDashboard=!nextCostError&&!hasMappedCosts?{
+  const hubCostCategories=Object.fromEntries((hubDashboard.cost_categories??[]).map(row=>[String(row.category),Number(row.amount??0)]));
+  const transpaPersonnel=Number(hubDashboard.components?.transpa_personnel_cost??0);
+  hubCostCategories.personnel=Number(hubCostCategories.personnel??0)+transpaPersonnel;
+  const displayDashboard={
     ...baseDashboard,
-    metrics:{...baseDashboard.metrics,result:Number(baseDashboard.metrics.result??0)-mappedNextCost-mappedFuelCost,diesel_share:Number(baseDashboard.metrics.revenue??0)>0?mappedFuelCost/Number(baseDashboard.metrics.revenue)*100:0},
-    components:{...baseDashboard.components,other_cost:mappedNextCost,fuel_cost:mappedFuelCost},
-    vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
-    cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
-  }:baseDashboard;
+    metrics:{...baseDashboard.metrics,...hubDashboard.metrics},
+    components:{...baseDashboard.components,...hubDashboard.components,fuel_cost:Number(hubCostCategories.fuel??0),other_cost:Number(hubDashboard.metrics?.total_cost??0)},
+    cost_categories:hubCostCategories
+  };
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
