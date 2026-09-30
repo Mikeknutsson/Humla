@@ -62,6 +62,58 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   },{approved:0,pending:0,approvedCount:0,pendingCount:0});
   const sek=(n:number)=>new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK",maximumFractionDigits:0}).format(n);
 
+  // Read-only NEXT allocation: use only unique project -> registration mappings.
+  // No raw imports or accounting approvals are modified. Internal transfers are
+  // excluded from consolidated cost to prevent double counting.
+  const nextCostRows:Array<{id:string;amount:number;account:string|null;allocation:{allocation_reference?:string;allocation_status?:string}|null}>=[];
+  let nextCostError="";
+  for(let offset=0;offset<15000;offset+=900){
+    const result=await supabase.from("kpi_import_rows").select("id,amount,account,allocation")
+      .eq("tenant_id",member.tenant_id).eq("data_kind","cost").eq("is_valid",true)
+      .gte("occurred_on",from).lte("occurred_on",to).order("id").range(offset,offset+899);
+    if(result.error){nextCostError=result.error.message;break;}
+    nextCostRows.push(...(result.data??[]) as typeof nextCostRows);
+    if((result.data??[]).length<900)break;
+  }
+  const projectRefs=[...new Set(nextCostRows.map(r=>r.allocation?.allocation_reference).filter((x):x is string=>Boolean(x)))];
+  const vehicleMappings=new Map<string,string[]>();
+  for(let i=0;i<projectRefs.length;i+=100){
+    const result=await supabase.from("kpi_project_unit_mappings").select("project_reference,vehicle_registration")
+      .eq("tenant_id",member.tenant_id).eq("enabled",true).in("project_reference",projectRefs.slice(i,i+100));
+    if(result.error){nextCostError=result.error.message;break;}
+    for(const m of result.data??[]){
+      const regs=vehicleMappings.get(m.project_reference)??[];
+      const reg=String(m.vehicle_registration??"").trim().toUpperCase();
+      if(reg&&!regs.includes(reg))regs.push(reg);
+      vehicleMappings.set(m.project_reference,regs);
+    }
+  }
+  const internalAccounts=new Set(["4630","4015","4425"]);
+  const byVehicle=new Map<string,number>();let mappedNextCost=0,unallocatedNextCost=0;
+  if(!nextCostError)for(const row of nextCostRows){
+    if(internalAccounts.has(String(row.account??"")))continue;
+    const regs=vehicleMappings.get(row.allocation?.allocation_reference??"")??[];
+    const amount=Number(row.amount??0);
+    if(regs.length===1&&row.allocation?.allocation_status==="identified"){
+      byVehicle.set(regs[0],(byVehicle.get(regs[0])??0)+amount);
+      mappedNextCost+=amount;
+    }else unallocatedNextCost+=amount;
+  }
+  // Dashboard previously had no account mappings and displayed zero costs.
+  // The overlay is provisional; do not add it again once mapped KPI costs exist.
+  const baseDashboard=(dashboard??{metrics:{},components:{},vehicles:[],drivers:[],cost_categories:{},unmapped_accounts:[],quality:{}}) as {
+    metrics:Record<string,number|string>;components:Record<string,number|string>;
+    vehicles:Array<Record<string,number|string>>;drivers:Array<Record<string,number|string>>;
+    cost_categories:Record<string,number|string>;unmapped_accounts:Array<{account:string;description?:string|null;row_count:number;amount:number}>;quality:Record<string,number|string>;
+  };
+  const hasMappedCosts=Number(baseDashboard.components.other_cost??0)!==0||Number(baseDashboard.components.fuel_cost??0)!==0;
+  const displayDashboard=!nextCostError&&!hasMappedCosts?{
+    ...baseDashboard,
+    metrics:{...baseDashboard.metrics,result:Number(baseDashboard.metrics.result??0)-mappedNextCost},
+    components:{...baseDashboard.components,other_cost:mappedNextCost},
+    vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
+    cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost}
+  }:baseDashboard;
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
@@ -74,7 +126,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
   const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
-  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
+  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}>{nextCostError?`NEXT-kostnader kunde inte fördelas: ${nextCostError}`:`NEXT: ${sek(mappedNextCost)} preliminärt fördelat på fordon; ${sek(unallocatedNextCost)} återstår att granska. Interna överföringar ingår inte.`}</div><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
     <div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
       <div><strong>Reparationskostnader från NEXT</strong><div style={{fontSize:12}}>Separat uppföljning – inte dubbelräknade i resultatet</div></div>
       <div><div style={{fontSize:12}}>Granskade för möjlig export</div><strong>{repairError?"Kunde inte läsas":sek(repairTotals.approved)}</strong><div style={{fontSize:12}}>{repairTotals.approvedCount} poster</div></div>
@@ -85,7 +137,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     overviewPrevious={(previousDashboard ?? null) as never}
     overviewPeriod={overviewPeriod}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
-    dashboard={(dashboard ?? emptyDashboard) as typeof emptyDashboard}
+    dashboard={displayDashboard as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
     userName={member.display_name ?? user.email ?? "Användare"}
