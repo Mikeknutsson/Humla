@@ -122,10 +122,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
-  const personnelHourlyCost=34000/(40*52/12)*(1+(31.42+4.5)/100);
-  const personnelVehicles=displayDashboard.vehicles.map((v,index)=>{const hours=Number(transpaVehicleTime?.vehicles?.[index]?.occupied_hours??0);return {...v,personnel_cost:Number.isFinite(hours)?hours*personnelHourlyCost:0};});
-  const personnelTotal=personnelVehicles.reduce((sum,v)=>sum+Number(v.personnel_cost??0),0);
-  const personnelDashboard={...displayDashboard,metrics:{...displayDashboard.metrics,result:Number(displayDashboard.metrics.result??0)-personnelTotal},vehicles:personnelVehicles,cost_categories:{...displayDashboard.cost_categories,"Personalkostnad – schablon":personnelTotal}};
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
   const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
@@ -149,7 +145,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     overviewPrevious={(previousDashboard ?? null) as never}
     overviewPeriod={overviewPeriod}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
-    dashboard={personnelDashboard as typeof emptyDashboard}
+    dashboard={displayDashboard as typeof emptyDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
     userName={member.display_name ?? user.email ?? "Användare"}
