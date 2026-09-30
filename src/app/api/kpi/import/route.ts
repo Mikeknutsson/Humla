@@ -41,6 +41,13 @@ export async function POST(request: Request) {
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const table = await parseImportFile(new File([bytes], file.name, { type: file.type }));
     let normalized = normalizeRows(table, kind, mapping);
+    // NEXT costs and historical hours are separate measures. Never derive
+    // a second wage cost from imported hours or count cost-file hours as time.
+    if (kind === "next_historical_time") {
+      normalized = normalized.map((row) => ({ ...row, amount: null }));
+    } else if (kind === "cost") {
+      normalized = normalized.map((row) => ({ ...row, paid_hours: null, billable_hours: null }));
+    }
     if (kind === 'revenue' && isWorkify(table)) {
       const { data: rules, error } = await supabase.from('kpi_workify_article_rules').select('id,article_number,project_reference,cost_center,source_hash').eq('tenant_id', member.tenant_id).eq('enabled', true);
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
