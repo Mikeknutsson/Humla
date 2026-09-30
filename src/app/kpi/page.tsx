@@ -125,6 +125,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   // Personnel cost fallback: until verified TransPA salary facts arrive, use reported
   // TransPA vehicle hours × configurable standard hourly personnel cost.
   const personnelStandardHourlyCost=350;
+  // Use the selected KPI period (not the current month). The RPC above receives from/to,
+  // so historical periods such as the full 2025/26 financial year are calculated from
+  // the corresponding TransPA hours.
   const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v:any)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
   const hasActualPersonnelCost=Object.entries(costDashboard.cost_categories??{}).some(([key,value])=>(key.toLocaleLowerCase("sv-SE").includes("personal")||key.toLocaleLowerCase("sv-SE").includes("lön"))&&Number(value??0)!==0);
   const standardPersonnelTotal=hasActualPersonnelCost?0:[...transpaHoursByVehicle.values()].reduce((sum,h)=>sum+(Number.isFinite(h)?h:0),0)*personnelStandardHourlyCost;
