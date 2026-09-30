@@ -127,7 +127,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
     cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
-  const defaultSalary=(salarySettings??[]).find((s:any)=>s.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5};
+  const defaultSalary=(salarySettings??[]).find((s:any)=>s.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5,employer_contribution_pct:31.42,pension_pct:4.5,other_overhead_pct:0};
   const personnelBaseHourlyCost=Number(defaultSalary.monthly_salary)/(Number(defaultSalary.weekly_hours)*52/12);\n  const personnelStandardHourlyCost=personnelBaseHourlyCost*(1+(Number(defaultSalary.employer_contribution_pct??31.42)+Number(defaultSalary.pension_pct??4.5)+Number(defaultSalary.other_overhead_pct??0))/100);
   const transpaHoursByVehicle=new Map<string,number>((transpaVehicleTime?.vehicles??[]).map((v:any)=>[String(v.vehicle??"").trim().toUpperCase(),Number(v.occupied_hours??v.reported_hours??0)]));
   const hasActualPersonnelCost=Object.entries(costDashboard.cost_categories??{}).some(([key,value])=>(key.toLocaleLowerCase("sv-SE").includes("personal")||key.toLocaleLowerCase("sv-SE").includes("lön"))&&Number(value??0)!==0);
