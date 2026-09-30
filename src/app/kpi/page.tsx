@@ -124,7 +124,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   }:baseDashboard;
   // Personnel cost fallback: until verified TransPA salary facts arrive, use reported
   // TransPA vehicle hours × configurable standard hourly personnel cost.
-  const personnelStandardHourlyCost=350;
+  const {data:salarySettings}=await supabase.from("kpi_personnel_salary_settings").select("transpa_employee_id,monthly_salary,weekly_hours,overtime_multiplier,is_default").eq("tenant_id",member.tenant_id);
+  const defaultSalary=(salarySettings??[]).find((s:any)=>s.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5};
+  const personnelStandardHourlyCost=Number(defaultSalary.monthly_salary)/(Number(defaultSalary.weekly_hours)*52/12);
   // Use the selected KPI period (not the current month). The RPC above receives from/to,
   // so historical periods such as the full 2025/26 financial year are calculated from
   // the corresponding TransPA hours.
