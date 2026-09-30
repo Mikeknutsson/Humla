@@ -67,10 +67,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   // excluded from consolidated cost to prevent double counting.
   const nextCostRows:Array<{id:string;amount:number;account:string|null;allocation:{allocation_reference?:string;allocation_status?:string}|null}>=[];
   let nextCostError="";
-  for(let offset=0;offset<15000;offset+=900){
-    const result=await supabase.from("kpi_import_rows").select("id,amount,account,allocation")
-      .eq("tenant_id",member.tenant_id).eq("data_kind","cost").eq("is_valid",true)
-      .gte("occurred_on",from).lte("occurred_on",to).order("id").range(offset,offset+899);
+  const nextCostPages=await Promise.all(Array.from({length:17},(_,page)=>supabase.from("kpi_import_rows").select("id,amount,account,allocation")
+    .eq("tenant_id",member.tenant_id).eq("data_kind","cost").eq("is_valid",true)
+    .gte("occurred_on",from).lte("occurred_on",to).order("id").range(page*900,page*900+899)));
+  for(const result of nextCostPages){
     if(result.error){nextCostError=result.error.message;break;}
     nextCostRows.push(...(result.data??[]) as typeof nextCostRows);
     if((result.data??[]).length<900)break;
