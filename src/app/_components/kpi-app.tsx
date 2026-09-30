@@ -297,7 +297,8 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
 
           <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontomappning</a>
           <a className={view === "units" ? "active" : ""} href={kpiHref("units")} onClick={() => setMobileMenu(false)}><Truck size={17}/>Enhetsmappning</a>
-          <a className={view === "personnel" ? "active" : ""} href={kpiHref("personnel")} onClick={() => setMobileMenu(false)}><Users size={17}/>Personalkostnad</a>\n          <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
+          <a className={view === "personnel" ? "active" : ""} href={kpiHref("personnel")} onClick={() => setMobileMenu(false)}><Users size={17}/>Personalkostnad</a>
+          <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
           <a className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-definitioner</a>
         </div>}
       </nav>
