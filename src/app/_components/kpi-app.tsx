@@ -84,7 +84,7 @@ function statusLabel(status: string) {
   return "Bearbetas";
 }
 
-export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWeekly, batches, accountMappings, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
+export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWeekly, batches, accountMappings, salarySettings, salaryPersons, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "overview", serverIssues = [] }: {
   transpaEvidence: TranspaEvidence | null;
   transpaVehicleTime: TranspaVehicleTime | null;
   efficiency: Efficiency | null;
@@ -99,6 +99,8 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
   overviewWeekly: {weeks:Array<{week_start:string;week_end:string;revenue:number;previous_revenue:number}>};
   batches: Batch[];
   accountMappings: AccountMapping[];
+  salarySettings: Array<{transpa_employee_id:string|null;monthly_salary:number;weekly_hours:number;overtime_multiplier:number;is_default:boolean}>;
+  salaryPersons: Array<{transpa_employee_id:string;employee_number:string|null;display_name:string|null;is_active:boolean}>;
   tenantName: string;
   userName: string;
   from: string;
@@ -295,7 +297,7 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
 
           <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontomappning</a>
           <a className={view === "units" ? "active" : ""} href={kpiHref("units")} onClick={() => setMobileMenu(false)}><Truck size={17}/>Enhetsmappning</a>
-          <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
+          <a className={view === "personnel" ? "active" : ""} href={kpiHref("personnel")} onClick={() => setMobileMenu(false)}><Users size={17}/>Personalkostnad</a>\n          <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
           <a className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-definitioner</a>
         </div>}
       </nav>
@@ -305,9 +307,10 @@ export function KpiApp({ dashboard, overviewPrevious, overviewPeriod, overviewWe
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "overview" ? "Översikt" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "overview" ? "Översikt" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : view === "personnel" ? "Personalkostnad" : "KPI-definitioner"}</h1></div><div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
 
+      {view === "personnel" && <div className="content"><section className="panel"><div className="panel-head"><div><span className="section-kicker">Inställningar</span><h2>Personalkostnad</h2></div></div><p>Grundlönen används när individuell lön saknas. Timlön beräknas från månadslön och 40-timmarsvecka. Övertid kan räknas med separat faktor.</p>{(()=>{const d=salarySettings.find(x=>x.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5,transpa_employee_id:null,is_default:true};return <form className="period-form" onSubmit={async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);await fetch("/api/kpi/personnel-settings",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(Object.fromEntries(fd))});location.reload();}}><input type="hidden" name="transpa_employee_id" value=""/><label>Grundlön / månad<input name="monthly_salary" type="number" defaultValue={d.monthly_salary}/></label><label>Veckoarbetstid<input name="weekly_hours" type="number" defaultValue={d.weekly_hours}/></label><label>Övertidsfaktor<input name="overtime_multiplier" type="number" step="0.1" defaultValue={d.overtime_multiplier}/></label><button type="submit">Spara grundinställning</button></form>})()}<div className="table-wrap"><table><thead><tr><th>Person</th><th>Nr</th><th>Månadslön</th><th>Vecka</th><th>Övertid</th><th></th></tr></thead><tbody>{salaryPersons.filter(p=>p.is_active!==false).map(p=>{const d=salarySettings.find(x=>x.transpa_employee_id===p.transpa_employee_id)||salarySettings.find(x=>x.is_default)||{monthly_salary:34000,weekly_hours:40,overtime_multiplier:1.5};return <tr key={p.transpa_employee_id}><td><strong>{p.display_name||p.transpa_employee_id}</strong></td><td>{p.employee_number||"–"}</td><td colSpan={4}><form className="period-form" onSubmit={async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);await fetch("/api/kpi/personnel-settings",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(Object.fromEntries(fd))});location.reload();}}><input type="hidden" name="transpa_employee_id" value={p.transpa_employee_id}/><input name="monthly_salary" type="number" defaultValue={d.monthly_salary}/><input name="weekly_hours" type="number" defaultValue={d.weekly_hours}/><input name="overtime_multiplier" type="number" step="0.1" defaultValue={d.overtime_multiplier}/><button type="submit">Spara</button></form></td></tr>})}</tbody></table></div></section></div>}
       {view === "review" && <div className="content"><HubReview initial={hubReviews as never[]}/></div>}
       {view === "overview" && <div className="content">
         <section className="overview-hero"><div><span className="section-kicker">Verksamhetsår {overviewPeriod.label}</span><h2>Översikt t.o.m. {overviewPeriod.current.to}</h2><p>Jämför {overviewPeriod.current.from} – {overviewPeriod.current.to} med samma antal dagar föregående verksamhetsår.</p></div><span className="asof">Senaste kompletta dag</span></section>
