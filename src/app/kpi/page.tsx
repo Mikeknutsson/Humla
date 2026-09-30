@@ -88,15 +88,23 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
       vehicleMappings.set(m.project_reference,regs);
     }
   }
-  const internalAccounts=new Set(["4630","4015","4425"]);
-  const byVehicle=new Map<string,number>();let mappedNextCost=0,unallocatedNextCost=0;
+  const internalAccounts=new Set(["4015","4425"]);
+  const fuelAccounts=new Set(["5360","5621","5631"]);
+  const byVehicle=new Map<string,number>();
+  const fuelByVehicle=new Map<string,number>();
+  let mappedNextCost=0,mappedFuelCost=0,unallocatedNextCost=0;
   if(!nextCostError)for(const row of nextCostRows){
     if(internalAccounts.has(String(row.account??"")))continue;
     const regs=vehicleMappings.get(row.allocation?.allocation_reference??"")??[];
     const amount=Number(row.amount??0);
     if(regs.length===1&&row.allocation?.allocation_status==="identified"){
-      byVehicle.set(regs[0],(byVehicle.get(regs[0])??0)+amount);
-      mappedNextCost+=amount;
+      if(fuelAccounts.has(String(row.account??""))){
+        fuelByVehicle.set(regs[0],(fuelByVehicle.get(regs[0])??0)+amount);
+        mappedFuelCost+=amount;
+      }else{
+        byVehicle.set(regs[0],(byVehicle.get(regs[0])??0)+amount);
+        mappedNextCost+=amount;
+      }
     }else unallocatedNextCost+=amount;
   }
   // Dashboard previously had no account mappings and displayed zero costs.
@@ -109,10 +117,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const hasMappedCosts=Number(baseDashboard.components.other_cost??0)!==0||Number(baseDashboard.components.fuel_cost??0)!==0;
   const displayDashboard=!nextCostError&&!hasMappedCosts?{
     ...baseDashboard,
-    metrics:{...baseDashboard.metrics,result:Number(baseDashboard.metrics.result??0)-mappedNextCost},
-    components:{...baseDashboard.components,other_cost:mappedNextCost},
-    vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
-    cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost}
+    metrics:{...baseDashboard.metrics,result:Number(baseDashboard.metrics.result??0)-mappedNextCost-mappedFuelCost,diesel_share:Number(baseDashboard.metrics.revenue??0)>0?mappedFuelCost/Number(baseDashboard.metrics.revenue)*100:0},
+    components:{...baseDashboard.components,other_cost:mappedNextCost,fuel_cost:mappedFuelCost},
+    vehicles:baseDashboard.vehicles.map(v=>({...v,cost:(byVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0),fuel_cost:(fuelByVehicle.get(String(v.vehicle??"").trim().toUpperCase())??0)})),
+    cost_categories:{...baseDashboard.cost_categories,"NEXT – preliminärt fördelat":mappedNextCost,"Bränsle":mappedFuelCost}
   }:baseDashboard;
   const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
 
