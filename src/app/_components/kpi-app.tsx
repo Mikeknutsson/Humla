@@ -137,7 +137,7 @@ export function KpiApp({ monthPeriod, overviewMonthly, activeFilters, dashboard,
 
   useEffect(() => { localStorage.setItem("humla:kpi:period", JSON.stringify({ from, to })); document.cookie = `humla_kpi_from=${from}; Path=/; Max-Age=31536000; SameSite=Lax`; document.cookie = `humla_kpi_to=${to}; Path=/; Max-Age=31536000; SameSite=Lax`; }, [from, to]);
   const scopedOperationsUnavailable = Boolean(dashboard.scoped_operational_unavailable);
-  const costCenter = dashboard.cost_center_scope ?? "";
+  const costCenter = dashboard.cost_center_scope ?? activeFilters.cost_center ?? "";
   const scopeQuery = costCenter ? `&cost_center=${encodeURIComponent(costCenter)}` : "";
   const filterQuery = new URLSearchParams(Object.entries(activeFilters).filter(([k])=>k!=="cost_center")).toString();
   const periodQuery = (monthPeriod ? monthPeriodQuery(monthPeriod) : `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)+scopeQuery+(filterQuery?`&${filterQuery}`:"");
