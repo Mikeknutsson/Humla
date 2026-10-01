@@ -5,7 +5,7 @@ export function exportSheets(report:Analysis,context:Record<string,unknown>){
  return {
   'Vald vy':Object.entries({...context,...report.summary}).map(([fält,värde])=>({fält,värde:typeof värde==='object'?JSON.stringify(värde):värde})),
   'Objekt':report.groups,'Perioder':report.periods,
-  'Transaktioner':report.transactions.map(t=>({...t,original:JSON.stringify(t.original)})),
+  'Transaktioner':report.transactions.map(t=>({...t,original:JSON.stringify(t.original),classification_source:JSON.stringify(t.classification_source??null)})),
  };
 }
 export function excelExport(report:Analysis,context:Record<string,unknown>){const book=XLSX.utils.book_new();for(const [name,rows]of Object.entries(exportSheets(report,context)))XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),name);return XLSX.write(book,{type:'buffer',bookType:'xlsx'}) as Buffer;}
@@ -19,7 +19,7 @@ export async function pdfExport(report:Analysis,context:Record<string,unknown>){
  line(`Omsättning: ${money(report.summary.revenue)} | Kostnad: ${money(report.summary.cost)} | Resultat: ${money(report.summary.result)} | Marginal: ${report.summary.margin_pct??'-'} %`);
  line('Ekonomiska objekt',true);for(const g of report.groups)line(`${g.label} | Intäkt ${money(g.revenue)} | Kostnad ${money(g.cost)} | Resultat ${money(g.result)} | ${g.rows} rader`);
  line('Perioder',true);for(const p of report.periods)line(`${p.period_start} - ${p.period_end} | Intäkt ${money(p.revenue)} | Kostnad ${money(p.cost)} | Resultat ${money(p.result)}`);
- line('Transaktioner och källreferenser',true);for(const t of report.transactions){line(`${t.occurred_on} | ${t.source} | ${t.unit_name??t.vehicle??'Ej fördelat'} | Projekt ${t.project??'-'} | Konto ${t.account??'-'} | ${t.category} | ${t.kind} | ${money(t.amount)}`);line(`${t.description??''} | ${t.file_name??t.source} | rad ${t.row_number??'-'} | ID ${t.fact_id}`)}
+ line('Transaktioner och källreferenser',true);for(const t of report.transactions){line(`${t.occurred_on} | ${t.source} | ${t.unit_name??t.vehicle??'Ej fördelat'} | Kostnadsställe ${t.cost_center??'-'} | Projekt ${t.project??'-'} | Konto ${t.account??'-'} | ${t.category} | ${t.kind} | ${money(t.amount)}`);line(`${t.description??''} | ${t.file_name??t.source} | rad ${t.row_number??'-'} | ID ${t.fact_id}`)}
  for(const [i,p]of doc.getPages().entries())p.drawText(`Humla Hub | Sida ${i+1} / ${doc.getPageCount()}`,{x:42,y:20,size:8,font});
  return await doc.save();
 }

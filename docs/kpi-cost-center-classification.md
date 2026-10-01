@@ -1,0 +1,13 @@
+# Dated cost center and business group classification
+
+Source: Projektöversikt(5).xlsx, Sheet1, 337 unique project references. SHA256 1b9d75db6217cc7c3030535f79a21b1aa51acf80915296dd2dd15239f48bc711. Effective date explicitly confirmed: 2025-09-01. Missing numbers confirmed by user: Verkstad 40, Övrigt 90. Source remains untouched.
+
+Cost centers: 10 Entreprenad och maskinuthyrning (152), 20 Sortergården (28), 30 Transport (118), 40 Verkstad (20), 50 Fastigheter (3), 60 Skåne (10), 90 Övrigt (6). Eighteen exact source business-group names are preserved; 153 projects have a group, 184 have no source group. No aliases silently replace Fasta uppdrag, Inhyrda lastbilar, Traktorer or Rivning.
+
+New dated classification ledger retains file hash and row provenance. Existing units, permanent identities, account rules and manual group periods are not overwritten. Classification is selected on each financial transaction date. An exact project/registration/source employee reference can classify cost center; contradictory centers remain Ej klassificerat. Reference matching does not verify canonical Person identity. Explicit dated unit group or manual project-group rules override the source project group. No guessed combined-unit group is saved.
+
+Hub `hub_kpi_analysis_v2` and `hub_kpi_cost_center_dashboard_v1` use the same authoritative financial facts. All amount/source/category/fact IDs are unchanged. Filter follows KPI, overview, drilldown, fiscal/date navigation, Excel, PDF and print. Financial weekly charts are scoped in Hub. Operational utilization/capacity/time ratios remain unavailable under a selected cost center until their allocation is verified; global figures are retained in the all-centers view. Administration and imports operate on the whole workspace with an explicit notice. Vehicle-distance display is separately labeled as all cost centers.
+
+August 2026 verification: 2323 facts, revenue 5213867.12, NEXT 2907582.72, TransPA 1069648.58, total cost 3977231.30. NEXT: center 30 = 2907382.72; center 40 = 200.00. No dropped or duplicated financial facts (bidirectional EXCEPT ALL), exact raw sum preserved. Pre-2025-09-01 transactions are not assigned source cost centers. Quarantined/unclassified allocation does not remove the financial amount.
+
+Remaining: allocating operational time/capacity per center, specialized corrections/versioning UI for this source classification register, and real historical odometer imports. Payroll still uses the Hub TransPA time-cost model; actual payroll and permanent Person identity are not claimed verified. Visual signed-in browser verification is blocked by the browser runtime credential-state error; backend/build/log checks cannot replace that test.
