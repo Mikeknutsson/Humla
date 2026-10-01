@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { KpiApp } from "../_components/kpi-app";
 
@@ -22,7 +21,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   if (!user) redirect("/kpi/login");
 
   const query = await searchParams;
-  const cookieStore = await cookies();
   const { data: member, error: memberError } = await supabase.from("hub_tenant_members").select("tenant_id,display_name,role").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
   if (!member) {
     console.error("[kpi] workspace lookup failed", { auth: authError?.code, member: memberError?.code });
@@ -41,7 +39,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
   const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }, { data: transpaVehicleTime, error: transpaVehicleTimeError }, { data: efficiency, error: efficiencyError }, { data: hiredCapacity, error: hiredCapacityError }, { data: driverProductivity, error: driverProductivityError }] = await Promise.all([
-    supabase.rpc("hub_kpi_transport_dashboard_v4", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
+    supabase.rpc("hub_kpi_dashboard_display_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
     supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
     supabase.rpc("kpi_transpa_vehicle_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
@@ -50,67 +48,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.rpc("kpi_driver_productive_time", { p_tenant_id: member.tenant_id, p_from: from, p_to: to }),
   ]);
 
-  // NEXT repair costs are displayed separately until accounting mappings and
-  // vehicle allocations are verified; do not add these totals to KPI result.
-  const {data:repairRows,error:repairError}=await supabase.from("hub_fordonskontrollen_cost_outbox")
-    .select("status,amount").eq("tenant_id",member.tenant_id)
-    .gte("occurred_on",from).lte("occurred_on",to).limit(10000);
-  const repairTotals=(repairRows??[]).reduce((acc,row)=>{
-    if(row.status==="approved"){acc.approved+=Number(row.amount??0);acc.approvedCount++;}
-    if(row.status==="pending_review"){acc.pending+=Number(row.amount??0);acc.pendingCount++;}
-    return acc;
-  },{approved:0,pending:0,approvedCount:0,pendingCount:0});
-  const sek=(n:number)=>new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK",maximumFractionDigits:0}).format(n);
-
-  // Humla Hub owns NEXT cost allocation. KPI only consumes the calculated result.
-  const {data:nextCostHub,error:nextCostHubError}=await supabase.rpc("hub_kpi_next_vehicle_costs_v1",{p_tenant_id:member.tenant_id,p_from:from,p_to:to});
-  const nextCostError=nextCostHubError?.message??"";
-  const hubVehicleCosts=Array.isArray(nextCostHub?.vehicles)?nextCostHub.vehicles as Array<{vehicle?:string;cost?:number|string;fuel_cost?:number|string}>:[];
-  const byVehicle=new Map(hubVehicleCosts.map(row=>[String(row.vehicle??"").trim().toUpperCase(),Number(row.cost??0)]));
-  const fuelByVehicle=new Map(hubVehicleCosts.map(row=>[String(row.vehicle??"").trim().toUpperCase(),Number(row.fuel_cost??0)]));
-  const mappedNextCost=Number(nextCostHub?.mapped_other_cost??0);
-  const mappedFuelCost=Number(nextCostHub?.mapped_fuel_cost??0);
-  const unallocatedNextCost=Number(nextCostHub?.unallocated_cost??0);
-  // Dashboard previously had no account mappings and displayed zero costs.
-  // The overlay is provisional; do not add it again once mapped KPI costs exist.
-  const hubDashboard=(dashboard??{metrics:{},components:{},cost_categories:[],revenue_categories:[]}) as unknown as { cost_categories?:Array<{category:string;amount:number|string}>; revenue_categories?:Array<Record<string,number|string>>; metrics:Record<string,number|string>;components:Record<string,number|string>; };\n  const { data: legacyDashboard } = await supabase.rpc("kpi_transport_dashboard", { p_tenant_id: member.tenant_id, p_from: from, p_to: to });\n  const baseDashboard=(legacyDashboard??{metrics:{},components:{},vehicles:[],drivers:[],cost_categories:{},unmapped_accounts:[],quality:{}}) as {
-    metrics:Record<string,number|string>;components:Record<string,number|string>;
-    vehicles:Array<Record<string,number|string>>;drivers:Array<Record<string,number|string>>;
-    cost_categories:Record<string,number|string>;unmapped_accounts:Array<{account:string;description?:string|null;row_count:number;amount:number}>;quality:Record<string,number|string>;
-  };
-  const hubCostCategories: Record<string, number> = {};\n  for (const row of (hubDashboard.cost_categories ?? [])) hubCostCategories[String(row.category)] = Number(row.amount ?? 0);
-  const transpaPersonnel=Number(hubDashboard.components?.transpa_personnel_cost??0);
-  hubCostCategories.personnel=Number(hubCostCategories.personnel??0)+transpaPersonnel;
-  const displayDashboard={
-    ...baseDashboard,
-    metrics:{...baseDashboard.metrics,...hubDashboard.metrics},
-    components:{...baseDashboard.components,...hubDashboard.components,fuel_cost:Number(hubCostCategories.fuel??0),other_cost:Number(hubDashboard.metrics?.total_cost??0)},
-    cost_categories:hubCostCategories
-  };
-  const emptyDashboard = { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
-
-  const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.current.from,p_to:overviewPeriod.current.to}) : {data:null,error:null};
-  const {data:previousDashboard,error:previousDashboardError}=initialView==='overview' ? await supabase.rpc("kpi_transport_dashboard",{p_tenant_id:member.tenant_id,p_from:overviewPeriod.previous.from,p_to:overviewPeriod.previous.to}) : {data:null,error:null};
+  const displayDashboard = dashboard ?? { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
+  const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
   const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
-    supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).eq('origin','manual').order('name'),
-    supabase.rpc('kpi_unit_report',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
+    supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).in('origin',['manual','manual_builder']).order('name'),
+    supabase.rpc('hub_kpi_unit_report_v2',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, previousDashboardError, overviewWeeklyError, repairError, nextCostHubError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, transpaVehicleTimeError, efficiencyError, hiredCapacityError, driverProductivityError, hubReviewError, overviewWeeklyError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
-  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}><div style={{marginBottom:10}}>{nextCostError?`NEXT-kostnader kunde inte fördelas: ${nextCostError}`:`NEXT: ${sek(mappedNextCost)} preliminärt fördelat på fordon; ${sek(unallocatedNextCost)} återstår att granska. Interna överföringar ingår inte.`}</div><div style={{marginBottom:10}}><a style={{fontWeight:700}} href={`/kpi/next-kostnader?from=${from}&to=${to}`}>Alla kostnader från NEXT – fördelning per fordon och konto →</a></div>
-    <div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
-      <div><strong>Reparationskostnader från NEXT</strong><div style={{fontSize:12}}>Separat uppföljning – inte dubbelräknade i resultatet</div></div>
-      <div><div style={{fontSize:12}}>Granskade för möjlig export</div><strong>{repairError?"Kunde inte läsas":sek(repairTotals.approved)}</strong><div style={{fontSize:12}}>{repairTotals.approvedCount} poster</div></div>
-      <div><div style={{fontSize:12}}>Väntar på granskning</div><strong>{repairError?"Kunde inte läsas":sek(repairTotals.pending)}</strong><div style={{fontSize:12}}>{repairTotals.pendingCount} poster</div></div>
-      <a style={{fontWeight:600}} href={`/kpi/reparationskostnader?from=${from}&to=${to}`}>Visa fördelning och detaljer →</a>
-    </div>
+  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}>
+    <a href={`/kpi/analys?from=${from}&to=${to}`}>Transport → verksamhetsgrupp → enhet → projekt → transaktion</a> · <a href={`/kpi/analys?from=${from}&to=${to}&source=NEXT`}>NEXT-kostnader</a> · <a href={`/kpi/reparationskostnader?from=${from}&to=${to}`}>Reparationsgranskning</a>
+    <p>Reparationsgranskning: {new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK"}).format(displayDashboard.repair_summary?.approved??0)} granskade · {new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK"}).format(displayDashboard.repair_summary?.pending??0)} väntar. Separat uppföljning.</p><p>Hub v4 · {displayDashboard.reconciliation?.matches ? "Detaljrader och huvudtotaler avstämda" : "Avstämning saknas – kontrollera underlaget"} · {displayDashboard.personnel_basis}</p>
   </section><KpiApp
-    overviewPrevious={(previousDashboard ?? null) as never}
-    overviewPeriod={overviewPeriod}
+    overviewPrevious={(displayDashboard.previous ?? null) as never}
+    overviewPeriod={{...overviewPeriod,current:{from,to},previous:{from:`${Number(from.slice(0,4))-1}${from.slice(4)}`,to:`${Number(to.slice(0,4))-1}${to.slice(4)}`},label:from.slice(0,4)}}
     overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
-    dashboard={displayDashboard as typeof emptyDashboard}
+    dashboard={displayDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
     userName={member.display_name ?? user.email ?? "Användare"}

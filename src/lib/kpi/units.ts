@@ -1,5 +1,5 @@
 export type KpiUnit = {
- unit_type: 'vehicle' | 'person' | 'overhead';
+ unit_type: 'vehicle' | 'person' | 'overhead' | 'compound';
  id: string; name: string; projects: string[]; registrations: string[]; employees: string[];
  valid_from: string; valid_to: string | null; enabled: boolean; revision: number;
 };
@@ -22,7 +22,7 @@ function date(value: unknown) {
 }
 export function unitPayload(body: Record<string, unknown>) {
  const unit_type=body.unit_type;
- if (unit_type !== 'vehicle' && unit_type !== 'person' && unit_type !== 'overhead') throw new Error('Välj enhetstyp.');
+ if (unit_type !== 'vehicle' && unit_type !== 'person' && unit_type !== 'overhead' && unit_type !== 'compound') throw new Error('Välj enhetstyp.');
  const name = typeof body.name === 'string' ? body.name.trim() : '';
  if (!name || name.length > 120) throw new Error('Enhetsnamn krävs, högst 120 tecken.');
  const projects = values(body.projects), registrations=values(body.registrations,true), employees=values(body.employees);
@@ -30,5 +30,6 @@ export function unitPayload(body: Record<string, unknown>) {
  const valid_from=date(body.valid_from), valid_to=body.valid_to ? date(body.valid_to) : null;
  if (valid_to && valid_to<valid_from) throw new Error('Slutdatum får inte vara före startdatum.');
  if (typeof body.enabled !== 'boolean') throw new Error('Ogiltig status.');
- return {name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled:body.enabled};
+ if(body.main_vehicle && (typeof body.main_vehicle!=='string'||!registrations.includes(body.main_vehicle))) throw new Error('Huvudfordonet måste ingå i enheten.');
+ return {name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled:body.enabled,...(body.main_vehicle?{main_vehicle:body.main_vehicle}:{})};
 }
