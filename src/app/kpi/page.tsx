@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { parseMonthPeriod } from "@/lib/kpi/period";
+import { parseMonthPeriod, monthPeriodFromDates } from "@/lib/kpi/period";
 import { filterKeys } from "@/lib/kpi/analysis";
 import { KpiApp } from "../_components/kpi-app";
 
@@ -34,9 +34,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const { data: settings } = await supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle();
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
   const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
-  const useMonths = initialView === "overview" || query.months !== undefined || query.fiscal_year !== undefined;
+  const legacyMonths = monthPeriodFromDates(query.from,query.to);
+  const useMonths = initialView === "overview" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || (initialView === "kpi" && !query.from && !query.to);
   let monthPeriod;
-  try { monthPeriod = parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
+  try { monthPeriod = query.fiscal_year === undefined && query.months === undefined && legacyMonths ? legacyMonths : parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
   const activeFilters = Object.fromEntries(filterKeys.filter(k=>query[k]).map(k=>[k,query[k]!]));
   const from = useMonths ? `${monthPeriod.fiscalYear}-09-01` : /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const costCenter = query.cost_center?.trim() || null;
@@ -44,7 +45,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
 
   const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }] = await Promise.all([
     useMonths ? supabase.rpc("hub_kpi_overview_months_v1", { p_tenant_id:member.tenant_id, p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters }) : supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter }),
-    supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
+    supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary,provenance").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
   ]);
   const transpaVehicleTime=dashboard?.transpa_vehicle_time??null;

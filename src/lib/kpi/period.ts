@@ -16,3 +16,16 @@ export function parseMonthPeriod(year:string|undefined,months:string|undefined,n
 export function monthPeriodQuery(period:Pick<MonthPeriod,'fiscalYear'|'months'>) {
  return new URLSearchParams({from:`${period.fiscalYear}-09-01`,to:`${period.fiscalYear+1}-08-31`,fiscal_year:String(period.fiscalYear),months:period.months.join(',')}).toString();
 }
+
+// Keep bookmarked complete-month date ranges aligned between Overview and KPI.
+export function monthPeriodFromDates(from:string|undefined,to:string|undefined,now=new Date()):MonthPeriod|undefined {
+ if(!from||!to||!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return undefined;
+ const start=new Date(from+'T00:00:00Z'),end=new Date(to+'T00:00:00Z');
+ if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||start.toISOString().slice(0,10)!==from||end.toISOString().slice(0,10)!==to||start>end||start.getUTCDate()!==1)return undefined;
+ if(new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth()+1,0)).getUTCDate()!==end.getUTCDate())return undefined;
+ const year=start.getUTCMonth()>=8?start.getUTCFullYear():start.getUTCFullYear()-1;
+ if(end.getUTCFullYear()!==year+(end.getUTCMonth()<8?1:0))return undefined;
+ const months:number[]=[];
+ for(let date=new Date(start);date<=end;date=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,1)))months.push(date.getUTCMonth()+1);
+ return parseMonthPeriod(String(year),months.join(','),now);
+}
