@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { parseMonthPeriod } from "@/lib/kpi/period";
+import { filterKeys } from "@/lib/kpi/analysis";
 import { KpiApp } from "../_components/kpi-app";
 
 export const dynamic = "force-dynamic";
 
-function ymd(d:Date){return d.toISOString().slice(0,10)}
-function overviewPeriods(month=9,day=1){const now=new Date();const yesterday=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()-1));const currentStartCandidate=new Date(Date.UTC(yesterday.getUTCFullYear(),month-1,day));const sy=yesterday<currentStartCandidate?yesterday.getUTCFullYear()-1:yesterday.getUTCFullYear();const currentFrom=new Date(Date.UTC(sy,month-1,day));const previousFrom=new Date(Date.UTC(sy-1,month-1,day));const elapsed=Math.round((yesterday.getTime()-currentFrom.getTime())/86400000);const previousTo=new Date(previousFrom.getTime()+elapsed*86400000);return{current:{from:ymd(currentFrom),to:ymd(yesterday)},previous:{from:ymd(previousFrom),to:ymd(previousTo)},label:`${sy}/${String(sy+1).slice(-2)}`}}
 function fiscalPeriod(month = 9, day = 1) {
   const now = new Date();
   const currentStart = new Date(Date.UTC(now.getUTCFullYear(), month - 1, day));
@@ -15,7 +15,7 @@ function fiscalPeriod(month = 9, day = 1) {
   return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; view?: string; cost_center?: string; auth_retry?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; view?: string; cost_center?: string; fiscal_year?: string; months?: string; group?:string; unit?:string; vehicle?:string; project?:string; category?:string; kind?:string; source?:string; date_from?:string; date_to?:string; auth_retry?: string }> }) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (!user) redirect("/kpi/login");
@@ -34,14 +34,16 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const { data: settings } = await supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle();
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
   const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
-  const overviewPeriod = overviewPeriods(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
+  const useMonths = initialView === "overview" || query.months !== undefined || query.fiscal_year !== undefined;
+  let monthPeriod;
+  try { monthPeriod = parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
+  const activeFilters = Object.fromEntries(filterKeys.filter(k=>query[k]).map(k=>[k,query[k]!]));
+  const from = useMonths ? `${monthPeriod.fiscalYear}-09-01` : /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const costCenter = query.cost_center?.trim() || null;
-  const costCenterQuery = costCenter ? `&cost_center=${encodeURIComponent(costCenter)}` : '';
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
+  const to = useMonths ? `${monthPeriod.fiscalYear+1}-08-31` : /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
   const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }] = await Promise.all([
-    supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter }),
+    useMonths ? supabase.rpc("hub_kpi_overview_months_v1", { p_tenant_id:member.tenant_id, p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters }) : supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter }),
     supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
   ]);
@@ -51,22 +53,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const driverProductivity=dashboard?.driver_productivity??null;
 
   const displayDashboard = dashboard ?? { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
-  const {data:overviewWeekly,error:overviewWeeklyError}=initialView==='overview' && costCenter ? {data:dashboard?.weekly??null,error:null} : initialView==='overview' ? await supabase.rpc("kpi_overview_weekly_v1",{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
   const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
     supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).in('origin',['manual','manual_builder']).order('name'),
     supabase.rpc('hub_kpi_unit_report_v2',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, hubReviewError, overviewWeeklyError].filter(Boolean).map((error) => error!.message);
+  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, hubReviewError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
-  return <><section style={{padding:"16px 22px",background:"#f5f5f5",borderBottom:"1px solid #ddd"}}>
-    <a href={`/kpi/analys?from=${from}&to=${to}${costCenterQuery}`}>Transport → verksamhetsgrupp → enhet → projekt → transaktion</a> · <a href={`/kpi/analys?from=${from}&to=${to}${costCenterQuery}&source=NEXT`}>NEXT-kostnader</a> · <a href={`/kpi/reparationskostnader?from=${from}&to=${to}`}>Reparationsgranskning</a> · <a href={`/kpi/korstracka?from=${from}&to=${to}`}>Körsträcka och kostnad per mil (alla kostnadsställen)</a>
-    {!costCenter&&<p>Reparationsgranskning: {new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK"}).format(displayDashboard.repair_summary?.approved??0)} granskade · {new Intl.NumberFormat("sv-SE",{style:"currency",currency:"SEK"}).format(displayDashboard.repair_summary?.pending??0)} väntar. Separat uppföljning.</p>}<p>Hub v4 · {displayDashboard.reconciliation?.matches ? "Detaljrader och huvudtotaler avstämda" : "Avstämning saknas – kontrollera underlaget"} · {displayDashboard.personnel_basis}</p>
-  </section><KpiApp
+  return <KpiApp
+    monthPeriod={useMonths?monthPeriod:undefined}
+    overviewMonthly={(displayDashboard.monthly??[]) as never}
+    activeFilters={activeFilters}
     overviewPrevious={(displayDashboard.previous ?? null) as never}
-    overviewPeriod={{...overviewPeriod,current:{from,to},previous:{from:`${Number(from.slice(0,4))-1}${from.slice(4)}`,to:`${Number(to.slice(0,4))-1}${to.slice(4)}`},label:from.slice(0,4)}}
-    overviewWeekly={(overviewWeekly ?? {weeks:[]}) as never}
+    overviewPeriod={{current:{from,to},previous:{from:`${Number(from.slice(0,4))-1}${from.slice(4)}`,to:`${Number(to.slice(0,4))-1}${to.slice(4)}`},label:`${monthPeriod.fiscalYear}/${monthPeriod.fiscalYear+1}`}}
     dashboard={displayDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}
@@ -85,5 +85,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     hubReviews={(hubReviews ?? []) as never[]}
     initialView={initialView}
     serverIssues={serverIssues}
-  /></>;
+  />;
 }
+
