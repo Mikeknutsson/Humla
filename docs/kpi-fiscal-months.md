@@ -34,3 +34,7 @@ Weekly revenue display is replaced by the primary monthly chart. Exact date
 intervals remain available in the KPI view without a month selection.
 Monthly points retain the selected months and all active filters while adding
 the clicked month as date_from/date_to for analysis.
+
+The report reuses selected classified facts for the unclassified summary. These
+two bounded report RPCs have a PostgREST-hoisted 30-second execution limit; global
+and role timeouts remain unchanged.

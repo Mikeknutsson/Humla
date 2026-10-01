@@ -94,7 +94,8 @@ begin
  if auth.uid() is null or not public.hub_has_permission(p_tenant_id,'kpi.read') then raise exception 'KPI access required' using errcode='42501'; end if;
  months:=private.hub_kpi_month_scope_v1(p_fiscal_year,p_selected_months);
  fy_from:=make_date(p_fiscal_year,9,1);fy_to:=make_date(p_fiscal_year+1,8,31);
- with facts as materialized(select * from private.hub_kpi_month_facts_v1(p_tenant_id,p_fiscal_year,months,p_filters)),
+ with selected_facts as materialized(select * from private.hub_kpi_month_facts_v1(p_tenant_id,p_fiscal_year,months,p_filters-'cost_center')),
+ facts as materialized(select * from selected_facts where not(p_filters?'cost_center') or cost_center=p_filters->>'cost_center'),
  month_dates as(select m,make_date(case when m>=9 then p_fiscal_year else p_fiscal_year+1 end,m,1) dt from unnest(months) m),
  monthly as(select m,dt,coalesce(sum(amount) filter(where kind='revenue'),0) revenue,coalesce(sum(amount) filter(where kind='cost'),0) cost,count(f.fact_id) rows from month_dates left join facts f on date_trunc('month',f.occurred_on)::date=dt group by m,dt),
  cats as(select category,round(sum(amount),2) amount from facts where kind='cost' group by category),
@@ -137,6 +138,7 @@ begin
  'cost_categories',coalesce((select jsonb_object_agg(category,amount) from cats),'{}'),
  'vehicles',coalesce((select jsonb_agg(to_jsonb(v)||jsonb_build_object('occupied_hours',vt.hours,'available_hours',vt.available_hours,'utilization',round(vt.hours/nullif(vt.available_hours,0)*100,1),'revenue_per_hour',round(v.revenue/nullif(vt.hours,0),2)) order by v.vehicle) from vehicles v left join vehicle_time vt using(vehicle)),'[]'),
  'drivers',coalesce((select jsonb_agg(to_jsonb(d)) from drivers d),'[]'),'unmapped_accounts','[]'::jsonb,
+ 'unclassified_summary',(select jsonb_build_object('revenue',round(coalesce(sum(amount) filter(where kind='revenue'),0),2),'cost',round(coalesce(sum(amount) filter(where kind='cost'),0),2),'rows',count(*)) from selected_facts where cost_center='unclassified'),
  'quality',(select jsonb_build_object('total_rows',count(*),'valid_rows',count(*),'rows_without_vehicle',count(*) filter(where vehicle is null),'rows_without_employee',0,'rows_without_account_mapping',0,'basis','Hub authoritative financial facts') from facts),
  'transpa_vehicle_time',jsonb_build_object('reported_hours',round(tt.hours,2),'available_hours',round(tt.available,2),'vehicle_count',tt.vehicles,'utilization',round(tt.hours/nullif(tt.available,0)*100,1),'vehicles',coalesce((select jsonb_agg(to_jsonb(v)||jsonb_build_object('occupied_hours',hours,'utilization',round(hours/nullif(available_hours,0)*100,1))) from vehicle_time v),'[]')),
  'efficiency',jsonb_build_object('worked_hours',round(w.hours,2),'revenue',round(t.revenue,2),'own_revenue',round(t.revenue-t.hired,2),'hired_revenue',round(t.hired,2),'revenue_per_worked_hour',round((t.revenue-t.hired)/nullif(w.hours,0),2)),
@@ -163,8 +165,13 @@ begin
  if p_cost_center is not null then filters:=filters||jsonb_build_object('cost_center',p_cost_center);end if;
  current_data:=private.hub_kpi_month_snapshot_v1(p_tenant_id,p_fiscal_year,months,filters);
  previous_data:=private.hub_kpi_month_snapshot_v1(p_tenant_id,p_fiscal_year-1,months,filters);
- unclassified:=public.hub_kpi_analysis_months_v1(p_tenant_id,make_date(p_fiscal_year,9,1),make_date(p_fiscal_year+1,8,31),filters||jsonb_build_object('cost_center','unclassified','fiscal_year',p_fiscal_year,'selected_months',months));
- return current_data||jsonb_build_object('previous',previous_data,'cost_centers',options,'cost_center_scope',p_cost_center,'unclassified_summary',unclassified->'summary','classification_valid_from',(select min(valid_from) from public.kpi_project_classification_periods where tenant_id=p_tenant_id),'metrics',current_data->'metrics'||jsonb_build_object('revenue_change_pct',round(((current_data#>>'{metrics,revenue}')::numeric/(nullif((previous_data#>>'{metrics,revenue}')::numeric,0))-1)*100,2)));
+
+ return current_data||jsonb_build_object('previous',previous_data,'cost_centers',options,'cost_center_scope',p_cost_center,'classification_valid_from',(select min(valid_from) from public.kpi_project_classification_periods where tenant_id=p_tenant_id),'metrics',current_data->'metrics'||jsonb_build_object('revenue_change_pct',round(((current_data#>>'{metrics,revenue}')::numeric/(nullif((previous_data#>>'{metrics,revenue}')::numeric,0))-1)*100,2)));
 end $$;
 revoke all on function public.hub_kpi_overview_months_v1(uuid,integer,integer[],text,jsonb) from public,anon;
 grant execute on function public.hub_kpi_overview_months_v1(uuid,integer,integer[],text,jsonb) to authenticated;
+-- A single bounded fiscal-year report includes current and prior-year financials.
+-- PostgREST hoists this timeout for these RPCs only; role/global limits stay intact.
+alter function public.hub_kpi_overview_months_v1(uuid,integer,integer[],text,jsonb) set statement_timeout='30s';
+alter function public.hub_kpi_analysis_months_v1(uuid,date,date,jsonb,text,text,integer,boolean) set statement_timeout='30s';
+notify pgrst,'reload schema';
