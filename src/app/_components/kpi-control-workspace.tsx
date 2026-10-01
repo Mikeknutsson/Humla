@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 const LegacyControlPanel=dynamic(()=>import('./kpi-legacy-control-panel'),{loading:()=> <p role="status">Öppnar granskning…</p>});
 const MatchWorkbench=dynamic(()=>import('./kpi-match-workbench').then(m=>m.KpiMatchWorkbench),{loading:()=> <p role="status">Öppnar matchningskö…</p>});
 const sections=[
- {key:'matching',title:'Matcha ofördelat',description:'Sök, markera eller dra poster till kostnadsställe, grupp, enhet, fordon och kategori.'},
+ {key:'matching',title:'Matcha & fördela',description:'Sök, kryssa eller dra ofördelade poster. Fördela gemensamma kostnadsprojekt jämnt mellan enheter.'},
  {key:'project_vehicle',title:'Projekt → fordon',description:'Koppla NEXT-projektnummer till rätt registreringsnummer.'},
  {key:'units',title:'Ekonomiska enheter',description:'Samla bil, släp, projekt och person. Välj grupp för hela enheten.'},
  {key:'project_group',title:'Verksamhetsgrupper',description:'Placera projekt i Stena, Kranbilar, Fjärr och övriga grupper.'},
