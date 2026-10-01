@@ -18,8 +18,8 @@ const sections=[
 ] as const;
 type Section=typeof sections[number]['key'];
 type Status={reviews:Array<{id:string}>;connections:Array<{connector_type:string;status:string;last_success_at:string|null;last_error_at:string|null}>};
-export function KpiControlWorkspace({rules,candidates}:{rules:RuleData;candidates:Array<{id:string;name:string;registration:string|null;projects:string[]}>}){
- const [section,setSection]=useState<Section|null>('matching'),[status,setStatus]=useState<Status|null>(null),[error,setError]=useState('');
+export function KpiControlWorkspace({rules,candidates,initialSection='matching'}:{rules:RuleData;candidates:Array<{id:string;name:string;registration:string|null;projects:string[]}>;initialSection?:Section}){
+ const [section,setSection]=useState<Section|null>(initialSection),[status,setStatus]=useState<Status|null>(null),[error,setError]=useState('');
  useEffect(()=>{const controller=new AbortController();fetch('/api/kpi/control-panel',{cache:'no-store',signal:controller.signal}).then(async r=>{const j=await r.json();if(!r.ok)throw Error(j.error);setStatus(j)}).catch(e=>{if(e.name!=='AbortError')setError(e.message)});return()=>controller.abort()},[]);
  return <div className="kpi-app control-workspace"><header className="control-header"><a className="brand" href="/kpi">Humla <small>Dashboard</small></a><nav aria-label="Dashboard"><a href="/kpi?view=kpi">KPI</a><a href="/kpi?view=import">Dataimport</a><a href="/kpi?view=review">Granskning</a></nav></header><main className="control-content"><div className="eyebrow">INSTÄLLNINGAR & KOPPLINGAR</div><h1>Kontrollpanel</h1><p>Arbeta här i Dashboard. Kopplingar och regler sparas i Humla Hub och används från det datum du väljer.</p>
  <section className="control-guide"><strong>Välj vad du vill koppla → sök objektet → ange giltig från → spara.</strong><span>Osäkra kopplingar lämnas för granskning. Historiska regelperioder finns kvar.</span></section>

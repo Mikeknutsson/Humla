@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import {unitPayload} from '../src/lib/kpi/units.ts';
-const body={name:'ABC123',unit_type:'vehicle',projects:'9018\n9047',registrations:'abc123\nDEF456\nABC123',employees:'181',valid_from:'2026-09-01',valid_to:'',enabled:true};
+const body={name:'Ekipage',main_vehicle:'ABC123',unit_type:'vehicle',projects:'9018\n9047',registrations:'abc123\nDEF456\nABC123',employees:'181',valid_from:'2026-09-01',valid_to:'',enabled:true};
 const value=unitPayload(body);
 assert.deepEqual(value.registrations,['ABC123','DEF456']);
 assert.deepEqual(value.projects,['9018','9047']);
 assert.deepEqual(value.employees,['181']);
+assert.equal(value.name,'ABC123');
+assert.throws(()=>unitPayload({...body,main_vehicle:''}));
+assert.throws(()=>unitPayload({...body,main_vehicle:'GHI789'}));
 assert.throws(()=>unitPayload({...body,valid_from:'2026-02-30'}));
 assert.throws(()=>unitPayload({...body,valid_to:'2026-08-31'}));
 assert.throws(()=>unitPayload({...body,registrations:'9018'}));
 assert.throws(()=>unitPayload({...body,unit_type:'unknown'}));
-assert.equal(unitPayload({...body,unit_type:'overhead',registrations:'',employees:''}).unit_type,'overhead');
+assert.equal(unitPayload({...body,main_vehicle:'',unit_type:'overhead',registrations:'',employees:''}).unit_type,'overhead');
 console.log('PASS: unit validation, unique members, date bounds, overhead without vehicles');
