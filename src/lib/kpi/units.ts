@@ -33,5 +33,10 @@ export function unitPayload(body: Record<string, unknown>) {
  const main_vehicle=typeof body.main_vehicle==='string'?body.main_vehicle.trim().toUpperCase():registrations.length===1?registrations[0]:'';
  if(main_vehicle && !registrations.includes(main_vehicle)) throw new Error('Huvudfordonet måste ingå i enheten.');
  if((unit_type==='vehicle'||unit_type==='compound')&&registrations.length){if(!main_vehicle)throw new Error('Välj intäktsbärande huvudfordon.');name=main_vehicle;}
- return {name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled:body.enabled,...(main_vehicle?{main_vehicle}:{})};
+ if(body.business_group_id!==undefined&&body.business_group_id!==null&&typeof body.business_group_id!=='string')throw new Error('Välj en giltig verksamhetsgrupp.');
+ const business_group_id=body.business_group_id===undefined?undefined:typeof body.business_group_id==='string'&&body.business_group_id.trim()?body.business_group_id.trim():null;
+ if(business_group_id&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(business_group_id))throw new Error('Välj en giltig verksamhetsgrupp.');
+ if(body.initial_setup!==undefined&&typeof body.initial_setup!=='boolean')throw new Error('Ogiltigt grundkopplingsläge.');
+ if(body.finalize_setup!==undefined&&typeof body.finalize_setup!=='boolean')throw new Error('Ogiltig låsning.');
+ return {initial_setup:body.initial_setup===true,finalize_setup:body.finalize_setup===true,...(business_group_id!==undefined?{business_group_id}:{}),name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled:body.enabled,...(main_vehicle?{main_vehicle}:{})};
 }
