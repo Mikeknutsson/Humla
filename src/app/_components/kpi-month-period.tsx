@@ -2,7 +2,7 @@
 import {useTransition,useOptimistic} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
 import {fiscalMonths,monthLabels,monthPeriodQuery,type MonthPeriod} from '@/lib/kpi/period';
-export function KpiMonthPeriod({period,costCenter,costCenters,groups=[]}:{period:MonthPeriod;costCenter:string;costCenters:Array<{code:string;name:string}>;groups?:string[]}) {
+export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName}:{period:MonthPeriod;costCenter:string;costCenters:Array<{code:string;name:string}>;groups?:string[];unitName?:string}) {
  const router=useRouter();const params=useSearchParams();const [pending,start]=useTransition();const [selected,setSelected]=useOptimistic(period);
  function change(year:number,months:number[],center=costCenter) {
   const p=new URLSearchParams(params);p.delete('from');p.delete('to');p.delete('date_from');p.delete('date_to');
@@ -22,6 +22,6 @@ export function KpiMonthPeriod({period,costCenter,costCenters,groups=[]}:{period
   <span className="section-kicker">Period · klicka för att välja eller ta bort månader</span>
   <div className="fiscal-months">{fiscalMonths.map((m,i)=><button key={m} aria-pressed={selected.months.includes(m)} disabled={selected.months.length===1&&selected.months.includes(m)} onClick={()=>change(selected.fiscalYear,selected.months.includes(m)?selected.months.filter(x=>x!==m):fiscalMonths.filter(x=>selected.months.includes(x)||x===m))}>{monthLabels[i]} {selected.months.includes(m)?'✓':''}</button>)}</div>
   <p aria-live="polite">{pending?'Hämtar från Humla Hub…':`${selected.months.map(m=>monthLabels[fiscalMonths.indexOf(m)]).join(' + ')} · ${selected.fiscalYear}/${selected.fiscalYear+1}`} · YTD omfattar hela månader till och med aktuell månad.</p>
-  {(params.has('unit')||params.has('vehicle')||params.has('project')||params.has('category')||params.has('source'))&&<p>Detaljurval: {['unit','vehicle','project','category','source'].filter(k=>params.has(k)).map(k=>`${k}: ${params.get(k)}`).join(' · ')} <button className="secondary" onClick={clearObject}>Visa hela gruppen igen</button></p>}
+  {(params.has('unit')||params.has('vehicle')||params.has('project')||params.has('category')||params.has('source'))&&<p>Detaljurval: {['unit','vehicle','project','category','source'].filter(k=>params.has(k)).map(k=>k==='unit'?`Enhet: ${unitName??'Vald ekonomisk enhet'}`:`${({vehicle:'Fordon',project:'Projekt',category:'Kategori',source:'Källa'} as Record<string,string>)[k]}: ${params.get(k)}`).join(' · ')} <button className="secondary" onClick={clearObject}>Visa hela gruppen igen</button></p>}
  </section>;
 }
