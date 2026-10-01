@@ -22,4 +22,14 @@ async function save(request: Request, edit: boolean) {
 export const POST=(request:Request)=>save(request,false);
 export const PATCH=(request:Request)=>save(request,true);
 
-export async function GET(){const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return Response.json({error:'Inloggning krävs'},{status:401});const {data:m}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();if(!m)return Response.json({error:'Arbetsyta saknas'},{status:403});const {data,error}=await db.rpc('hub_kpi_admin_unit_builder_v2',{p_tenant_id:m.tenant_id});if(error)return Response.json({error:'Objektregistret kunde inte läsas'},{status:403});return Response.json(data,{headers:{'Cache-Control':'private, no-store'}})}
+export async function GET(){
+ const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return Response.json({error:'Inloggning krävs'},{status:401});
+ const {data:m}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();if(!m)return Response.json({error:'Arbetsyta saknas'},{status:403});
+ const {data,error}=await db.rpc('hub_kpi_admin_unit_builder_v2',{p_tenant_id:m.tenant_id});if(error)return Response.json({error:'Objektregistret kunde inte läsas'},{status:403});
+ const [{data:units,error:unitError},{data:periods,error:periodError}]=await Promise.all([
+ db.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',m.tenant_id).in('origin',['manual','manual_builder']).order('name'),
+ db.from('kpi_unit_periods').select('unit_id,valid_from,valid_to,payload').eq('tenant_id',m.tenant_id).order('valid_from',{ascending:false})
+ ]);
+ if(unitError||periodError)return Response.json({error:'Enheter och historik kunde inte läsas'},{status:500});
+ return Response.json({...data,units:(units??[]).map(u=>{const latest=periods?.find(p=>p.unit_id===u.id);return {...u,valid_from:latest?.valid_from??u.valid_from,valid_to:latest?latest.valid_to:u.valid_to,main_vehicle:latest?.payload?.main_vehicle??u.registrations[0]??'',periods:(periods??[]).filter(p=>p.unit_id===u.id).map(p=>({valid_from:p.valid_from,valid_to:p.valid_to}))}})},{headers:{'Cache-Control':'private, no-store'}});
+}
