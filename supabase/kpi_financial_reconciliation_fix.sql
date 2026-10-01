@@ -206,4 +206,7 @@ begin
  return current_data||jsonb_build_object('previous',previous_data,'comparison_available',comparison_available,'cost_centers',options,'cost_center_scope',p_cost_center,'classification_valid_from',(select min(valid_from) from public.kpi_project_classification_periods where tenant_id=p_tenant_id),'metrics',current_data->'metrics'||jsonb_build_object('revenue_change_pct',case when comparison_available then round(((current_data#>>'{metrics,revenue}')::numeric/(nullif((previous_data#>>'{metrics,revenue}')::numeric,0))-1)*100,2) else null end));
 end $function$;
 
+-- CREATE OR REPLACE resets function settings; retain bounded RPC timeouts.
+alter function public.hub_kpi_overview_months_v1(uuid,integer,integer[],text,jsonb) set statement_timeout='30s';
+alter function public.hub_kpi_analysis_months_v1(uuid,date,date,jsonb,text,text,integer,boolean) set statement_timeout='30s';
 notify pgrst, 'reload schema';

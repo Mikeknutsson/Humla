@@ -48,6 +48,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary,provenance").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
     supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
   ]);
+  if ((initialView === "overview" || initialView === "kpi") && (dashboardError || !dashboard)) {
+    console.error("[kpi] financial report unavailable", { code: dashboardError?.code });
+    const retryQuery = new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    return <main className="access-denied"><div role="alert"><h1>Rapporten kunde inte hämtas</h1><p>Hubben kunde inte lämna ett verifierat resultat för urvalet. Inga KPI-belopp visas eftersom saknade data inte är samma sak som noll.</p><a className="primary" href={`/kpi?${retryQuery.toString()}`}>Försök igen med samma urval</a></div></main>;
+  }
   const transpaVehicleTime=dashboard?.transpa_vehicle_time??null;
   const efficiency=dashboard?.efficiency??null;
   const hiredCapacity=dashboard?.hired_capacity??null;
@@ -88,4 +93,3 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     serverIssues={serverIssues}
   />;
 }
-
