@@ -23,13 +23,15 @@ function date(value: unknown) {
 export function unitPayload(body: Record<string, unknown>) {
  const unit_type=body.unit_type;
  if (unit_type !== 'vehicle' && unit_type !== 'person' && unit_type !== 'overhead' && unit_type !== 'compound') throw new Error('Välj enhetstyp.');
- const name = typeof body.name === 'string' ? body.name.trim() : '';
+ let name = typeof body.name === 'string' ? body.name.trim() : '';
  if (!name || name.length > 120) throw new Error('Enhetsnamn krävs, högst 120 tecken.');
  const projects = values(body.projects), registrations=values(body.registrations,true), employees=values(body.employees);
  if (projects.length+registrations.length+employees.length<1 || projects.length+registrations.length+employees.length>300) throw new Error('Ange 1–300 kopplingar.');
  const valid_from=date(body.valid_from), valid_to=body.valid_to ? date(body.valid_to) : null;
  if (valid_to && valid_to<valid_from) throw new Error('Slutdatum får inte vara före startdatum.');
  if (typeof body.enabled !== 'boolean') throw new Error('Ogiltig status.');
- if(body.main_vehicle && (typeof body.main_vehicle!=='string'||!registrations.includes(body.main_vehicle))) throw new Error('Huvudfordonet måste ingå i enheten.');
- return {name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled:body.enabled,...(body.main_vehicle?{main_vehicle:body.main_vehicle}:{})};
+ const main_vehicle=typeof body.main_vehicle==='string'?body.main_vehicle.trim().toUpperCase():registrations.length===1?registrations[0]:'';
+ if(main_vehicle && !registrations.includes(main_vehicle)) throw new Error('Huvudfordonet måste ingå i enheten.');
+ if((unit_type==='vehicle'||unit_type==='compound')&&registrations.length){if(!main_vehicle)throw new Error('Välj intäktsbärande huvudfordon.');name=main_vehicle;}
+ return {name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled:body.enabled,...(main_vehicle?{main_vehicle}:{})};
 }

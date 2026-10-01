@@ -34,7 +34,7 @@ export function UnitManager({units,report,canManage,from,to}:{units:KpiUnit[];re
    <p className="wide">NEXT-projekt skapar inga fordon. Gemensamma kostnader följs separat under Övergripande kostnader och fördelas inte automatiskt på fordonsenheter.</p>
    <label className="wide">Enhetsnamn<input name="name" required maxLength={120} defaultValue={editing?.name??''} placeholder="Ex. ABC123"/></label>
    <label>Projekt<textarea name="projects" rows={5} defaultValue={editing?.projects.join('\n')??''} placeholder="Ett projektnummer per rad"/></label>
-   <label>Bil och släp<textarea name="registrations" rows={5} defaultValue={editing?.registrations.join('\n')??''} placeholder="Ett regnummer per rad"/></label>
+   <label>Intäktsbärande huvudfordon<input name="main_vehicle" defaultValue={editing?.registrations.includes(editing.name)?editing.name:editing?.registrations.length===1?editing.registrations[0]:''} placeholder="Ex. DFC86A · styr enhetsnamnet"/></label><label>Bil och släp<textarea name="registrations" rows={5} defaultValue={editing?.registrations.join('\n')??''} placeholder="Ett regnummer per rad"/></label>
    <label>Anställningsnummer<textarea name="employees" rows={5} defaultValue={editing?.employees.join('\n')??''} placeholder="Ett anställningsnummer per rad"/></label>
    <label>Gäller från<input type="date" name="valid_from" required defaultValue={editing?to:from}/></label><label>Gäller till<input type="date" name="valid_to" defaultValue={editing?.valid_to??''}/></label>
    <label className="check-line"><input type="checkbox" name="enabled" defaultChecked={editing?.enabled??true}/>Aktiv</label>
