@@ -9,6 +9,8 @@ const money=new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maxim
 const key=(i:Item)=>JSON.stringify([i.source,i.kind,i.reference_type,i.reference]);
 function MatchEvidence({item,from,to}:{item:Item;from:string;to:string}){
  const registered=[...new Set(item.register_vehicles?.flat()??[])].filter(Boolean);
+ const examples=(field:string)=>[...new Set((item.samples??[]).map(s=>s.original?.[field]).filter(v=>v!==undefined&&v!==null&&v!==''))].map(String).join(', ');
+ const originalDocument=(value:unknown)=>{if(typeof value!=='string')return null;try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='app.workifyit.com'?u.href:null}catch{return null}};
  const projectLink=(project:string)=>'/kpi/analys?'+new URLSearchParams({from,to,source:item.source,kind:item.kind,project,level:'transaction'});
  return <div className="match-evidence">
  <small><strong>Kopplat fordon:</strong> {item.vehicles?.length?item.vehicles.join(', '):'Ingen verifierad fordonskoppling'}</small>
@@ -16,9 +18,10 @@ function MatchEvidence({item,from,to}:{item:Item;from:string;to:string}){
  {item.projects?.map(p=><small key={p.reference}><strong>Projekt:</strong> <a href={projectLink(p.reference)} target="_blank" rel="noopener noreferrer">{p.reference}{p.name?' – '+p.name:''}</a></small>)}
  {Boolean(item.accounts?.length)&&<small><strong>Konto:</strong> {item.accounts?.join(', ')}</small>}
  {Boolean(item.suppliers?.length)&&<small><strong>Leverantör:</strong> {item.suppliers?.join(', ')}</small>}
+ {['Ordernummer','Kundnamn','Littranummer','Artikelnummer','Rubrik'].filter(field=>examples(field)).map(field=><small key={field}><strong>{({Ordernummer:'Order',Kundnamn:'Kund',Littranummer:'Littra / projekt',Artikelnummer:'Artikel',Rubrik:'Uppdrag'} as Record<string,string>)[field]} (exempel):</strong> {examples(field)}</small>)}
  <details><summary>Visa originalunderlag · {item.samples?.length??0} exempel</summary>
  <p>Upp till fem rader visas här. Projektlänken öppnar projektets transaktioner. Saknas fordonsuppgift och verifierad koppling behöver posten kontrolleras före matchning.</p>
- {item.samples?.map((s,index)=><article key={index}><h4>{s.occurred_on} · {s.amount==null?'Belopp saknas':money.format(s.amount)}</h4><p>{s.description??'Beskrivning saknas'}{s.project&&<> · <a href={projectLink(s.project)} target="_blank" rel="noopener noreferrer">Projekt {s.project}{s.project_name?' – '+s.project_name:''}</a></>}</p><small>Källfil: {s.file_name??item.source} · rad {s.row_number??'saknas'}</small><dl>{Object.entries(s.original??{}).filter(([k,v])=>!k.startsWith('_humla')&&v!==null&&v!=='').map(([k,v])=><div key={k}><dt>{k}</dt><dd>{typeof v==='object'?JSON.stringify(v):String(v)}</dd></div>)}</dl></article>)}
+ {item.samples?.map((s,index)=><article key={index}><h4>{s.occurred_on} · {s.amount==null?'Belopp saknas':money.format(s.amount)}</h4><p>{s.description??'Beskrivning saknas'}{s.project&&<> · <a href={projectLink(s.project)} target="_blank" rel="noopener noreferrer">Projekt {s.project}{s.project_name?' – '+s.project_name:''}</a></>}</p><small>Källfil: {s.file_name??item.source} · rad {s.row_number??'saknas'}</small>{originalDocument(s.original?.FilUrl)&&<p><a href={originalDocument(s.original.FilUrl)!} target="_blank" rel="noopener noreferrer">Öppna originaldokument i Workify</a></p>}<dl>{Object.entries(s.original??{}).filter(([k,v])=>!k.startsWith('_humla')&&v!==null&&v!=='').map(([k,v])=><div key={k}><dt>{k}</dt><dd>{typeof v==='object'?JSON.stringify(v):String(v)}</dd></div>)}</dl></article>)}
  </details></div>;
 }
 export function KpiMatchWorkbench(){
