@@ -5,9 +5,11 @@ import {KpiPrint} from './kpi-print';
 import {KpiEconomicUnits,type EconomicUnit} from './kpi-economic-units';
 import { KpiMonthChart, type MonthlyPoint } from "./kpi-month-chart";
 import { monthPeriodQuery,type MonthPeriod } from "@/lib/kpi/period";
-import { ImportReview } from "./import-review";
-import { HubReview } from "./hub-review";
+import dynamic from "next/dynamic";
+const ImportReview = dynamic(() => import("./import-review").then(m => m.ImportReview));
+const HubReview = dynamic(() => import("./hub-review").then(m => m.HubReview));
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3, CheckCircle2, ChevronRight, Database, FileSpreadsheet, Fuel,
@@ -18,9 +20,10 @@ import { DATA_KINDS, suggestMapping, type DataKind, type ParsedRow } from "@/lib
 import { parseVehicleRules, resolveVehicle } from "@/lib/kpi/vehicle-rules";
 import { logout } from "../kpi/login/actions";
 import type { AccountMapping } from "@/lib/kpi/account-mapping";
-import {TranspaEvidencePanel, type TranspaEvidence} from './transpa-evidence';
-import {CompoundUnitBuilder} from './compound-unit-builder';
-import {UnitManager} from './unit-manager';
+import type {TranspaEvidence} from './transpa-evidence';
+const TranspaEvidencePanel = dynamic(() => import('./transpa-evidence').then(m => m.TranspaEvidencePanel));
+const CompoundUnitBuilder = dynamic(() => import('./compound-unit-builder').then(m => m.CompoundUnitBuilder));
+const UnitManager = dynamic(() => import('./unit-manager').then(m => m.UnitManager));
 import type {KpiUnit,UnitReport} from '@/lib/kpi/units';
 
 export type Dashboard = {
@@ -110,7 +113,7 @@ export function KpiApp({ monthPeriod, overviewMonthly, activeFilters, dashboard,
   overviewPrevious: Dashboard | null;
   overviewPeriod: {current:{from:string;to:string};previous:{from:string;to:string};label:string};
   batches: Batch[];
-  accountMappings: AccountMapping[];
+  accountMappings?: AccountMapping[];
   tenantName: string;
   userName: string;
   from: string;
@@ -295,19 +298,16 @@ export function KpiApp({ monthPeriod, overviewMonthly, activeFilters, dashboard,
       <div className="brand-wrap"><div className="brand-mark">H</div><div><div className="brand">Humla</div><div className="brand-sub">DASHBOARD</div></div><button className="icon-button close-nav" onClick={() => setMobileMenu(false)} aria-label="Stäng meny"><X size={18}/></button></div>
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
-        <a className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Översikt</a>
-        <a className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</a>
-        <a className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</a>
+        <Link prefetch={false} className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={() => setMobileMenu(false)}><LayoutDashboard size={18}/>Översikt</Link>
+        <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>KPI</Link>
+        <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
+        <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
         {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
-
-          <a className={view === "accounts" ? "active" : ""} href={kpiHref("accounts")} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontomappning</a>
-          <a href="/kpi/regler"><ListTree size={17}/>Hub-regler & historik</a>
-          <a className={view === "units" ? "active" : ""} href={kpiHref("units")} onClick={() => setMobileMenu(false)}><Truck size={17}/>Enhetsmappning</a>
-          <a className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</a>
-          <a className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-definitioner</a>
+          <Link href={`/kpi/kontrollpanel?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontrollpanel</Link>
+          <Link className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} prefetch={false} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</Link>
+          <Link className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} prefetch={false} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-guide</Link>
         </div>}
       </nav>
-      {canManage&&<div className="nav-group"><span className="nav-group-title"><ShieldCheck size={15}/>ADMIN</span><a href="/kpi/kontrollpanel" onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Kontrollpanel</a><a href={kpiHref("review")} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning & mappning</a></div>}
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
       <div className="user-block"><div className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0,2)}</div><div><strong>{userName}</strong><span>KPI-användare</span></div><form action={logout}><button className="logout-button" type="submit">Logga ut</button></form></div>
     </aside>

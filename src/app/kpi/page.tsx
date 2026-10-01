@@ -27,11 +27,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     if (query.auth_retry !== "1") redirect("/kpi?auth_retry=1");
     return <main className="access-denied"><div><span>!</span><h1>Din session fungerar, men KPI-arbetsytan kunde inte öppnas</h1><p>Ingen aktiv KPI-arbetsyta kunde läsas för användaren.</p><a className="primary" href="/kpi/login?stay=1">Hantera KPI-sessionen</a></div></main>;
   }
-  const { data: tenant } = await supabase.from("hub_tenants").select("name").eq("id", member.tenant_id).maybeSingle();
-  const { data: canRead, error: readError } = await supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.read" });
+  const [{ data: tenant }, { data: canRead, error: readError }, { data: canManage, error: manageError }, { data: settings }] = await Promise.all([
+    supabase.from("hub_tenants").select("name").eq("id", member.tenant_id).maybeSingle(),
+    supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.read" }),
+    supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.manage" }),
+    supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle(),
+  ]);
   if (!canRead) return <main className="access-denied"><div><span>403</span><h1>Du saknar åtkomst till KPI-appen</h1><p>Be en administratör aktivera din KPI-behörighet.</p></div></main>;
-  const { data: canManage, error: manageError } = await supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.manage" });
-  const { data: settings } = await supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle();
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
   const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
   const legacyMonths = monthPeriodFromDates(query.from,query.to);
@@ -43,10 +45,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const costCenter = query.cost_center?.trim() || null;
   const to = useMonths ? `${monthPeriod.fiscalYear+1}-08-31` : /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
-  const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }, { data: accountMappings, error: mappingsError }] = await Promise.all([
-    useMonths ? supabase.rpc("hub_kpi_overview_months_v1", { p_tenant_id:member.tenant_id, p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters }) : supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter }),
-    supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary,provenance").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12),
-    supabase.from("kpi_account_mappings").select("id,account_from,account_to,name,calculation_role,cost_category,include_in_vehicle_result,priority,valid_from,valid_to,enabled,notes,created_at,updated_at").eq("tenant_id", member.tenant_id).order("enabled", { ascending: false }).order("account_from"),
+  const needsReport = initialView === "overview" || initialView === "kpi";
+  const needsBatches = needsReport || initialView === "import";
+  const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }] = await Promise.all([
+    needsReport ? (useMonths ? supabase.rpc("hub_kpi_overview_months_v1", { p_tenant_id:member.tenant_id, p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters }) : supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter })) : Promise.resolve({ data: null, error: null }),
+    needsBatches ? supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary,provenance").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12) : Promise.resolve({ data: [], error: null }),
   ]);
   if ((initialView === "overview" || initialView === "kpi") && (dashboardError || !dashboard)) {
     console.error("[kpi] financial report unavailable", { code: dashboardError?.code });
@@ -65,9 +68,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]) : [{data:[],error:null},{data:null,error:null}];
   const {data:hubReviews,error:hubReviewError}=initialView==='review' ? await supabase.from('hub_review_queue').select('id,review_type,activity_kind,confidence,proposed_matches,payload,reason_code').eq('tenant_id',member.tenant_id).eq('status','open').order('created_at',{ascending:false}).limit(250) : {data:[],error:null};
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
-  const serverIssues = [readError, manageError, dashboardError, batchesError, mappingsError, unitsError, unitReportError, transpaError, hubReviewError].filter(Boolean).map((error) => error!.message);
-  if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError, mappingsError].filter(Boolean).map((error) => error!.code) });
-  return <KpiApp
+  const serverIssues = [readError, manageError, dashboardError, batchesError, unitsError, unitReportError, transpaError, hubReviewError].filter(Boolean).map((error) => error!.message);
+  if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError].filter(Boolean).map((error) => error!.code) });
+  return <KpiApp key={initialView}
     monthPeriod={useMonths?monthPeriod:undefined}
     overviewMonthly={(displayDashboard.monthly??[]) as never}
     activeFilters={activeFilters}
@@ -80,7 +83,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     from={from}
     to={to}
     canManage={Boolean(canManage)}
-    accountMappings={(accountMappings ?? []) as never[]}
     units={(units ?? []) as never[]}
     unitReport={unitReport ?? {units:[],quality:{},conflict_rows:[]}}
     transpaEvidence={transpaEvidence}

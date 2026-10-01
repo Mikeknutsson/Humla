@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { KpiRefresh } from "../_components/kpi-refresh";
 
 export const metadata: Metadata = {
   title: "Humla KPI",
@@ -6,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function KpiLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <><KpiRefresh/>{children}</>;
 }

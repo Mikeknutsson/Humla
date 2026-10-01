@@ -79,3 +79,13 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .dashboard-report-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:0}.dashboard-report-actions>span{font-size:12px;color:var(--muted)}
 @media print{.sidebar,.topbar .mobile-nav,.topbar .secondary,.topbar-badge,.no-print{display:none!important}.app-shell{display:block!important}.app-main{margin-left:0!important;min-width:0!important}.content{padding:12px!important}.kpi-app,body{background:white!important}.panel,.metric-card{break-inside:avoid;box-shadow:none!important}.table-wrap{overflow:visible!important}.metrics-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}.month-selector button,.month-period button,.economic-unit-name button{border:0!important}}
 .match-evidence{min-width:220px}.match-evidence small{display:block;margin-top:5px}.match-evidence details{margin-top:9px}.match-evidence article{padding:10px 0;border-top:1px solid #ddd}.match-evidence dl{margin:0}.match-evidence dl>div{display:grid;grid-template-columns:minmax(100px,1fr) minmax(120px,2fr);gap:8px;padding:4px 0}.match-evidence dt{font-weight:650}.match-evidence dd{margin:0;overflow-wrap:anywhere;white-space:normal}.match-evidence details p{white-space:normal;max-width:520px}
+
+/* Shared refresh remains visible throughout the Dashboard. */
+.kpi-refresh-bar{position:sticky;top:0;z-index:35;height:48px;display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:5px 24px;background:#fff;border-bottom:1px solid #e1e5e9;color:#343a3f}
+.kpi-refresh-bar button,.kpi-refresh-bar a{display:inline-flex;align-items:center;gap:7px;border:1px solid #d6dade;border-radius:7px;background:#fff;color:#343a3f;font:inherit;font-size:12px;font-weight:700;padding:8px 12px;text-decoration:none;cursor:pointer}
+.kpi-refresh-bar a{margin-right:auto}.kpi-refresh-bar button:disabled{cursor:wait;opacity:.7}.kpi-refresh-bar button:focus-visible,.kpi-refresh-bar a:focus-visible{outline:3px solid #16816a;outline-offset:2px}
+.kpi-refresh-bar~.kpi-app .topbar{top:48px}.kpi-refresh-bar~.control-workspace .control-header{top:48px}
+.refresh-spinning{animation:kpi-refresh-spin 1s linear infinite}@keyframes kpi-refresh-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.refresh-spinning{animation:none}}
+.kpi-refresh-bar .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.kpi-page-loading{padding:32px;color:#343a3f;background:#fff;min-height:200px}.kpi-page-loading h1{font-size:20px}
+@media(max-width:640px){.kpi-refresh-bar{padding:5px 16px}.kpi-refresh-bar~.kpi-app .topbar{height:auto;min-height:72px;flex-wrap:wrap}.kpi-refresh-bar~.kpi-app .topbar-badge{display:none}}
