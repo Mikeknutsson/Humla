@@ -1,7 +1,7 @@
 -- Dashboard allocation rules: dated, tenant-scoped, audited; never change amounts.
 create table if not exists public.kpi_dashboard_allocations (
  id uuid primary key default gen_random_uuid(), tenant_id uuid not null references public.hub_tenants(id),
- dimension text not null check(dimension in ('cost_center','group','unit','vehicle','category')),
+ dimension text not null check(dimension in ('cost_center','group','unit','vehicle','category','shared_cost')),
  source text not null, kind text not null check(kind in ('revenue','cost')),
  reference_type text not null check(reference_type in ('fact','project','vehicle','article','account')),
  reference text not null check(length(reference) between 1 and 200), target text not null,
@@ -10,8 +10,11 @@ create table if not exists public.kpi_dashboard_allocations (
  check(valid_to is null or valid_to>=valid_from),
  unique(tenant_id,dimension,source,kind,reference_type,reference,valid_from)
 );
+alter table public.kpi_dashboard_allocations drop constraint if exists kpi_dashboard_allocations_dimension_check;
+alter table public.kpi_dashboard_allocations add constraint kpi_dashboard_allocations_dimension_check check(dimension in ('cost_center','group','unit','vehicle','category','shared_cost'));
 create index if not exists kpi_dashboard_allocations_match_idx on public.kpi_dashboard_allocations(tenant_id,source,kind,reference_type,reference,valid_from);
 alter table public.kpi_dashboard_allocations enable row level security;
+drop policy if exists kpi_dashboard_allocations_read on public.kpi_dashboard_allocations;
 create policy kpi_dashboard_allocations_read on public.kpi_dashboard_allocations for select to authenticated using(public.hub_has_permission(tenant_id,'kpi.manage'));
 revoke all on public.kpi_dashboard_allocations from anon,authenticated;
 grant select on public.kpi_dashboard_allocations to authenticated;
@@ -21,7 +24,8 @@ returns jsonb language plpgsql security definer set search_path='' as $$
 declare item jsonb; ref text; typ text; src text; k text; affected integer:=0; result_id uuid;
 begin
  if auth.uid() is null or not public.hub_has_permission(p_tenant_id,'kpi.manage') then raise exception 'KPI-administratör krävs' using errcode='42501';end if;
- if p_dimension not in ('cost_center','group','unit','vehicle','category') or p_from is null or (p_to is not null and p_to<p_from) or length(trim(coalesce(p_reason,''))) not between 3 and 1000 or jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items) not between 1 and 100 then raise exception 'Kontrollera urval, giltighetsdatum och motivering';end if;
+ if p_dimension is null or p_dimension not in ('cost_center','group','unit','vehicle','category','shared_cost') or nullif(trim(p_target),'') is null or p_from is null or (p_to is not null and p_to<p_from) or length(trim(coalesce(p_reason,''))) not between 3 and 1000 or jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items) not between 1 and 100 then raise exception 'Kontrollera urval, giltighetsdatum och motivering';end if;
+ if p_dimension='shared_cost' and p_target not in ('*','none') and not exists(select 1 from public.kpi_business_groups where tenant_id=p_tenant_id and enabled and name=p_target) then raise exception 'Välj alla enheter eller en giltig verksamhetsgrupp';end if;
  if p_dimension='cost_center' and not exists(select 1 from public.kpi_project_classification_periods where tenant_id=p_tenant_id and cost_center=p_target) then raise exception 'Okänt kostnadsställe';end if;
  if p_dimension='group' and not exists(select 1 from public.kpi_business_groups where tenant_id=p_tenant_id and enabled and name=p_target) then raise exception 'Okänd verksamhetsgrupp';end if;
  if p_dimension='unit' and not exists(select 1 from public.kpi_units where tenant_id=p_tenant_id and id::text=p_target and origin in ('manual','manual_builder') and enabled) then raise exception 'Okänd ekonomisk enhet';end if;
@@ -31,13 +35,14 @@ begin
  for item in select value from jsonb_array_elements(p_items) loop
   ref:=trim(item->>'reference');typ:=item->>'reference_type';src:=item->>'source';k:=item->>'kind';
   if typ not in ('fact','project','vehicle','article','account') or src not in ('NEXT','Workify','TransPA','Avskrivningsregister') or k not in ('revenue','cost') or length(coalesce(ref,'')) not between 1 and 200 then raise exception 'Ogiltig referens';end if;
+  if p_dimension='shared_cost' and (src<>'NEXT' or k<>'cost' or typ<>'project') then raise exception 'Jämn fördelning gäller NEXT-kostnadsprojekt';end if;
   if exists(select 1 from public.kpi_dashboard_allocations a where a.tenant_id=p_tenant_id and a.dimension=p_dimension and a.source=src and a.kind=k and a.reference_type=typ and a.reference=ref and a.valid_from>=p_from) then raise exception 'En regel finns redan på eller efter startdatumet. Välj ett senare datum.';end if;
   update public.kpi_dashboard_allocations a set valid_to=p_from-1 where a.tenant_id=p_tenant_id and a.dimension=p_dimension and a.source=src and a.kind=k and a.reference_type=typ and a.reference=ref and (a.valid_to is null or a.valid_to>=p_from);
   insert into public.kpi_dashboard_allocations(tenant_id,dimension,source,kind,reference_type,reference,target,valid_from,valid_to,reason,created_by)
   values(p_tenant_id,p_dimension,src,k,typ,ref,p_target,p_from,p_to,trim(p_reason),auth.uid()) returning id into result_id;
   affected:=affected+1;
   -- Release only rows held solely for allocation. Invalid dates/amounts remain held.
-  if src='NEXT' and p_dimension in ('cost_center','unit','vehicle','group') then
+  if src='NEXT' and p_dimension in ('cost_center','unit','vehicle','group','shared_cost') then
    update public.kpi_import_rows r set is_valid=true,validation_errors='[]',allocation=coalesce(r.allocation,'{}')||jsonb_build_object('dashboard_allocation_rule',result_id,'allocation_status','classified','reviewed_by',auth.uid(),'reviewed_at',now())
    where r.tenant_id=p_tenant_id and r.data_kind='cost' and not r.is_valid and r.amount is not null and r.occurred_on between p_from and coalesce(p_to,'infinity'::date)
    and r.validation_errors<@'["Kostnadsfördelning behöver granskas","Fordonsbeteckning saknar verifierad regnummerkoppling"]'::jsonb
@@ -57,10 +62,10 @@ returns jsonb language plpgsql stable security definer set search_path='' set st
 declare result jsonb;
 begin
  if auth.uid() is null or not public.hub_has_permission(p_tenant_id,'kpi.manage') then raise exception 'KPI-administratör krävs' using errcode='42501';end if;
- if p_dimension not in ('cost_center','group','unit','vehicle','category') or p_reference_type not in ('project','vehicle','article','account','fact') or p_from is null or p_to<p_from or p_to-p_from>366 or p_page<0 then raise exception 'Ogiltigt urval';end if;
+ if p_dimension not in ('cost_center','group','unit','vehicle','category','shared_cost') or p_reference_type not in ('project','vehicle','article','account','fact') or p_from is null or p_to<p_from or p_to-p_from>366 or p_page<0 then raise exception 'Ogiltigt urval';end if;
  with facts as materialized(select * from private.hub_kpi_classified_facts_v1(p_tenant_id,p_from,p_to)),
  rows as(
-  select fact_id,occurred_on,kind,amount,project,vehicle,account,original,source,description from facts where case p_dimension when 'cost_center' then cost_center='unclassified' when 'group' then business_group='Ej klassificerat' when 'unit' then unit_id is null when 'vehicle' then vehicle is null else category in ('other','unclassified') end
+  select fact_id,occurred_on,kind,amount,project,vehicle,account,original,source,description from facts where case p_dimension when 'cost_center' then cost_center='unclassified' when 'group' then business_group='Ej klassificerat' when 'unit' then unit_id is null when 'vehicle' then vehicle is null when 'shared_cost' then source='NEXT' and kind='cost' and project is not null else category in ('other','unclassified') end
   union all select r.id::text,r.occurred_on,r.data_kind,r.amount,r.project_reference,r.vehicle_registration,r.account,r.source_data,case when r.data_kind='cost' then 'NEXT' else 'Workify' end,r.description
   from public.kpi_import_rows r where r.tenant_id=p_tenant_id and not r.is_valid and r.data_kind in ('cost','revenue') and r.occurred_on between p_from and p_to
  ), keyed as(select *,case p_reference_type when 'project' then project when 'vehicle' then vehicle when 'article' then nullif(original->>'Artikelnummer','') when 'account' then account else fact_id end reference from rows),
@@ -160,8 +165,8 @@ begin
    select case when count(distinct p.business_group_id)=1 then (array_agg(distinct p.business_group_id))[1] end gid
    from public.kpi_project_business_groups p where p.tenant_id=p_tenant_id and p.project_reference=f.proj and f.dt>=coalesce(p.valid_from,'2000-01-01') and (p.valid_to is null or f.dt<=p.valid_to)
   ) pg on true left join public.kpi_business_groups bg on bg.id=pg.gid and bg.tenant_id=p_tenant_id and bg.enabled
- ) select f.fid,f.dt,f.k,f.amt,coalesce(a.targets->>'category',f.cat),f.proj,coalesce(a.targets->>'vehicle',f.vrn),coalesce(assigned.id,f.uid),coalesce(assigned.name,f.uname),
-coalesce(a.targets->>'group',assigned.grp,f.grp),f.src,f.descr,f.acc,f.fn,f.rn,f.raw||jsonb_build_object('_humla_assignment',a.targets)
+ ), decorated as(select f.fid,f.dt,f.k,f.amt,coalesce(a.targets->>'category',f.cat) cat,f.proj,coalesce(a.targets->>'vehicle',f.vrn) vrn,coalesce(assigned.id,f.uid) uid,coalesce(assigned.name,f.uname) uname,
+coalesce(a.targets->>'group',assigned.grp,f.grp) grp,f.src,f.descr,f.acc,f.fn,f.rn,f.raw||jsonb_build_object('_humla_assignment',a.targets) raw
 from related f left join lateral(
  select jsonb_object_agg(dimension,target) targets from(
  select distinct on (dimension) dimension,target from allocation_rules r where r.source=f.src and r.kind=f.k and r.valid_from<=f.dt and (r.valid_to is null or r.valid_to>=f.dt)
@@ -171,7 +176,31 @@ from related f left join lateral(
 ) a on true left join lateral(
  select u.id,u.name,(select g.name from unit_group_versions g where g.unit_id=u.id and g.valid_from<=f.dt and (g.valid_to is null or g.valid_to>=f.dt) limit 1) grp from unit_versions u
  where u.id::text=a.targets->>'unit' and u.enabled and u.valid_from<=f.dt and (u.valid_to is null or u.valid_to>=f.dt) limit 1
-) assigned on true;
+) assigned on true
+)
+ select case when recipients.id is null then f.fid else f.fid||':share:'||recipients.id::text end,f.dt,f.k,
+ case when recipients.id is null then f.amt when recipients.position=recipients.n then f.amt-round(f.amt/recipients.n,2)*(recipients.n-1) else round(f.amt/recipients.n,2) end,
+ f.cat,f.proj,case when recipients.id is not null then case when recipients.name ~ '^[A-Z]{3}[0-9]{2}[A-Z0-9]$' then recipients.name end when f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','') then null else f.vrn end,
+ case when recipients.id is not null then recipients.id when f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','') then null else f.uid end,
+ case when recipients.id is not null then recipients.name when f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','') then null else f.uname end,
+ case when recipients.id is not null then coalesce(recipients.grp,'Ej klassificerat') when f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','') then 'Ej klassificerat' else f.grp end,
+ f.src,f.descr,f.acc,f.fn,f.rn,
+ f.raw||case when f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','') then jsonb_build_object('_humla_distribution',jsonb_build_object('method','equal','scope',f.raw#>>'{_humla_assignment,shared_cost}','original_fact_id',f.fid,'original_amount',f.amt,'recipient_count',coalesce(recipients.n,0),'recipient_unit',recipients.id,'status',case when recipients.id is null then 'no_eligible_units' else 'allocated' end)) else '{}'::jsonb end
+ from decorated f left join lateral(
+ select eligible.*,count(*)over() n,row_number()over(order by eligible.id) position
+ from (
+  select distinct on(u.id) u.id,u.name,coalesce(own.name,registry.name) grp from unit_versions u
+  left join lateral(select name from unit_group_versions g where g.unit_id=u.id and g.valid_from<=f.dt and (g.valid_to is null or g.valid_to>=f.dt) order by g.valid_from desc limit 1)own on true
+  left join lateral(
+   select case when count(distinct r.business_group)=1 then min(r.business_group) end name from public.kpi_project_classification_periods r
+   where r.tenant_id=p_tenant_id and r.valid_from<=f.dt and (r.valid_to is null or r.valid_to>=f.dt) and u.name=any(r.registrations) and r.business_group is not null
+  )registry on own.name is null
+  where f.k='cost' and f.src='NEXT' and f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','')
+  and u.enabled and u.valid_from<=f.dt and (u.valid_to is null or u.valid_to>=f.dt)
+  and (f.raw#>>'{_humla_assignment,shared_cost}'='*' or coalesce(own.name,registry.name)=f.raw#>>'{_humla_assignment,shared_cost}')
+  order by u.id,u.valid_from desc
+ )eligible
+ )recipients on true;
 end $function$;
 CREATE OR REPLACE FUNCTION private.hub_kpi_classified_facts_v1(p_tenant_id uuid, p_from date, p_to date)
  RETURNS TABLE(fact_id text, occurred_on date, kind text, amount numeric, category text, project text, vehicle text, unit_id uuid, unit_name text, business_group text, source text, description text, account text, file_name text, row_number integer, original jsonb, cost_center text, cost_center_name text, classification_source jsonb)
@@ -182,7 +211,7 @@ AS $function$
  with facts as materialized(select * from private.hub_kpi_financial_facts_v1(p_tenant_id,p_from,p_to)),
  registry as materialized(select * from public.kpi_project_classification_periods where tenant_id=p_tenant_id and valid_from<=p_to and (valid_to is null or valid_to>=p_from))
  select f.fact_id,f.occurred_on,f.kind,f.amount,f.category,f.project,f.vehicle,f.unit_id,f.unit_name,
-  case when nullif(f.original#>>'{_humla_assignment,group}','') is not null then f.business_group when own_group.has_group then f.business_group when explicit_group.has_group then f.business_group
+  case when f.original#>>'{_humla_distribution,status}' in ('allocated','no_eligible_units') then f.business_group when nullif(f.original#>>'{_humla_assignment,group}','') is not null then f.business_group when own_group.has_group then f.business_group when explicit_group.has_group then f.business_group
    when cc.center_count>1 or bg.group_count>1 then 'Ej klassificerat' else coalesce(bg.group_name,f.business_group) end,
   f.source,f.description,f.account,f.file_name,f.row_number,f.original,
   coalesce(nullif(f.original#>>'{_humla_assignment,cost_center}',''),article.cost_center,nullif(f.original->>'_humla_cost_center',''),case when cc.center_count=1 then cc.code else 'unclassified' end),
