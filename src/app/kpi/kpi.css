@@ -85,6 +85,7 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-refresh-bar button,.kpi-refresh-bar a{display:inline-flex;align-items:center;gap:7px;border:1px solid #d6dade;border-radius:7px;background:#fff;color:#343a3f;font:inherit;font-size:12px;font-weight:700;padding:8px 12px;text-decoration:none;cursor:pointer}
 .kpi-refresh-bar a{margin-right:auto}.kpi-refresh-bar button:disabled{cursor:wait;opacity:.7}.kpi-refresh-bar button:focus-visible,.kpi-refresh-bar a:focus-visible{outline:3px solid #16816a;outline-offset:2px}
 .kpi-refresh-bar~.kpi-app .topbar{top:48px}.kpi-refresh-bar~.control-workspace .control-header{top:48px}
+.kpi-refresh-bar~.kpi-app .sidebar{top:48px;height:calc(100dvh - 48px);min-height:0}
 .refresh-spinning{animation:kpi-refresh-spin 1s linear infinite}@keyframes kpi-refresh-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.refresh-spinning{animation:none}}
 .kpi-refresh-bar .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 .kpi-page-loading{padding:32px;color:#343a3f;background:#fff;min-height:200px}.kpi-page-loading h1{font-size:20px}
