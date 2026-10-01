@@ -1,9 +1,11 @@
 "use client";
 import {useState} from 'react';
+import {useRouter} from 'next/navigation';
 import type {KpiUnit,UnitReport} from '@/lib/kpi/units';
 const money = new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0});
 const unitTypes = {compound:'Sammansatt enhet',vehicle:'Fordon/ekipage',person:'Person',overhead:'Övergripande kostnader'};
 export function UnitManager({units,report,canManage,from,to}:{units:KpiUnit[];report:UnitReport;canManage:boolean;from:string;to:string}) {
+ const router=useRouter();
  const [editing,setEditing]=useState<KpiUnit|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
  const [selected,setSelected]=useState<KpiUnit|null>(null);
  const [formKey,setFormKey]=useState(0);
@@ -14,7 +16,7 @@ export function UnitManager({units,report,canManage,from,to}:{units:KpiUnit[];re
    const response=await fetch('/api/kpi/units',{method:editing?'PATCH':'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
    const result=await response.json();
    if(!response.ok) throw new Error(result.error);
-   window.location.reload();
+   setMessage('Enheten sparades i Humla Hub. Du kan skapa nästa här.');setEditing(null);setFormKey(v=>v+1);router.refresh();
   } catch(error) {setMessage(error instanceof Error?error.message:'Kunde inte spara. Ladda om och kontrollera innan nytt försök.');}
   finally {setBusy(false);}
  }
