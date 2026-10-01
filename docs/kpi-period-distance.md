@@ -1,0 +1,11 @@
+# Period distance in KPI
+
+Hub RPC `hub_kpi_import_distance_v1` stores the raw batch in ingress before processing rows. Only a unique existing Vehicle Object ID can receive distance. Bad dates, unknown/ambiguous registrations and overlapping accepted periods enter the review queue independently. Fingerprints suppress repeated accepted rows; persisted periods are append-only.
+
+`hub_kpi_distance_report_v1` computes mil (10 km), cost/mil and revenue/mil using authoritative Hub financial facts. Imported periods must cover the requested date interval completely without overlap. Monthly distances are never prorated to weeks or days. Zero distance returns null ratios. Fordonskontrollen readings require exact Stockholm midnight boundaries, one connection, consistent units and no observed decrease; interpolation and extrapolation are not permitted.
+
+The display at `/kpi/korstracka` uses individual vehicle finances, not combined-unit finances. It exposes row review reasons and a separate CSV/Excel import (one sheet, 1–5000 rows, <=5 MB). The existing authenticated Fordonskontrollen sync route now allows `odometer_readings` using the same connection and Edge Function. No credentials are exposed. Fetching historical meters requires a signed-in authorized user; it was not run through an alternate authentication mechanism.
+
+CSV/Excel headers: Regnummer, Från, Till, Körsträcka, Enhet. Dates are inclusive ISO dates or Excel date cells, unit km/mil; source description is required. Quarantined corrections can be reimported after checking identity and period. A specialized review resolution/replacement workflow for accepted historical distance periods is not yet implemented; no historical value is overwritten automatically.
+
+Verification: production SQL rollback assertions for mixed rows, canonical matching, duplicate numeric scales, overlaps, conversion, cost ratio and partial-period rejection; Swedish CSV decimal comma; Next.js production build. Test rows are rolled back, never retained as real mileage. Inventory at implementation: Fordonskontrollen active, last success 2026-09-30, zero canonical meter readings; one reconstructed vehicle day (LMT31J, 402 km, 2026-09-17) is not used as monthly distance.

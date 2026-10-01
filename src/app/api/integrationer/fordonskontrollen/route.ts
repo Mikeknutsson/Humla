@@ -7,7 +7,7 @@ export async function POST(req:Request){
  if(!member)return Response.json({error:"Organisation saknas"},{status:403});
  const {data:allowed}=await s.rpc("hub_has_permission",{p_tenant_id:member.tenant_id,p_permission:"hub.connections.manage"});
  if(!allowed)return Response.json({error:"Behörighet saknas"},{status:403});
- const {action}=await req.json();if(!["vehicles","units"].includes(action))return Response.json({error:"Ogiltig åtgärd"},{status:400});
+ const {action}=await req.json();if(!["vehicles","units","odometer_readings"].includes(action))return Response.json({error:"Ogiltig åtgärd"},{status:400});
  const {data:session}=await s.auth.getSession();if(!session.session?.access_token)return Response.json({error:"Session saknas"},{status:401});
  const base=process.env.NEXT_PUBLIC_SUPABASE_URL;if(!base)return Response.json({error:"Supabase URL saknas"},{status:500});
  const response=await fetch(base+"/functions/v1/fordonskontrollen-sync",{method:"POST",headers:{"Authorization":"Bearer "+session.session.access_token,"Content-Type":"application/json"},body:JSON.stringify({connection_id:connection,action,mode:"full"}),cache:"no-store"});

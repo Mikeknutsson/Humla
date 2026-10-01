@@ -13,5 +13,5 @@ export default function Page(){
  <button disabled={busy} onClick={()=>run("vehicles")}>{busy?"Synkroniserar...":"Hämta fordon från Fordonskontrollen"}</button>
  <p><Link href="/integrationer/fordonskontrollen/reparationskostnader">Granska reparationskostnader från NEXT →</Link></p>
  <button disabled={busy} onClick={()=>run("units")}>Hämta maskiner/enheter</button>
- {result&&<p role="status">{result}</p>}{details&&<pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{details}</pre>}</section></>;
+ <h2>Mätarhistorik</h2><p>Hämtar registrerade mätarställningar i kilometer genom befintlig connector. Historiken kan ge körsträcka först när den täcker vald period.</p><button disabled={busy} onClick={()=>run("odometer_readings")}>Hämta mätarhistorik</button><p><Link href="/kpi/korstracka">Körsträcka och kostnad per mil i KPI →</Link></p>{result&&<p role="status">{result}</p>}{details&&<pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{details}</pre>}</section></>;
 }
