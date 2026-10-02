@@ -1,0 +1,5 @@
+.kpiPage :global(.content){max-width:none}
+.workspace :global(.detail-grid).wideTable{grid-template-columns:minmax(0,1fr)}
+.workspace .desktopToggle{display:flex;align-items:center;justify-content:center;flex-shrink:0}
+@media(min-width:881px){.workspace.collapsed{grid-template-columns:minmax(0,1fr)}.workspace.collapsed>:global(.sidebar){display:none}}
+@media(max-width:880px){.workspace .desktopToggle{display:none}}
