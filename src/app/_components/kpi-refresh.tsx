@@ -4,7 +4,7 @@ import Link from "next/link";
 import {refreshKpiReport} from "../kpi/actions/refresh-report";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, MessageSquare } from "lucide-react";
 
 export function KpiRefresh() {
   const pathname = usePathname();
@@ -17,6 +17,7 @@ export function KpiRefresh() {
 
   return <div className="kpi-refresh-bar no-print">
     {pathname !== "/kpi" && <Link href={dashboardHref} prefetch={false}><ArrowLeft size={16}/>Dashboard</Link>}
+    {pathname !== "/kpi/ai" && <Link href="/kpi/ai" prefetch={false}><MessageSquare size={16}/>Fråga Humla</Link>}
     <button type="button" disabled={refreshing} onClick={async () => {
       setRefreshing(true);
       // Reload client-side queues as well as server data, preserving the current URL.
