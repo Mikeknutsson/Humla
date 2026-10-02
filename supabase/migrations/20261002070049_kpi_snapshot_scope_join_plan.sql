@@ -1,0 +1,2 @@
+alter function private.hub_kpi_month_snapshot_v1(uuid,integer,integer[],jsonb) set enable_nestloop to off;
+alter function private.hub_kpi_month_snapshot_v1(uuid,integer,integer[],jsonb) set jit to off;
