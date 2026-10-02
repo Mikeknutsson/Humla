@@ -13,8 +13,10 @@ Att välja **Ny ändring** för en öppen grundkoppling låser den också.
 
 Den ursprungliga migreringen öppnade elva nya, obekräftade ekipage. På användarens
 uttryckliga begäran återöppnades 2026-10-02 alla 13 manuella enheters grundkopplingar.
-Tio låsta enheter återöppnades med audit av tidigare låsning och perioder; tre var
-redan öppna. Inga projekt, grupper, startdatum eller belopp tilldelades automatiskt.
+Tio låsta enheter återöppnades med audit av tidigare låsning och perioder; en var
+redan öppen. Två äldre enheter saknade statusrad och fick en öppen status med
+audit av oförändrade perioder. Inga projekt, grupper, startdatum eller belopp
+tilldelades automatiskt.
 
 En rättning av grundkopplingen ersätter endast första perioden. Senare perioder
 bevaras. Grundkopplingens start och slut får inte överlappa nästa period.
