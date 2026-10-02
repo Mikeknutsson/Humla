@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState,type DragEvent} from 'react';
 import {useSearchParams} from 'next/navigation';
-type Item={source:string;kind:string;reference_type:string;reference:string;description:string|null;project_name?:string|null;rows:number;amount:number;first_date:string;last_date:string;vehicles?:string[];register_vehicles?:string[][];projects?:Array<{reference:string;name:string|null}>;accounts?:string[];suppliers?:string[];samples?:Array<{occurred_on:string;amount:number;project:string|null;project_name:string|null;vehicle:string|null;account:string|null;description:string|null;file_name:string|null;row_number:number|null;original:Record<string,unknown>}>};
+export type Item={source:string;kind:string;reference_type:string;reference:string;description:string|null;project_name?:string|null;rows:number;amount:number;first_date:string;last_date:string;vehicles?:string[];register_vehicles?:string[][];projects?:Array<{reference:string;name:string|null}>;accounts?:string[];suppliers?:string[];samples?:Array<{occurred_on:string;amount:number;project:string|null;project_name:string|null;vehicle:string|null;account:string|null;description:string|null;file_name:string|null;row_number:number|null;original:Record<string,unknown>}>};
 type Queue={items:Item[];total_groups:number;rows:number;groups:Array<{name:string}>;units:Array<{id:string;name:string}>;cost_centers:Array<{code:string;name:string}>;history:Array<{dimension:string;source:string;reference:string;target:string;valid_from:string;valid_to:string|null;reason:string}>};
 type Registry={candidates:Array<{name:string;registration:string|null;projects:string[]}>;units:Array<{name:string;registrations:string[];projects:string[]}>};
 const dimensions={cost_center:'Kostnadsställe',group:'Verksamhetsgrupp',unit:'Ekonomisk enhet',vehicle:'Fordon',category:'Kategori',shared_cost:'Gemensamma kostnadsprojekt'};
@@ -9,7 +9,7 @@ const recipients={...dimensions,project:'Projekt'};
 const categories={personnel:'Personal',fuel:'Bränsle',service_repair:'Service & Rep',fixed:'Fasta kostnader',depreciation:'Avskrivning',material:'Material',tipp_deponi:'Tipp / Deponi',hired:'Inhyrda',other:'Övrigt',transport:'Transportintäkt',tipp:'Tippintäkt'};
 const money=new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:2});
 const key=(i:Item)=>JSON.stringify([i.source,i.kind,i.reference_type,i.reference]);
-function MatchEvidence({item,from,to}:{item:Item;from:string;to:string}){
+export function MatchEvidence({item,from,to}:{item:Item;from:string;to:string}){
  const registered=[...new Set(item.register_vehicles?.flat()??[])].filter(Boolean);
  const examples=(field:string)=>[...new Set((item.samples??[]).map(s=>s.original?.[field]).filter(v=>v!==undefined&&v!==null&&v!==''))].map(String).join(', ');
  const originalDocument=(value:unknown)=>{if(typeof value!=='string')return null;try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='app.workifyit.com'?u.href:null}catch{return null}};

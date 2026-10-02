@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { unitPayload } from '@/lib/kpi/units';
+import { revalidateTag } from 'next/cache';
 
 async function save(request: Request, edit: boolean) {
  const db = await createClient();
@@ -16,6 +17,7 @@ async function save(request: Request, edit: boolean) {
   const {data,error} = await db.rpc('hub_kpi_save_unit_v2',{p_tenant_id:member.tenant_id,p_payload:payload,p_unit_id:edit?body.id:null,p_revision:edit?body.revision:null});
   if (error) return Response.json({error:error.message},{status:400});
   if (!data) return Response.json({error:'Enheten har ändrats. Ladda om sidan innan du sparar.'},{status:409});
+  revalidateTag(`kpi-report:${user.id}`,{expire:0});
   return Response.json({id:data});
  } catch(error) {return Response.json({error:error instanceof Error ? error.message : 'Ogiltiga uppgifter.'},{status:400});}
 }
