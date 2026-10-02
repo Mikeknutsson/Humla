@@ -2,6 +2,7 @@
 import {Fragment,useState,useTransition} from 'react';
 import Link from 'next/link';
 import {KpiTableFrame} from './kpi-table-frame';
+import {KpiGroupFilter} from './kpi-cost-center-filter';
 import {analysisHref} from '@/lib/kpi/analysis';
 import {useRouter} from 'next/navigation';
 export type EconomicUnit={key:string;label:string;revenue:number;cost:number;result:number;rows:number;
@@ -25,7 +26,7 @@ export function KpiEconomicUnits({units,query,totals,canManage,groups=[]}:{units
  const columns=5+costs.length+ratios.length;
  const head=<thead><tr><th>Enhet / ingående objekt</th><th>Omsättning</th><th>Total kostnad</th><th>Resultat</th>{costs.map(([k,l])=><th key={k}>{l}</th>)}{ratios.map(([k,l,s])=><th key={k}>{l}{['cost_per_mil','fuel_cost_per_mil'].includes(k)?` (${s})`:''}</th>)}<th>Urval</th></tr></thead>;
  return <article className="panel economic-units" aria-busy={pending}><h2>Ekonomiska enheter</h2>
- <div className="unit-table-controls"><label>Verksamhetsgrupp<select value={selectedGroup} disabled={pending} onChange={e=>filterGroup(e.target.value)}><option value="">Alla verksamhetsgrupper</option>{Array.from(new Set([...groups,...(selectedGroup?[selectedGroup]:[])])).map(g=><option key={g} value={g}>{g}</option>)}</select></label>
+ <div className="unit-table-controls"><KpiGroupFilter value={selectedGroup} groups={groups} disabled={pending} onChange={filterGroup}/>
  <label>Sortera enheter<select value={sort} onChange={e=>setSort(e.target.value)}><option value="label">Namn</option><option value="revenue">Omsättning, högst först</option><option value="result">Resultat, högst först</option><option value="cost">Kostnad, högst först</option><option value="utilization">Beläggning, högst först</option><option value="cost_per_mil">Kostnad per mil, högst först</option></select></label><span role="status">{pending?'Hämtar gruppens underlag…':`${units.length} enheter i urvalet`}</span></div>
  <p>Gruppvalet filtrerar hela KPI-vyn och totalsummorna. Tabellen kan scrollas i sidled. Fäll ut en enhet för ingående delar eller välj Visa endast.</p>
  <KpiTableFrame head={head}><table>{head}<tbody>{ordered.map(u=><Fragment key={u.key}>

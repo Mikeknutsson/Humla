@@ -2,7 +2,7 @@
 import {useTransition,useOptimistic} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
 import {fiscalMonths,monthLabels,monthPeriodQuery,type MonthPeriod} from '@/lib/kpi/period';
-import {KpiCostCenterFilter} from './kpi-cost-center-filter';
+import {KpiCostCenterFilter,KpiGroupFilter} from './kpi-cost-center-filter';
 export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName}:{period:MonthPeriod;costCenter:string;costCenters:Array<{code:string;name:string}>;groups?:string[];unitName?:string}) {
  const router=useRouter();const params=useSearchParams();const [pending,start]=useTransition();const [selected,setSelected]=useOptimistic(period);
  function change(year:number,months:number[],center=costCenter) {
@@ -18,7 +18,7 @@ export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName
  return <section className="fiscal-period panel" aria-label="Periodväljare" aria-busy={pending}>
   <div className="fiscal-controls"><label>Verksamhetsår<select aria-label="Verksamhetsår" value={selected.fiscalYear} disabled={pending} onChange={e=>change(Number(e.target.value),selected.months)}>{years.map(y=><option key={y} value={y}>{y}/{y+1}</option>)}</select></label>
   <KpiCostCenterFilter value={costCenter} options={costCenters} disabled={pending} onChange={center=>change(selected.fiscalYear,selected.months,center)}/>
-  <label>Verksamhetsgrupp<select aria-label="Verksamhetsgrupp" value={params.get('group')??''} disabled={pending} onChange={e=>groupChange(e.target.value)}><option value="">Alla verksamhetsgrupper</option>{[...new Set([...groups,...(params.get('group')?[params.get('group')!]:[])])].map(g=><option key={g} value={g}>{g}</option>)}</select></label>
+  <KpiGroupFilter value={params.get('group')??''} groups={groups} disabled={pending} onChange={groupChange}/>
   <div className="fiscal-shortcuts"><button onClick={()=>change(selected.fiscalYear,fiscalMonths)}>Hela verksamhetsåret</button><button disabled={!ytd.length} title="Från september till och med aktuell månad" onClick={()=>change(selected.fiscalYear,ytd)}>YTD</button><button onClick={()=>change(selected.fiscalYear,[selected.months.length===1?selected.months[0]:period.currentMonth])}>En månad</button></div></div>
   <span className="section-kicker">Period · klicka för att välja eller ta bort månader</span>
   <div className="fiscal-months">{fiscalMonths.map((m,i)=><button key={m} aria-pressed={selected.months.includes(m)} disabled={selected.months.length===1&&selected.months.includes(m)} onClick={()=>change(selected.fiscalYear,selected.months.includes(m)?selected.months.filter(x=>x!==m):fiscalMonths.filter(x=>selected.months.includes(x)||x===m))}>{monthLabels[i]} {selected.months.includes(m)?'✓':''}</button>)}</div>

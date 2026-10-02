@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import {cachedKpiReport} from "@/lib/kpi/report-cache";
 import { createClient } from "@/lib/supabase/server";
 import { parseMonthPeriod, monthPeriodFromDates } from "@/lib/kpi/period";
 import { filterKeys } from "@/lib/kpi/analysis";
@@ -48,7 +49,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const needsReport = initialView === "overview" || initialView === "kpi";
   const needsBatches = needsReport || initialView === "import";
   const [{ data: dashboard, error: dashboardError }, { data: batches, error: batchesError }] = await Promise.all([
-    needsReport ? (useMonths ? supabase.rpc("hub_kpi_overview_months_v1", { p_tenant_id:member.tenant_id, p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters }) : supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter })) : Promise.resolve({ data: null, error: null }),
+    needsReport ? cachedKpiReport(user.id,member.tenant_id,{useMonths,monthPeriod,costCenter,activeFilters,from,to},async()=>useMonths ? supabase.rpc("hub_kpi_overview_months_v1", { p_tenant_id:member.tenant_id, p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters }) : supabase.rpc("hub_kpi_cost_center_dashboard_v1", { p_tenant_id: member.tenant_id, p_from: from, p_to: to, p_cost_center: costCenter })) : Promise.resolve({ data: null, error: null }),
     needsBatches ? supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary,provenance").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12) : Promise.resolve({ data: [], error: null }),
   ]);
   if ((initialView === "overview" || initialView === "kpi") && (dashboardError || !dashboard)) {
