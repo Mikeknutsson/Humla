@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { KpiRefresh } from "../_components/kpi-refresh";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function KpiLayout({ children }: { children: React.ReactNode }) {
-  return <><KpiRefresh/>{children}</>;
+  return <><Suspense fallback={null}><KpiRefresh/></Suspense>{children}</>;
 }

@@ -1,17 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 
 export function KpiRefresh() {
   const pathname = usePathname();
+  const search = useSearchParams();
+  const params = new URLSearchParams(search.toString());
+  for (const key of ['view','level','grain','page','auth_retry']) params.delete(key);
+  const dashboardHref = `/kpi?${params}`;
   const [refreshing, setRefreshing] = useState(false);
   if (pathname === "/kpi/login") return null;
 
   return <div className="kpi-refresh-bar no-print">
-    {pathname !== "/kpi" && <Link href="/kpi" prefetch={false}><ArrowLeft size={16}/>Dashboard</Link>}
+    {pathname !== "/kpi" && <Link href={dashboardHref} prefetch={false}><ArrowLeft size={16}/>Dashboard</Link>}
     <button type="button" disabled={refreshing} onClick={() => {
       setRefreshing(true);
       // Reload client-side queues as well as server data, preserving the current URL.
