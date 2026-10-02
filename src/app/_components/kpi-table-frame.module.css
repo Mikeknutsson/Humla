@@ -1,0 +1,11 @@
+.frame { min-width:0; max-width:100%; }
+.sticky { position:sticky; top:48px; z-index:25; background:#fff; border-bottom:1px solid #dce2e6; box-shadow:0 3px 6px #13212e12; }
+.heading { overflow:hidden; }
+.heading table { margin:0; }
+.heading th { background:#fff; }
+.heading th:first-child { position:sticky; left:0; z-index:2; border-right:1px solid #e2e8ee; }
+.bar { overflow-x:scroll; overflow-y:hidden; height:20px; scrollbar-width:auto; scrollbar-color:#8b98a5 #e8edf1; }
+.bar:focus-visible { outline:2px solid #d8a600; outline-offset:-2px; }
+.body thead { opacity:0; }
+.body thead th { height:0; line-height:0; padding-top:0!important; padding-bottom:0!important; border-bottom:0!important; }
+@media print { .sticky { display:none; } .body thead { opacity:1; } .body thead th { height:auto; line-height:normal; padding:9px 10px!important; } }

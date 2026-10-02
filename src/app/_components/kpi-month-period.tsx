@@ -2,6 +2,7 @@
 import {useTransition,useOptimistic} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
 import {fiscalMonths,monthLabels,monthPeriodQuery,type MonthPeriod} from '@/lib/kpi/period';
+import {KpiCostCenterFilter} from './kpi-cost-center-filter';
 export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName}:{period:MonthPeriod;costCenter:string;costCenters:Array<{code:string;name:string}>;groups?:string[];unitName?:string}) {
  const router=useRouter();const params=useSearchParams();const [pending,start]=useTransition();const [selected,setSelected]=useOptimistic(period);
  function change(year:number,months:number[],center=costCenter) {
@@ -16,7 +17,7 @@ export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName
  function clearObject(){const p=new URLSearchParams(params);for(const k of ['unit','vehicle','project','category','kind','source','date_from','date_to'])p.delete(k);start(()=>router.push('/kpi?'+p));}
  return <section className="fiscal-period panel" aria-label="Periodväljare" aria-busy={pending}>
   <div className="fiscal-controls"><label>Verksamhetsår<select aria-label="Verksamhetsår" value={selected.fiscalYear} disabled={pending} onChange={e=>change(Number(e.target.value),selected.months)}>{years.map(y=><option key={y} value={y}>{y}/{y+1}</option>)}</select></label>
-  <label>Kostnadsställe<select aria-label="Kostnadsställe" value={costCenter} disabled={pending} onChange={e=>change(selected.fiscalYear,selected.months,e.target.value)}><option value="">Alla kostnadsställen</option>{costCenters.map(c=><option key={c.code} value={c.code}>{c.code==='unclassified'?c.name:`${c.code} – ${c.name}`}</option>)}</select></label>
+  <KpiCostCenterFilter value={costCenter} options={costCenters} disabled={pending} onChange={center=>change(selected.fiscalYear,selected.months,center)}/>
   <label>Verksamhetsgrupp<select aria-label="Verksamhetsgrupp" value={params.get('group')??''} disabled={pending} onChange={e=>groupChange(e.target.value)}><option value="">Alla verksamhetsgrupper</option>{[...new Set([...groups,...(params.get('group')?[params.get('group')!]:[])])].map(g=><option key={g} value={g}>{g}</option>)}</select></label>
   <div className="fiscal-shortcuts"><button onClick={()=>change(selected.fiscalYear,fiscalMonths)}>Hela verksamhetsåret</button><button disabled={!ytd.length} title="Från september till och med aktuell månad" onClick={()=>change(selected.fiscalYear,ytd)}>YTD</button><button onClick={()=>change(selected.fiscalYear,[selected.months.length===1?selected.months[0]:period.currentMonth])}>En månad</button></div></div>
   <span className="section-kicker">Period · klicka för att välja eller ta bort månader</span>
