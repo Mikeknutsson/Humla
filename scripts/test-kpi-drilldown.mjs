@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import vm from 'node:vm';
+function load(file, dependencies={}) {
+ const context={exports:{},Intl,Date,Number,URLSearchParams,Error,require:name=>dependencies[name]};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,context);
+ return context.exports;
+}
+const period=load('src/lib/kpi/period.ts');
+const {analysisHref,analysisQuery}=load('src/lib/kpi/analysis.ts',{'./period':period});
+const query='from=2025-09-01&to=2026-08-31&fiscal_year=2025&months=9%2C10%2C1&cost_center=30&group=Stena&view=kpi&page=4';
+let p=new URLSearchParams(analysisHref(query,{unit:'unit-1',category:'fuel',kind:'cost'}).split('?')[1]);
+assert.equal(p.get('months'),'9,10,1');
+assert.equal(p.get('cost_center'),'30');
+assert.equal(p.get('group'),'Stena');
+assert.equal(p.get('level'),'project');
+assert.equal(p.get('category'),'fuel');
+assert.equal(p.has('page'),false);assert.equal(p.has('view'),false);
+const args=analysisQuery(p);
+assert.deepEqual(Array.from(args.p_filters.selected_months),[9,10,1]);
+assert.equal(args.p_filters.kind,'cost');
+p=new URLSearchParams(analysisHref(p.toString(),{project:'A&B / 123',level:'transaction'}).split('?')[1]);
+assert.equal(p.get('project'),'A&B / 123');assert.equal(p.get('unit'),'unit-1');
+assert.equal(p.get('category'),'fuel');assert.equal(p.get('level'),'transaction');
+p=new URLSearchParams(analysisHref(p.toString(),{page:'2',level:'transaction'}).split('?')[1]);
+assert.equal(analysisQuery(p).p_page,2);
+p=new URLSearchParams(analysisHref(p.toString(),{category:null,project:null,unit:null,vehicle:'DFC86A'}).split('?')[1]);
+assert.equal(p.has('category'),false);assert.equal(p.get('level'),'project');
+assert.equal(p.get('months'),'9,10,1');
+console.log('Dashboard drilldown: month selection, filters, hierarchy, escaping and pagination passed.');
