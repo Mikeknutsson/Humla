@@ -11,10 +11,24 @@ måste börja efter senaste periodens start. Den skapar en ny period; tidigare
 kopplingar och grupper bevaras. Låsningen kan inte återställas av klienten.
 Att välja **Ny ändring** för en öppen grundkoppling låser den också.
 
-Migreringen öppnar bara de elva nya, obekräftade ekipagen med en enda period
-från screenshot-importen 2026-10-01. Enheter med befintlig historik (bland annat
-RHR94A) återöppnas inte. Inget historiskt startdatum eller gruppval fylls i
-automatiskt för produktionsdata.
+Den ursprungliga migreringen öppnade elva nya, obekräftade ekipage. På användarens
+uttryckliga begäran återöppnades 2026-10-02 alla 13 manuella enheters grundkopplingar.
+Tio låsta enheter återöppnades med audit av tidigare låsning och perioder; tre var
+redan öppna. Inga projekt, grupper, startdatum eller belopp tilldelades automatiskt.
+
+En rättning av grundkopplingen ersätter endast första perioden. Senare perioder
+bevaras. Grundkopplingens start och slut får inte överlappa nästa period.
+Dashboardens grundkopplingsläge laddar första periodens innehåll, medan Ny ändring
+laddar senaste innehållet. Klienten kan fortfarande inte återöppna en låst koppling.
+
+## Verifiering 2026-10-02
+
+- Produktionsbuild och ESLint godkända.
+- SQL-test med ROLLBACK: MNJ31B kunde få historisk grundkoppling från 2025-09-01.
+- DFC86A:s första period kunde rättas; senare period var identisk före och efter.
+- Verklig NEXT-kostnadsrad kunde matchas till registrerat projekt, med oförändrat belopp.
+- Okänt projekt nekades. Inga testregler eller ändrade perioder lämnades kvar.
+- Januaris 2 280 ekonomiska fakta var identiska före och efter migreringen.
 
 **Verksamhetsgrupp · hela enheten** sparas i enhetens daterade periodpayload.
 Hub prioriterar denna grupp framför projektgrupper för alla ekonomiska fakta
