@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
+import {cachedKpiReport} from '@/lib/kpi/report-cache';
 import {analysisHref,analysisQuery,type Analysis} from '@/lib/kpi/analysis';
 import {KpiPrint} from '@/app/_components/kpi-print';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
@@ -13,7 +14,10 @@ export default async function AnalysisPage({searchParams}:{searchParams:Promise<
  let args:ReturnType<typeof analysisQuery>;try{args=analysisQuery(params)}catch{return <KpiDetailShell query={params.toString()}><div className="content"><h1>Välj rapportperiod</h1><Link href="/kpi" prefetch={false}>Till KPI</Link></div></KpiDetailShell>}
  const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)redirect('/kpi/login');
  const {data:member}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();if(!member)return <main>Arbetsyta saknas.</main>;
- const {data,error}=await db.rpc(args.p_filters.selected_months?'hub_kpi_analysis_months_v1':'hub_kpi_analysis_v2',{p_tenant_id:member.tenant_id,...args});
+ const {data:canRead}=await db.rpc('hub_has_permission',{p_tenant_id:member.tenant_id,p_permission:'kpi.read'});
+ if(!canRead)return <main>Du saknar åtkomst till KPI-underlagen.</main>;
+ const rpc=args.p_filters.selected_months?'hub_kpi_analysis_months_v1':'hub_kpi_analysis_v2';
+ const {data,error}=await cachedKpiReport(user.id,member.tenant_id,{report:'analysis',rpc,...args},async()=>db.rpc(rpc,{p_tenant_id:member.tenant_id,...args}));
  if(error)return <KpiDetailShell query={params.toString()}><div className="content"><h1>Analysen kunde inte läsas</h1><p>{error.message}</p><Link href="/kpi" prefetch={false}>Till KPI</Link></div></KpiDetailShell>;
  const report=data as Analysis;
  function href(changes:Record<string,string|null>){return analysisHref(params.toString(),{level:args.p_level,...changes})}
