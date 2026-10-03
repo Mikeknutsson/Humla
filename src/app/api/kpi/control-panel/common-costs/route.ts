@@ -1,0 +1,5 @@
+import {createClient} from "@/lib/supabase/server";
+export const dynamic="force-dynamic";
+async function ctx(){const s=await createClient();const {data:{user}}=await s.auth.getUser();if(!user)return {error:Response.json({error:"Inloggning krävs"},{status:401})};const {data:m}=await s.from("hub_tenant_members").select("tenant_id").eq("user_id",user.id).eq("status","active").maybeSingle();if(!m)return {error:Response.json({error:"Ingen aktiv organisation"},{status:403})};return {s,tenant:m.tenant_id};}
+export async function GET(){const c=await ctx();if(c.error)return c.error;const {data,error}=await c.s!.rpc("hub_common_cost_admin_v1",{p_tenant_id:c.tenant});return error?Response.json({error:error.message},{status:500}):Response.json(data,{headers:{"Cache-Control":"no-store"}});}
+export async function POST(req:Request){const c=await ctx();if(c.error)return c.error;const rule=await req.json();const {data,error}=await c.s!.rpc("hub_common_cost_save_v1",{p_tenant_id:c.tenant,p_rule:rule});return error?Response.json({error:error.message},{status:400}):Response.json({ok:true,id:data});}
