@@ -38,15 +38,16 @@ Deno.serve(async(req)=>{try{
   const claim=await sb.from("hub_next_outbound_rows").update({status:"sending",last_attempt_at:attempt,attempt_count:row.attempt_count+1}).eq("tenant_id",TENANT).eq("id",row.id).eq("status",row.status).is("next_workorderrow_id",null).select("id").maybeSingle();
   if(claim.error)throw new Error("next_claim_failed");
   if(!claim.data){results.push({id:row.id,status:"already_claimed"});continue;}
-  let httpStatus:number|null=null,nid:number|null=null,status="needs_review";
+  let httpStatus:number|null=null,nid:number|null=null,status="needs_review",validationErrors:unknown=null;
   try {
    const response=await fetch("https://api.next-tech.com/v1/workorderrow/",{method:"POST",headers:{Authorization:"Bearer "+token,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
    httpStatus=response.status;
    const result=await response.json().catch(()=>null);
+   if(response.status===422&&Array.isArray(result?.detail))validationErrors=result.detail.map((x:any)=>({loc:x.loc,type:x.type}));
    nid=Number.isSafeInteger(result?.id)&&result.id>0?result.id:null;
    status=nextDeliveryStatus(response.status,nid);
   }catch{/* The remote POST may have succeeded. Never resend automatically. */}
-  const receipt=await sb.from("hub_next_delivery_receipts").insert({tenant_id:TENANT,outbound_row_id:row.id,operation:"POST /workorderrow/",http_status:httpStatus,next_object_id:nid,response_meta:{status,attempt_at:attempt}});
+  const receipt=await sb.from("hub_next_delivery_receipts").insert({tenant_id:TENANT,outbound_row_id:row.id,operation:"POST /workorderrow/",http_status:httpStatus,next_object_id:nid,response_meta:{status,attempt_at:attempt,validation_errors:validationErrors}});
   if(receipt.error)throw new Error("next_receipt_storage_failed_requires_review");
   const update=await sb.from("hub_next_outbound_rows").update({status,next_workorderrow_id:status==="delivered"?nid:null,delivered_at:status==="delivered"?new Date().toISOString():null,last_error:status==="delivered"?null:status==="needs_review"?"Delivery uncertain; reconcile with NEXT before retry":"NEXT HTTP "+httpStatus}).eq("tenant_id",TENANT).eq("id",row.id).eq("status","sending").eq("last_attempt_at",attempt);
   if(update.error)throw new Error("next_delivery_state_failed_requires_review");
