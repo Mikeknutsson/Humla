@@ -30,10 +30,13 @@ export function nextRowBody(row){
  if(typeof row.next_codeno!=='string'||!row.next_codeno.trim())throw new Error('next_article_not_verified');
  const quantity=Number(row.quantity),price=row.priceunit==null?null:Number(row.priceunit);
  if(!Number.isFinite(quantity)||(price!==null&&!Number.isFinite(price)))throw new Error('next_invalid_quantity_or_price');
- const body={workorderid:row.next_workorder_id,codeno:row.next_codeno,usedquantity:quantity,chargeable:row.chargeable,showinmobile:row.showinmobile};
+ const itemunitid=row.payload?.next_itemunit_id,accountno=row.payload?.next_accountno;
+ if(!Number.isSafeInteger(itemunitid)||itemunitid===0)throw new Error('next_unit_mapping_required');
+ if(typeof accountno!=='string'||!accountno.trim()||accountno.length>5)throw new Error('next_account_mapping_required');
+ const body={workorderid:row.next_workorder_id,codeno:row.next_codeno,itemunitid,accountno,quantity,usedquantity:quantity,chargeable:row.chargeable,showinmobile:row.showinmobile};
  if(typeof body.chargeable!=='boolean'||typeof body.showinmobile!=='boolean')throw new Error('next_invalid_row_flags');
- if(row.description)body.text=row.description;
- if(row.unit)body.unit=row.unit;
+ if(row.description)body.description=row.description;
+ if(row.payload?.Artikeldatum)body.performeddate=row.payload.Artikeldatum;
  if(price!==null)body.priceunit=price;
  return body;
 }
