@@ -30,4 +30,9 @@ assert.equal(finalSummary[0].Lastbil,'SUMMA');assert.equal(finalSummary[0]['Tota
 assert.equal(finalSummary[1]['Total intäkt'],140.02);assert.equal(XLSX.utils.sheet_to_json(finalBook.Sheets.Orderrader).length,3);
 assert.equal(finishedRows([{...base,status:'exported'},{...base,status:'posted'}]).length,2);
 assert.equal(finishedRows(Array.from({length:2101},(_,i)=>({...base,source_key:String(i)}))).length,2101);
+const tipping=[{...base,source_key:'tip1',category:'tipp_deponi',source_center:'20',receiver_center:'10',carrier_type:'project',carrier_id:'schakt',carrier_name:'Schakt',carrier_reference:'5005',amount:200},{...base,source_key:'tip2',vehicle:'XYZ789',vehicle_id:'another-vehicle',category:'tipp_deponi',source_center:'20',receiver_center:'10',carrier_type:'project',carrier_id:'schakt',carrier_name:'Schakt',carrier_reference:'5005',amount:100}];
+const tipGroups=transferGroups(tipping);assert.equal(tipGroups.length,1);assert.equal(tipGroups[0].tipp_deponi,300);assert.equal(tipGroups[0].vehicle_id,null);assert.equal(tipGroups[0].carrier_id,'schakt');
+assert.equal(transferGroups([{...base,category:'tipp_deponi'}]).length,0);
+const tipBook=XLSX.read(transferWorkbook(finishedRows(tipping),'tip-report',true),{type:'buffer'});
+const tipSummary=XLSX.utils.sheet_to_json(tipBook.Sheets['KST och fordon']);assert.equal(tipSummary[1].Intäktsbärare,'Schakt');assert.equal(tipSummary[1]['Intäktsprojekt'],'5005');assert.equal(tipSummary[1].Lastbil,'');assert.equal(tipSummary[1].Tippavgift,300);
 console.log('PASS internal periods, amounts, credits, optional projects, vehicle/center grouping, canonical IDs and Excel reconciliation');

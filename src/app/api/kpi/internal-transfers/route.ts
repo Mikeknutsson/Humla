@@ -10,14 +10,16 @@ export async function GET(req:Request){
   if(p.has('export_id')){const id=p.get('export_id')!;if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Ogiltigt export-ID');const {data,error}=await ctx.db.from('kpi_internal_transfer_ledger').select('snapshot').eq('tenant_id',ctx.tenant).eq('export_id',id).limit(2001);if(error||!data?.length) return Response.json({error:'Export saknas eller åtkomst nekad'},{status:404});if(data.length>2000)throw Error('Exportgränsen överskreds');return download(data.map(r=>r.snapshot as InternalRow),id);}
   const {data,error}=await ctx.db.rpc('hub_kpi_internal_transfers_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
   if(error)return Response.json({error:'Underlaget kunde inte läsas. Kontrollera period och KPI-behörighet.'},{status:403});
+  for(const key of ['from_center','to_center'])if(p.has(key)&&!['10','20','30','40','50','60','90'].includes(p.get(key)!))throw Error('Invalid center');
+  const filteredRows=(data.rows as InternalRow[]).filter(r=>(!p.get('from_center')||r.receiver_center===p.get('from_center'))&&(!p.get('to_center')||r.source_center===p.get('to_center')));
   if(p.get('download')==='report'){
-   const rows=finishedRows(data.rows,p.get('cost_center')??undefined);
+   const rows=finishedRows(filteredRows,p.get('cost_center')??undefined);
    if(!rows.length)return Response.json({error:'Inga färdiga rader finns i urvalet.'},{status:400});
    return download(rows,`rapport-${p.get('from')}-${p.get('to')}-${Date.now()}`,true);
   }
-  const groups=transferGroups(data.rows);
+  const groups=transferGroups(filteredRows);
   const centers=[...new Set(groups.flatMap(g=>[g.source_center,g.receiver_center]).filter((c):c is string=>c!==null))];
-  return Response.json({...data,groups,totals:transferTotals(groups),totals_by_center:Object.fromEntries(centers.map(c=>[c,transferTotals(groups,c)]))},{headers});
+  return Response.json({...data,rows:filteredRows,count:filteredRows.length,groups,totals:transferTotals(groups),totals_by_center:Object.fromEntries(centers.map(c=>[c,transferTotals(groups,c)]))},{headers});
  }catch{return Response.json({error:'Ogiltigt urval. Välj högst ett verksamhetsår.'},{status:400});}
 }
 export async function POST(req:Request){
