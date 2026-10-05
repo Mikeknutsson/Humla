@@ -11,11 +11,12 @@ assert.throws(()=>internalQuery(new URLSearchParams({from:'2025-02-30',to:'2025-
 assert.throws(()=>internalQuery(new URLSearchParams({from:'2025-09-01',to:'2026-08-31',months:'0'})));
 assert.deepEqual(JSON.parse(JSON.stringify(internalQuery(new URLSearchParams({from:'2025-09-01',to:'2026-08-31',months:'9,1'})).p_months)),[9,1]);
 const base={source_key:'one',row_id:'row',occurred_on:'2025-09-01',order:'1',littra:'4004',project:'4004',receiver_name:'Lager',vehicle:'ABC123',vehicle_id:'vehicle',receiver_id:'project',source_center:'30',receiver_center:'20',category:'transport',amount:100.01,quantity:1,unit:'tim',article:'12',ready:true,status:'new',review_reason:''};
-const rows=[base,{...base,source_key:'two',project:'another',receiver_id:'another-project',category:'material',amount:50.02},{...base,source_key:'credit',project:'',receiver_id:null,amount:-10.01},{...base,source_key:'unresolved',amount:900,ready:false,status:'review'},{...base,source_key:'changed',amount:800,status:'changed'}];
+const rows=[base,{...base,source_key:'two',project:'another',receiver_id:'another-project',category:'material',amount:50.02},{...base,source_key:'credit',project:'',receiver_id:null,receiver_rule:'Standardregel: 10 Entreprenad',amount:-10.01},{...base,source_key:'unresolved',amount:900,ready:false,status:'review'},{...base,source_key:'changed',amount:800,status:'changed'}];
 const groups=transferGroups(rows);assert.equal(groups.length,1);assert.equal(groups[0].transport,90);assert.equal(groups[0].material,50.02);
 const XLSX=require('xlsx'),book=XLSX.read(transferWorkbook(rows.slice(0,3),'test-export'),{type:'buffer'});
 assert.deepEqual(book.SheetNames,['Underlag','KST och fordon','Orderrader']);
 const detail=XLSX.utils.sheet_to_json(book.Sheets.Orderrader);assert.equal(detail.length,3);assert.equal(detail[0]['Humla Fordons-ID'],'vehicle');
+assert.equal(detail[2]['Mottagande KST-regel'],'Standardregel: 10 Entreprenad');
 const summary=XLSX.utils.sheet_to_json(book.Sheets['KST och fordon']);
 assert.equal(summary.length,1);assert.equal(summary[0]['Total intäkt'],140.02);assert.equal(summary[0].Transport,90);assert.equal(summary[0].Material,50.02);assert.equal(summary[0].Projekt,undefined);
 const otherCenter=transferGroups([...rows,{...base,source_key:'other-center',receiver_center:'40'}]);assert.equal(otherCenter.length,2);
