@@ -88,6 +88,9 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-refresh-bar~.kpi-app .sidebar{top:48px;height:calc(100dvh - 48px);min-height:0}
 .refresh-spinning{animation:kpi-refresh-spin 1s linear infinite}@keyframes kpi-refresh-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.refresh-spinning{animation:none}}
 .kpi-refresh-bar .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.kpi-sync-status{font-size:11px;max-width:480px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+@media(max-width:640px){.kpi-sync-status{display:none}.kpi-refresh-bar{padding:5px 8px!important;gap:5px!important}.kpi-refresh-bar button,.kpi-refresh-bar a{font-size:11px!important;padding:7px 6px!important}}
+@media(max-width:640px){.kpi-refresh-bar{gap:6px}.kpi-refresh-bar button,.kpi-refresh-bar a{padding:7px 8px}.kpi-sync-status{max-width:125px;font-size:10px}.kpi-refresh-bar a{font-size:11px}}
 .kpi-page-loading{padding:32px;color:#343a3f;background:#fff;min-height:200px}.kpi-page-loading h1{font-size:20px}
 @media(max-width:640px){.kpi-refresh-bar{padding:5px 16px}.kpi-refresh-bar~.kpi-app .topbar{height:auto;min-height:72px;flex-wrap:wrap}.kpi-refresh-bar~.kpi-app .topbar-badge{display:none}}
 
