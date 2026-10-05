@@ -36,9 +36,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]);
   if (!canRead) return <main className="access-denied"><div><span>403</span><h1>Du saknar åtkomst till KPI-appen</h1><p>Be en administratör aktivera din KPI-behörighet.</p></div></main>;
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const initialView = query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
+  const initialView = query.view === "internal" || query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
   const legacyMonths = monthPeriodFromDates(query.from,query.to);
-  const useMonths = initialView === "overview" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || (initialView === "kpi" && !query.from && !query.to);
+  const useMonths = initialView === "overview" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || ((initialView === "kpi" || initialView === "internal") && !query.from && !query.to);
   let monthPeriod;
   try { monthPeriod = query.fiscal_year === undefined && query.months === undefined && legacyMonths ? legacyMonths : parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
   const activeFilters = Object.fromEntries(filterKeys.filter(k=>query[k]).map(k=>[k,query[k]!]));
