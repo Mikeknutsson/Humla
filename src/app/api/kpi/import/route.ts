@@ -52,6 +52,26 @@ export async function POST(request: Request) {
       const { data: rules, error } = await supabase.from('kpi_workify_article_rules').select('id,article_number,project_reference,cost_center,source_hash').eq('tenant_id', member.tenant_id).eq('enabled', true);
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
       normalized = allocateWorkify(normalized, rules ?? []);
+      // Confirmed Workify labels resolve through Hub, never through a guessed
+      // registration or a new parallel identity registry.
+      const labels = [...new Set(normalized.map(row => row.vehicle_registration?.trim().toUpperCase()).filter((v): v is string => Boolean(v)))];
+      if (labels.length) {
+        const { data: aliases, error: aliasError } = await supabase.from('hub_identity_keys')
+          .select('identity_value,object_id').eq('tenant_id', member.tenant_id)
+          .eq('object_type', 'Vehicle').eq('identity_type', 'workify_vehicle_label')
+          .eq('confidence', 1).in('identity_value', labels);
+        if (aliasError) throw new Error('Hubbens bekräftade fordonsbenämningar kunde inte läsas.');
+        const candidates = new Map<string, Set<string>>();
+        for (const alias of aliases ?? []) {
+          const label = alias.identity_value.trim().toUpperCase();
+          const ids = candidates.get(label) ?? new Set<string>();
+          ids.add(alias.object_id); candidates.set(label, ids);
+        }
+        normalized = normalized.map(row => {
+          const ids = candidates.get(row.vehicle_registration?.trim().toUpperCase() ?? '');
+          return ids?.size === 1 ? { ...row, vehicle_object_id: [...ids][0] } : row;
+        });
+      }
     }
     // Match source project numbers regardless of harmless Excel/text formatting.
     // Never infer a vehicle from a partial or approximate project number.
