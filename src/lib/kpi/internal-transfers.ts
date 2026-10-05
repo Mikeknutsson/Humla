@@ -14,12 +14,15 @@ export function internalQuery(p:URLSearchParams){
  if(months&&(!months.length||months.some(m=>!Number.isInteger(m)||m<1||m>12)))throw new Error('Ogiltiga månader');
  return {p_from:from,p_to:to,p_months:months};
 }
-export function transferWorkbook(rows:InternalRow[],exportId:string){
+export function finishedRows(rows:InternalRow[],center?:string){return rows.filter(r=>r.ready&&r.status!=='changed'&&['transport','material','tipp_deponi'].includes(r.category)&&(!center||r.source_center===center||r.receiver_center===center));}
+export function transferWorkbook(rows:InternalRow[],exportId:string,report=false){
  const groups=transferGroups(rows).map(g=>({'Intäkts-KST':g.source_center??'','Kostnads-KST':g.receiver_center??'',Lastbil:g.vehicle,'Humla Fordons-ID':g.vehicle_id??'',Transport:g.transport,Material:g.material,Tippavgift:g.tipp_deponi,'Total intäkt':g.total,Orderrader:g.rows}));
  const details=rows.map(r=>({Datum:r.occurred_on,Order:r.order,Littra:r.littra,'Intäkts-KST':r.source_center,'Kostnads-KST':r.receiver_center,'Mottagande KST-regel':r.receiver_rule??'Matchat kostnadsställe',Fordon:r.vehicle,'Källans fordonsbenämning':r.vehicle_reference??r.vehicle,'Fordonsregel':r.vehicle_rule??'','Humla Fordons-ID':r.vehicle_id,Projekt:r.project,'Humla Projekt-ID':r.receiver_id,Kategori:r.category,Artikel:r.article,Beskrivning:r.description,Mängd:r.quantity,Enhet:r.unit,Belopp:r.amount,'Källrad-ID':r.row_id,'Dublettnyckel':r.source_key,'Export-ID':exportId}));
  const book=XLSX.utils.book_new();
- XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Export:exportId,Kund:'Elleholms Maskin AB',Status:'Exporterat underlag – inte bokfört automatiskt',Omföring:'Samlad internintäkt per lastbil mellan intäkts-KST och kostnads-KST',Avgränsning:'Endast fakturerade, granskade rader. Projektkoppling är valfri. Ingen moms eller BAS-kontering föreslås.'}]),'Underlag');
- XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(groups),'KST och fordon');
+ XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet([{Export:exportId,Kund:'Elleholms Maskin AB',Status:report?'Rapportexport – ingen omföringsstatus ändrad':'Exporterat underlag – inte bokfört automatiskt',Omföring:'Samlad internintäkt per lastbil mellan intäkts-KST och kostnads-KST',Avgränsning:'Endast fakturerade, granskade rader. Projektkoppling är valfri. Ingen moms eller BAS-kontering föreslås.'}]),'Underlag');
+ const totals=transferTotals(transferGroups(rows));
+ const summary=report?[{'Intäkts-KST':'','Kostnads-KST':'',Lastbil:'SUMMA','Humla Fordons-ID':'',Transport:totals.transport,Material:totals.material,Tippavgift:totals.tipp_deponi,'Total intäkt':totals.total,Orderrader:totals.rows},...groups]:groups;
+ XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(summary),'KST och fordon');
  XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(details),'Orderrader');
  return XLSX.write(book,{type:'buffer',bookType:'xlsx'}) as Buffer;
 }
