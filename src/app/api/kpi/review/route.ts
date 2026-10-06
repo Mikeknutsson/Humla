@@ -52,7 +52,7 @@ export async function POST(request: Request) {
    return Response.json({ok:true,results});
   }
   if (!/^[a-f0-9-]{36}$/i.test(body.id ?? '') || !body.values || typeof body.values !== 'object' || typeof body.reason !== 'string') return Response.json({error:'Ogiltiga uppgifter'}, {status:400});
-  const {data,error} = await db.rpc('kpi_approve_review',{p_row_id:body.id,p_values:body.values,p_reason:body.reason});
+  const {data,error} = await db.rpc('kpi_approve_workify_order_review',{p_row_id:body.id,p_values:body.values,p_reason:body.reason});
   if(error) return Response.json({error:error.message}, {status:400});
   return Response.json(data);
  } catch {return Response.json({error:'Kunde inte godkänna raden'}, {status:400});}
