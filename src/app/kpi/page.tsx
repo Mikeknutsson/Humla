@@ -36,9 +36,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   ]);
   if (!canRead) return <main className="access-denied"><div><span>403</span><h1>Du saknar åtkomst till KPI-appen</h1><p>Be en administratör aktivera din KPI-behörighet.</p></div></main>;
   const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const initialView = query.view === "internal" || query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
+  const initialView = query.view === "monthly" || query.view === "internal" || query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
   const legacyMonths = monthPeriodFromDates(query.from,query.to);
-  const useMonths = initialView === "overview" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || ((initialView === "kpi" || initialView === "internal") && !query.from && !query.to);
+  const useMonths = initialView === "overview" || initialView === "monthly" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || ((initialView === "kpi" || initialView === "internal") && !query.from && !query.to);
   let monthPeriod;
   try { monthPeriod = query.fiscal_year === undefined && query.months === undefined && legacyMonths ? legacyMonths : parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
   const activeFilters = Object.fromEntries(filterKeys.filter(k=>query[k]).map(k=>[k,query[k]!]));
@@ -62,7 +62,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const hiredCapacity=dashboard?.hired_capacity??null;
   const driverProductivity=dashboard?.driver_productivity??null;
 
-  const displayDashboard = dashboard ?? { metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
+  const displayDashboard = dashboard ?? { cost_center_scope: costCenter, metrics: {}, components: {}, vehicles: [], drivers: [], cost_categories: {}, unmapped_accounts: [], quality: {} };
   const [{data:units,error:unitsError},{data:unitReport,error:unitReportError}] = initialView === 'units' ? await Promise.all([
     supabase.from('kpi_units').select('id,name,unit_type,projects,registrations,employees,valid_from,valid_to,enabled,revision').eq('tenant_id',member.tenant_id).in('origin',['manual','manual_builder']).order('name'),
     supabase.rpc('hub_kpi_unit_report_v2',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}),

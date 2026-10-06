@@ -16,6 +16,8 @@ const HubReview = dynamic(() => import("./hub-review").then(m => m.HubReview));
 import Link from "next/link";
 import {useSearchParams} from "next/navigation";
 import {InternalTransfers} from './internal-transfers';
+const KpiMonthlyReport = dynamic(() => import('./kpi-monthly-report').then(m => m.KpiMonthlyReport));
+import {selectionFromQuery} from '@/lib/kpi/selection';
 import {analysisHref} from "@/lib/kpi/analysis";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -126,7 +128,7 @@ export type KpiAppProps = {
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa" | "review" | "internal";
+  initialView?: "overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa" | "review" | "internal" | "monthly";
   serverIssues?: string[];
   onPeriodChange?: (query:string)=>Promise<void>;
 };
@@ -158,7 +160,7 @@ export function KpiApp({ monthPeriod, overviewMonthly, activeFilters, dashboard,
   const costCenter = dashboard.cost_center_scope ?? activeFilters.cost_center ?? "";
   const scopeQuery = costCenter ? `&cost_center=${encodeURIComponent(costCenter)}` : "";
   const filterQuery = new URLSearchParams(Object.entries(activeFilters).filter(([k])=>k!=="cost_center")).toString();
-  const periodQuery = (monthPeriod ? monthPeriodQuery(monthPeriod) : `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)+scopeQuery+(filterQuery?`&${filterQuery}`:"");
+  const periodQuery = view==='monthly' ? selectionFromQuery(new URLSearchParams(liveQuery.toString())).toString() : (monthPeriod ? monthPeriodQuery(monthPeriod) : `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)+scopeQuery+(filterQuery?`&${filterQuery}`:"");
   const kpiHref = (nextView?: string) => `/kpi?${nextView ? `view=${nextView}&` : ""}${periodQuery}`;
   const selectedDate = new Date(`${from}T00:00:00Z`); const selectedFiscalStartYear = selectedDate.getUTCMonth() >= 8 ? selectedDate.getUTCFullYear() : selectedDate.getUTCFullYear() - 1; const fiscalYears = Array.from({ length: 4 }, (_, index) => { const startYear = selectedFiscalStartYear - index; const endYear = startYear + 1; return { label: `${startYear}/${endYear}`, from: `${startYear}-09-01`, to: `${endYear}-08-31` }; });
 
@@ -319,6 +321,7 @@ export function KpiApp({ monthPeriod, overviewMonthly, activeFilters, dashboard,
         <Link prefetch={false} className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
         <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>KPI</Link>
         <Link prefetch={false} className={view === "internal" ? "active" : ""} href={kpiHref("internal")} onClick={() => setMobileMenu(false)}><Truck size={18}/>Interna körningar</Link>
+        <Link prefetch={false} className={view === "monthly" ? "active" : ""} href={kpiHref("monthly")} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Månadsrapport</Link>
         <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
         <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
         {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
@@ -332,10 +335,11 @@ export function KpiApp({ monthPeriod, overviewMonthly, activeFilters, dashboard,
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><KpiSidebarToggle/><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "internal" ? "Interna körningar" : view === "overview" ? "Översikt" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div>{canManage&&<Link prefetch={false} className="secondary" href={`/kpi/kontrollpanel?${periodQuery}`}><ListTree size={16}/>Kopplingar & inställningar</Link>}<div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      <header className="topbar"><KpiSidebarToggle/><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "monthly" ? "Månadsrapport – Transport" : view === "internal" ? "Interna körningar" : view === "overview" ? "Översikt" : view === "kpi" ? "KPI – Transport" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div>{canManage&&<Link prefetch={false} className="secondary" href={`/kpi/kontrollpanel?${periodQuery}`}><ListTree size={16}/>Kopplingar & inställningar</Link>}<div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div></header>
+      {view==='monthly'&&<div className="content"><KpiMonthlyReport query={periodQuery}/></div>}
       {view==='internal'&&<div className="content"><form className="period-form"><input type="hidden" name="view" value="internal"/><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button>Visa period</button></form><p>Urval: {from} – {to}{monthPeriod?` · månader ${monthPeriod.months.join(', ')}`:''}. Kostnadsställesfiltret i fliken omfattar båda sidor av omföringen.</p><InternalTransfers query={periodQuery} canManage={canManage}/></div>}
       {(view === "overview" || view === "kpi") && <div className="content">{monthPeriod ? <KpiMonthPeriod onReportChange={onPeriodChange} period={monthPeriod} costCenter={costCenter} costCenters={dashboard.cost_centers??[]} groups={dashboard.group_options??[]} unitName={dashboard.economic_units?.find(u=>u.key===activeFilters?.unit)?.label}/> : <form className="period-form"><input type="hidden" name="from" value={from}/><input type="hidden" name="to" value={to}/><input type="hidden" name="view" value={view}/><KpiCostCenterFilter value={costCenter} options={dashboard.cost_centers??[]}/><input type="hidden" name="cost_center" value={costCenter}/><button>Visa</button></form>}{costCenter&&<p>Projektregistrets kopplingar gäller från {dashboard.classification_valid_from??"registrerad giltighetsdag"}. Hela belopp följer daterade kopplingar. Osäkra kostnadsställen ligger under Ej klassificerat. Importer, granskning och administration gäller hela arbetsytan.</p>}{numeric(dashboard.unclassified_summary?.rows)>0&&<p><Link prefetch={false} href={`/kpi/analys?${periodQuery.replace(/&cost_center=[^&]*/,"")}&cost_center=unclassified`}>Ej klassificerat kostnadsställe: {currency.format(numeric(dashboard.unclassified_summary?.revenue))} intäkter · {currency.format(numeric(dashboard.unclassified_summary?.cost))} kostnader</Link>. Dessa belopp ingår i Alla kostnadsställen och inväntar säker fördelning.</p>}{scopedOperationsUnavailable&&<p>Beläggning, kapacitet och timnyckeltal per kostnadsställe inväntar verifierad fördelning. Finansiella belopp är beräknade i Hubben.</p>}</div>}
-      {costCenter&&view!=="overview"&&view!=="kpi"&&<div className="content"><p>Den här vyn visar hela arbetsytan. Kostnadsställesfiltret används när du återgår till KPI eller Översikt.</p></div>}
+      {costCenter&&view!=="overview"&&view!=="kpi"&&view!=="monthly"&&<div className="content"><p>Den här vyn visar hela arbetsytan. Kostnadsställesfiltret används när du återgår till KPI eller Översikt.</p></div>}
       {serverIssues.length > 0 && <div className="content server-issues"><AlertTriangle size={18}/><div><strong>En del data kunde inte hämtas</strong><span>{serverIssues.join(" · ")}</span></div></div>}
       {(view==='overview'||view==='kpi')&&<div className="content dashboard-report-actions no-print"><KpiPrint/><a className="secondary" href={`/api/kpi/export?${periodQuery}&level=${view==='kpi'?'unit':'group'}&grain=month&format=xlsx`}>Exportera Excel</a><a className="secondary" href={`/api/kpi/export?${periodQuery}&level=${view==='kpi'?'unit':'group'}&grain=month&format=pdf`}>Exportera PDF</a><span>Export och utskrift gäller aktuellt periodurval och aktiva filter.</span></div>}
 
