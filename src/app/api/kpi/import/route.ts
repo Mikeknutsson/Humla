@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       normalized = normalized.map((row) => ({ ...row, paid_hours: null, billable_hours: null }));
     }
     if (kind === 'revenue' && isWorkify(table)) {
-      const { data: rules, error } = await supabase.from('kpi_workify_article_rules').select('id,article_number,project_reference,cost_center,source_hash').eq('tenant_id', member.tenant_id).eq('enabled', true);
+      const { data: rules, error } = await supabase.from('kpi_workify_article_rules').select('id,article_number,project_reference,cost_center,source_hash,revenue_category').eq('tenant_id', member.tenant_id).eq('enabled', true);
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
       // Confirmed Workify labels resolve through Hub, never through a guessed
       // registration or a new parallel identity registry.
@@ -187,8 +187,8 @@ export async function POST(request: Request) {
 
     // Hub reuses confirmed, dated project/allocation rules for each new file.
     // Unknown recipients and invalid evidence stay in review.
-    if (kind === "cost") {
-      const { data: resolved, error: resolveError } = await supabase.rpc("hub_kpi_resolve_import_allocations_v1", {
+    if (kind === "cost" || (kind === "revenue" && isWorkify(table))) {
+      const { data: resolved, error: resolveError } = await supabase.rpc(kind === "cost" ? "hub_kpi_resolve_import_allocations_v1" : "hub_kpi_resolve_workify_import_v1", {
         p_tenant_id: member.tenant_id, p_batch_id: batchId,
       });
       if (resolveError) throw resolveError;

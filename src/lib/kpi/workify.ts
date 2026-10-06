@@ -1,6 +1,6 @@
 import type { ParsedTable } from './schema';
 import type { normalizeRows } from './parser';
-export type ArticleRule = { id: string; article_number: string; project_reference: string | null; cost_center: string | null; source_hash: string };
+export type ArticleRule = { id: string; article_number: string; project_reference: string | null; cost_center: string | null; source_hash: string; revenue_category?: string };
 export function isWorkify(table: ParsedTable) {
   return ['Ordernummer','Artikelnummer','Artikeldatum','Summa','Fakturerad'].every(h => table.headers.includes(h));
 }
@@ -10,6 +10,12 @@ export function allocateWorkify(rows: Array<ReturnType<typeof normalizeRows>[num
     const article = (row.source_data.Artikelnummer ?? '').trim().toUpperCase();
     const rule = byArticle.get(article);
     if (!rule) return { ...row, is_valid: false, validation_errors: [...row.validation_errors, `Ej mappad Workify-artikel: ${article || '(saknas)'}`], allocation: { article, target: 'review' } };
+    if (rule.revenue_category === 'ignored') {
+      const errors = row.validation_errors.filter(error => error !== 'Fordonsbeteckning saknar verifierad regnummerkoppling');
+      if (row.amount !== 0) errors.push('Ignorerad informationsartikel har ett belopp som behöver granskas');
+      return { ...row, project_reference: null, vehicle_registration: null, vehicle_object_id: null,
+        allocation: { article, rule_id: rule.id, target: 'ignored' }, validation_errors: errors, is_valid: errors.length === 0 };
+    }
     const project = rule.project_reference;
     // Project allocation must not also match a vehicle or person reporting unit.
     const errors = project ? row.validation_errors.filter(e => e !== 'Fordonsbeteckning saknar verifierad regnummerkoppling' && e !== 'Motstridiga fordonskopplingar') : [...row.validation_errors];

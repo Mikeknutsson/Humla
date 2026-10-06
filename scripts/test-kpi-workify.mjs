@@ -12,6 +12,12 @@ assert.deepEqual(result.map(r=>r.is_valid),[true,true,false,false]);
 assert.equal(result[0].project_reference,'5100');assert.equal(result[0].vehicle_registration,null);assert.equal(result[1].project_reference,null);assert.equal(result[1].vehicle_registration,'ABC123');assert.equal(result[0].source_data.Projekt,'999');assert.equal(result.filter(r=>r.is_valid).reduce((sum,r)=>sum+r.amount,0),200);
 const hours=normalizeRows({headers:['Date','Hours'],rows:[{Date:'2026-09-01',Hours:'-5'},{Date:'2026-09-01',Hours:'5'}]},'driver_time',{occurred_on:'Date',paid_hours:'Hours',billable_hours:'Hours',employee_number:'Date'});assert.equal(hours[0].is_valid,false);assert.equal(hours[0].paid_hours,null);assert.equal(hours[1].is_valid,true);
 console.log('PASS: exclusive project/vehicle allocation, missing rules quarantined, mixed valid/invalid rows, negative hours preserved for review');
+const ignoredRule={id:'ignored',article_number:'1-1-1',project_reference:null,cost_center:null,source_hash:'confirmed',revenue_category:'ignored'};
+const ignoredBase={...result[1],source_data:{...result[1].source_data,Artikelnummer:'1-1-1'},validation_errors:[],amount:0};
+const ignored=allocateWorkify([ignoredBase,{...ignoredBase,amount:100}],[ignoredRule]);
+assert.equal(ignored[0].is_valid,true);assert.equal(ignored[0].allocation.target,'ignored');assert.equal(ignored[0].vehicle_registration,null);
+assert.equal(ignored[1].is_valid,false);
+console.log('PASS: zero-value information articles ignored; unexpected financial amounts retained for review');
 if(process.env.WORKIFY_TEST_FILE){
  const actual=await parseImportFile(new File([await readFile(process.env.WORKIFY_TEST_FILE)],'workify.xlsx'));
  const rules=JSON.parse(await readFile('/tmp/humla-workify-rules.json','utf8')).map((r,i)=>({...r,id:String(i)}));
