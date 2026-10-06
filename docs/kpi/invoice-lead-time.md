@@ -22,8 +22,16 @@ must also pass.
 
 LMT31J audit, September 2026: NEXT costs remain on canonical unit LMT31J including
 the cassette trailer RLW15A (projects 9030/969). 175,821.02 SEK in gravel purchases
-moved to the material unit as requested. No source TransPA time reports were found
-for the vehicle or its configured driver. Piusi has 21 tankings, 3,703.94 litres and
-50,356.56 SEK of provisional API-priced fuel. The monthly report includes this fuel;
-the existing KPI financial facts only include NEXT fuel. Do not interpret the
-vehicle's KPI result as a complete result or invent payroll hours.
+moved to the material unit as requested. User confirmed Erik Ivarsson is an
+external invoicing driver, not a TransPA payroll source. His six imported NEXT
+invoices (April–August, 317,572 SEK) already map to LMT31J/personnel. No September
+invoice is imported; no monthly estimate is inserted.
+
+Piusi has 21 September tankings, 3,703.94 litres and 50,356.56 SEK of provisional
+API-priced fuel for LMT31J. The common Hub prepared ledger now includes accepted
+Piusi costs and preserves NEXT 5360 tank purchases as zero-impact reconciliation
+rows, with their booked amount in source metadata. This feeds the Overview, KPI,
+monthly series, units, comparison, export and drilldown from one generation.
+LMT31J September total cost becomes 111,701.74 SEK, still without a September
+chauffeur invoice. No source rows or account rules are changed. The month drilldown
+now reads the same prepared generation rather than rebuilding live classifications.
