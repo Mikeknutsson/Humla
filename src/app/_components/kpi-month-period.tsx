@@ -3,7 +3,7 @@ import {useEffect,useRef,useState,useTransition} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
 import {fiscalMonths,monthLabels,monthPeriodQuery,type MonthPeriod} from '@/lib/kpi/period';
 import {KpiCostCenterFilter,KpiGroupFilter} from './kpi-cost-center-filter';
-export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName}:{period:MonthPeriod;costCenter:string;costCenters:Array<{code:string;name:string}>;groups?:string[];unitName?:string}) {
+export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName,onReportChange}:{period:MonthPeriod;costCenter:string;costCenters:Array<{code:string;name:string}>;groups?:string[];unitName?:string;onReportChange?:(query:string)=>Promise<void>}) {
  const router=useRouter();const params=useSearchParams();const [pending,start]=useTransition();
  const [draft,setDraft]=useState({base:period,value:period});const [queueState,setQueued]=useState(false);
  const selected=draft.base===period?draft.value:period;const queued=draft.base===period&&queueState;
@@ -16,7 +16,10 @@ export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName
   const p=new URLSearchParams(params);p.delete('from');p.delete('to');p.delete('date_from');p.delete('date_to');
   for(const [k,v] of new URLSearchParams(monthPeriodQuery({fiscalYear:year,months})))p.set(k,v);
   if(center)p.set('cost_center',center);else p.delete('cost_center');
-  start(()=>router.push('/kpi?'+p,{scroll:false}));
+  start(async()=>{
+   if(onReportChange){try{await onReportChange(p.toString());}catch{setSelected(period);}}
+   else router.replace('/kpi?'+p,{scroll:false});
+  });
  }
  // Batch rapid month toggles before starting an expensive Hub report.
  // Once a request starts, lock the period controls to avoid concurrent queries.
@@ -25,7 +28,7 @@ export function KpiMonthPeriod({period,costCenter,costCenters,groups=[],unitName
   if(!months.length)return;
   setSelected({...selected,months});setQueued(true);
   if(monthTimer.current!==null)clearTimeout(monthTimer.current);
-  monthTimer.current=setTimeout(()=>change(selected.fiscalYear,months),350);
+  monthTimer.current=setTimeout(()=>change(selected.fiscalYear,months),650);
  }
  const years=Array.from({length:Math.max(5,period.currentYear-selected.fiscalYear+2)},(_,i)=>Math.max(period.currentYear+1,selected.fiscalYear)-i);
  const ytd=selected.fiscalYear<period.currentYear?fiscalMonths:selected.fiscalYear===period.currentYear?fiscalMonths.slice(0,fiscalMonths.indexOf(period.currentMonth)+1):[];

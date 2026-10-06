@@ -3,7 +3,7 @@ import {cachedKpiReport} from "@/lib/kpi/report-cache";
 import { createClient } from "@/lib/supabase/server";
 import { parseMonthPeriod, monthPeriodFromDates } from "@/lib/kpi/period";
 import { filterKeys } from "@/lib/kpi/analysis";
-import { KpiApp } from "../_components/kpi-app";
+import { KpiLiveReport } from "../_components/kpi-live-report";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +71,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const {data:transpaEvidence,error:transpaError}=initialView==='transpa'&&canManage ? await supabase.rpc('kpi_transpa_evidence',{p_tenant_id:member.tenant_id,p_from:from,p_to:to}) : {data:null,error:null};
   const serverIssues = [readError, manageError, dashboardError, batchesError, unitsError, unitReportError, transpaError, hubReviewError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError].filter(Boolean).map((error) => error!.code) });
-  return <KpiApp key={initialView}
+  return <KpiLiveReport key={initialView}
     monthPeriod={useMonths?monthPeriod:undefined}
     overviewMonthly={(displayDashboard.monthly??[]) as never}
     activeFilters={activeFilters}
