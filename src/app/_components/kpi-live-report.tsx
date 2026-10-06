@@ -1,5 +1,5 @@
 "use client";
-import {memo,useCallback,useEffect,useRef,useState} from 'react';
+import {memo,useCallback,useEffect,useRef,useState,useTransition} from 'react';
 import {useSearchParams} from 'next/navigation';
 import {KpiApp,type KpiAppProps} from './kpi-app';
 import {KpiReportSelection} from './kpi-report-selection';
@@ -14,7 +14,7 @@ export function KpiLiveReport(props:KpiAppProps) {
  const params=useSearchParams();
  const [report,setReport]=useState({base:props,value:props});
  const [draft,setDraft]=useState<{base:KpiAppProps;query:string}|null>(null);
- const [error,setError]=useState(''),[pending,setPending]=useState(false);
+ const [error,setError]=useState(''),[pending,setPending]=useState(false);const [renderPending,startReportTransition]=useTransition();
  const request=useRef<AbortController|null>(null),timer=useRef<ReturnType<typeof setTimeout>|null>(null),version=useRef(0);
  const cache=useRef(new Map<string,{data:Data;at:number}>());
  const current=report.base===props?report.value:props;
@@ -42,11 +42,11 @@ export function KpiLiveReport(props:KpiAppProps) {
      cache.current.set(key(nextQuery),{data,at:Date.now()});
     }
     if(id!==version.current)return;
-    setReport(previous=>({base:props,value:{...(previous.base===props?previous.value:props),...data}}));
+    startReportTransition(()=>{setReport(previous=>id===version.current?{base:props,value:{...(previous.base===props?previous.value:props),...data}}:previous);
     const next=new URLSearchParams(nextQuery),view=new URLSearchParams(window.location.search).get('view');
     if(view==='kpi')next.set('view',view);else next.delete('view');
-    window.history.replaceState(null,'','/kpi?'+next);
-    setDraft({base:props,query:next.toString()});setPending(false);
+    window.history.replaceState(null,'','/kpi?'+next);});
+    setPending(false);
    }catch{
     if(id!==version.current)return;
     setDraft(null);setPending(false);setError('Rapporten kunde inte hämtas. Tidigare urval och belopp visas fortfarande. Försök igen.');
@@ -55,5 +55,5 @@ export function KpiLiveReport(props:KpiAppProps) {
   // Repeat selections are immediate; rapid changes share one server request.
   if(cache.current.has(key(nextQuery)))void load();else timer.current=setTimeout(()=>void load(),250);
  },[props]);
- return <KpiReportSelection.Provider value={{query,pending,change}}>{error&&<p role="alert" className="content">{error}</p>}<ReportApp {...current}/></KpiReportSelection.Provider>;
+ return <KpiReportSelection.Provider value={{query,pending:pending||renderPending,change}}>{error&&<p role="alert" className="content">{error}</p>}<ReportApp {...current}/></KpiReportSelection.Provider>;
 }
