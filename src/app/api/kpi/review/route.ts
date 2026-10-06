@@ -4,6 +4,27 @@ export async function GET(request: Request) {
  const { data: { user } } = await supabase.auth.getUser();
  if (!user) return Response.json({ error: 'Inloggning krävs' }, { status: 401 });
  const url = new URL(request.url);
+ if(url.searchParams.get('scope')) {
+  const {data:member}=await supabase.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();
+  if(!member)return Response.json({error:'Aktivt företag saknas'},{status:403});
+  const {data:allowed,error:permissionError}=await supabase.rpc('hub_has_permission',{p_tenant_id:member.tenant_id,p_permission:'kpi.read'});
+  if(permissionError||!allowed)return Response.json({error:'KPI-behörighet krävs'},{status:403});
+  const from=url.searchParams.get('from')??'',to=url.searchParams.get('to')??'',scope=url.searchParams.get('scope');
+  const valid=(v:string)=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
+  if(!valid(from)||!valid(to)||to<from||Date.parse(to)-Date.parse(from)>366*86400000||!['period','undated','all'].includes(scope!))return Response.json({error:'Ogiltigt periodurval'},{status:400});
+  const page=Math.max(0,Math.floor(Number(url.searchParams.get('page'))||0));
+  if(page>10000)return Response.json({error:'Ogiltig sida'},{status:400});
+  let query=supabase.from('kpi_import_rows').select('*,kpi_import_batches(file_name)',{count:'exact'}).eq('tenant_id',member.tenant_id).eq('is_valid',false);
+  if(scope==='undated')query=query.is('occurred_on',null);
+  else if(scope==='period')query=query.or(`occurred_on.is.null,and(occurred_on.gte.${from},occurred_on.lte.${to})`);
+  const [rows,all,undated]=await Promise.all([
+   query.order('occurred_on',{nullsFirst:false}).order('id').range(page*50,page*50+49),
+   supabase.from('kpi_import_rows').select('id',{count:'exact',head:true}).eq('tenant_id',member.tenant_id).eq('is_valid',false),
+   supabase.from('kpi_import_rows').select('id',{count:'exact',head:true}).eq('tenant_id',member.tenant_id).eq('is_valid',false).is('occurred_on',null),
+  ]);
+  if(rows.error||all.error||undated.error)return Response.json({error:'KPI-granskningen kunde inte hämtas'},{status:500});
+  return Response.json({rows:rows.data,total:rows.count,all:all.count,undated:undated.count},{headers:{'Cache-Control':'private, no-store'}});
+ }
  const batch = url.searchParams.get('batch');
  const page = Math.max(0, Math.floor(Number(url.searchParams.get('page')) || 0));
  if (!batch || !/^[a-f0-9-]{36}$/i.test(batch)) return Response.json({error:'Ogiltig import'}, {status:400});

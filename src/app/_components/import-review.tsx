@@ -2,9 +2,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DATA_KINDS, type DataKind } from '@/lib/kpi/schema';
-type Row = {id:string;row_number:number;data_kind:DataKind;source_data:Record<string,unknown>;validation_errors:string[];[key:string]:unknown};
+export type Row = {id:string;row_number:number;data_kind:DataKind;source_data:Record<string,unknown>;validation_errors:string[];[key:string]:unknown};
 const numbers=new Set(['amount','quantity','available_hours','occupied_hours','paid_hours','billable_hours']);
-function ReviewEditor({row,onSaved}: {row:Row;onSaved:()=>void}) {
+export function ReviewEditor({row,onSaved}: {row:Row;onSaved:()=>void}) {
  const [values,setValues]=useState<Record<string,string>>(()=>Object.fromEntries(DATA_KINDS[row.data_kind].fields.map(f=>[f.key,String(row[f.key]??'')])));
  const [target,setTarget]=useState(row.project_reference?'project':row.vehicle_registration?'vehicle':'');
  const [reason,setReason]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
