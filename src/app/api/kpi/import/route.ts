@@ -51,10 +51,10 @@ export async function POST(request: Request) {
     if (kind === 'revenue' && isWorkify(table)) {
       const { data: rules, error } = await supabase.from('kpi_workify_article_rules').select('id,article_number,project_reference,cost_center,source_hash').eq('tenant_id', member.tenant_id).eq('enabled', true);
       if (error) throw new Error('Artikelregistret kunde inte läsas. Försök igen.');
-      normalized = allocateWorkify(normalized, rules ?? []);
       // Confirmed Workify labels resolve through Hub, never through a guessed
       // registration or a new parallel identity registry.
-      const labels = [...new Set(normalized.map(row => row.vehicle_registration?.trim().toUpperCase()).filter((v): v is string => Boolean(v)))];
+      const labelFor = (row: typeof normalized[number]) => String(row.source_data[mapping.vehicle_registration] ?? row.source_data.RegNr ?? row.vehicle_registration ?? '').trim().toUpperCase();
+      const labels = [...new Set(normalized.map(labelFor).filter(Boolean))];
       if (labels.length) {
         const { data: aliases, error: aliasError } = await supabase.from('hub_identity_keys')
           .select('identity_value,object_id').eq('tenant_id', member.tenant_id)
@@ -68,10 +68,15 @@ export async function POST(request: Request) {
           ids.add(alias.object_id); candidates.set(label, ids);
         }
         normalized = normalized.map(row => {
-          const ids = candidates.get(row.vehicle_registration?.trim().toUpperCase() ?? '');
-          return ids?.size === 1 ? { ...row, vehicle_object_id: [...ids][0] } : row;
+          const label = labelFor(row);
+          const ids = candidates.get(label);
+          if (ids?.size !== 1) return row;
+          const errors = row.validation_errors.filter(error => error !== 'Fordonsbeteckning saknar verifierad regnummerkoppling');
+          return { ...row, vehicle_object_id: [...ids][0], vehicle_registration: label,
+            validation_errors: errors, is_valid: errors.length === 0 };
         });
       }
+      normalized = allocateWorkify(normalized, rules ?? []);
     }
     // Match source project numbers regardless of harmless Excel/text formatting.
     // Never infer a vehicle from a partial or approximate project number.
