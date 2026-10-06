@@ -11,7 +11,7 @@ const shared=load('src/lib/kpi/monthly-report.ts');
 const exports=load('src/lib/kpi/monthly-report-export.ts',name=>name==='./monthly-report'?shared:require(name));
 const report=process.argv[2]?JSON.parse(fs.readFileSync(process.argv[2],'utf8')):{tenant:'Test',title:'Nyckeltal Transport',period:{from:'2026-01-01',to:'2026-01-31',ytd_from:'2025-09-01'},scope:{cost_center:'20,30'},generation:'test',synced_at:'2026-02-01T02:20:00Z',invoicing_rule:'Alla registrerade intäkter räknas som fakturerade.',month:{metrics:[{key:'revenue',label:'Fakturerad omsättning',value:100,unit:'kr',status:'source',basis:'Rapportregel'},{key:'billing',label:'Debiterbar tid',value:null,unit:'%',status:'missing',basis:'Underlag saknas'}],vehicles:[],recorded_revenue:100,uninvoiced_revenue:0,fuel:null,fuel_share:null,estimated_payroll:null,active_vehicle_count:0},ytd:{metrics:[{key:'revenue',value:500,status:'partial'},{key:'billing',value:null,status:'missing'}],vehicles:[],recorded_revenue:500,uninvoiced_revenue:0,fuel:null,fuel_share:null,estimated_payroll:null,active_vehicle_count:0},indicators:{reported_vehicle_utilization:null,definition:'Inte debiterbar tid'}};
 const workbook=XLSX.read(exports.monthlyExcel(report),{type:'buffer'});
-assert.equal(workbook.SheetNames.length,5);
+assert.equal(workbook.SheetNames.length,11);
 const rows=XLSX.utils.sheet_to_json(workbook.Sheets.Nyckeltal);
 assert.equal(rows[0].Månad,report.month.metrics[0].value);
 assert.equal(rows[0].YTD,report.ytd.metrics[0].value);

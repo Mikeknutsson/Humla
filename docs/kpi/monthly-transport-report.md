@@ -9,3 +9,14 @@ Resultatet använder NEXT-kostnader och TransPA-personalschablon och märks prel
 Rapporten läser samma dagligt förberedda generation som KPI. Servercache isoleras per användare, tenant, generation och urval, med ny behörighetskontroll före cacheträff. Browsercache gäller flikens livstid och töms vid Hämta underlag igen. Urvalsbyte laddar bara rapporten, inte hela sidan. RPC är avsiktligt authenticated-only SECURITY DEFINER för tillgång till privata prepared-tabeller; explicit kpi.read och tenant-kontroll görs före dataåtkomst, anonymous/PUBLIC execute är spärrat.
 
 Verifiering: `npm run build`, riktad ESLint, `node scripts/test-kpi-monthly-report.mjs` samt samma exporttest med verklig Hub-rapport. SQL-assertioner för september 2026, januari verksamhetsår 2025/2026, YTD-summa, gemensamt KST 20+30, saknade värden och nekad anonymous/annan tenant. September KST30: omsättning 6 762 040,64 kr; preliminärt resultat 1 818 774,55 kr.
+
+
+## Piusi/NEXT och TransPA, 2026-10-06
+
+Rapportens bränslemodell är Piusi-tankningskostnad plus övrigt NEXT-bränsle. Konto 5360 (inköp till egen tank) tas bort från bränslet under månader med Piusi-underlag och visas som avstämning. Piusi-priser är preliminära om inte manuellt godkända; extrema, avvisade eller okopplade rader ingår inte. Rapportens resultat ersätter sin ursprungliga NEXT-bränsledel med denna förbrukningsmodell och kan därför skilja sig från KPI:s inköpsbaserade resultat. API/prisstatus, senaste synkning och granskningsantal framgår i vyn/exporten.
+
+Piusi FuelTransaction och prisgranskningar kopieras till samma prepared generation av den befintliga rapportarbetaren. Schema/tider för integrationerna ändras inte. Synkfel i Piusi rättas inte av rapportfunktionen. Backfill av aktiv generation fångades separat 2026-10-06 och visas i source_state.captured_at. Bränslefiltrering använder canonical vehicle_id och befintliga daterade registreringskopplingar/enhetsperioder. Enhetslistan hämtas från exakt samma Hub economic_units som KPI; inga parallella enhetsregister skapas. Namn/kopplingar uppdateras i båda vid nästa förberedda rapportsynkning.
+
+Arbetad chaufförstid, intäktskopplad tid, fordonstid och kapacitet kommer från Hub:ens TransPA-underlag för månad och YTD. Beläggning samt chaufförernas intäktskopplade tidsandel är tydligt märkta indikatorer, inte verifierad debiterbar tid. Användaren återtog förslaget att ersätta debiterbar tid med fakturerbar summa: detta är inte infört.
+
+Verifierat september KST30: Piusi 503 638,03 kr; NEXT exklusive egen tank 335 432,75 kr; bränsle 839 070,78 kr; undantaget konto 5360 68 227,99 kr. Rapporterad fordonstid 4 323,57 h; arbetad chaufförstid 4 448,08 h. 44 kostnadsenheters ID:n matchar KPI-snapshoten. Excel innehåller 11 blad inklusive bränsle- och TransPA-underlag samt samma kostnadsenheter för månad och YTD.
