@@ -5,6 +5,7 @@ import {KpiTableFrame} from './kpi-table-frame';
 import {KpiGroupFilter} from './kpi-cost-center-filter';
 import {analysisHref} from '@/lib/kpi/analysis';
 import {useRouter} from 'next/navigation';
+import {useKpiReportSelection} from './kpi-report-selection';
 export type EconomicUnit={key:string;label:string;revenue:number;cost:number;result:number;rows:number;
  cost_categories?:Record<string,number|null>;margin_pct?:number|null;worked_hours?:number|null;productive_hours?:number|null;
  billing_percent?:number|null;utilization?:number|null;occupied_hours?:number|null;available_hours?:number|null;
@@ -17,17 +18,21 @@ const num=new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1});
 const costs=[['personnel','Personal'],['fuel','Bränsle'],['service_repair','Service & Rep'],['fixed','Fasta'],['depreciation','Avskrivning'],['material','Material'],['tipp_deponi','Tipp/Deponi'],['hired','Inhyrda'],['other','Övrigt']] as const;
 const ratios=[['margin_pct','Marginal','%'],['worked_hours','Arbetad tid','h'],['billing_percent','Debiteringsgrad*','%'],['utilization','Beläggningsgrad','%'],['revenue_per_hour','Intäkt / h','kr'],['cost_per_hour','Kostnad / h','kr'],['distance_mil','Körsträcka','mil'],['cost_per_mil','Kostnad / mil','kr'],['revenue_per_mil','Intäkt / mil','kr'],['fuel_cost_per_mil','Bränsle / mil','kr'],['fuel_liters_per_mil','Förbrukning / mil','l']] as const;
 function value(n:number|null|undefined,suffix:string){return n==null?'–':num.format(n)+' '+suffix;}
+function EconomicGroupFilter({query,groups}:{query:string;groups:string[]}){
+ const selection=useKpiReportSelection(),router=useRouter();const [pending,start]=useTransition();
+ const selectedGroup=new URLSearchParams(selection?.query??query).get('group')??'';
+ function change(group:string){const p=new URLSearchParams(selection?.query??query);p.set('view','kpi');if(group)p.set('group',group);else p.delete('group');for(const k of ['unit','vehicle','project'])p.delete(k);if(selection)selection.change(p.toString());else start(()=>router.push('/kpi?'+p));}
+ return <KpiGroupFilter value={selectedGroup} groups={groups} disabled={pending} onChange={change}/>;
+}
 export function KpiEconomicUnits({units,query,totals,canManage,groups=[]}:{units:EconomicUnit[];query:string;totals:{revenue:number;cost:number;result:number};canManage:boolean;groups:string[]}){
  const [expanded,setExpanded]=useState<string[]>([]),[sort,setSort]=useState('label');
- const [pending,startTransition]=useTransition();const router=useRouter();const selectedGroup=new URLSearchParams(query).get('group')??'';
  const ordered=[...units].sort((a,b)=>sort==='label'?a.label.localeCompare(b.label,'sv'):((b[sort as keyof EconomicUnit] as number|null)??-Infinity)-((a[sort as keyof EconomicUnit] as number|null)??-Infinity));
- function filterGroup(group:string){const p=new URLSearchParams(query);p.set('view','kpi');if(group)p.set('group',group);else p.delete('group');p.delete('unit');p.delete('vehicle');p.delete('project');startTransition(()=>router.push('/kpi?'+p));}
  function href(unit:string,child?:EconomicUnit['children'][number],dashboard=false,category?:string){const p=new URLSearchParams(query);p.set('unit',unit);p.delete('vehicle');p.delete('project');if(child?.vehicle)p.set('vehicle',child.vehicle);else if(child?.project)p.set('project',child.project);p.set(dashboard?'view':'level',dashboard?'kpi':'project');if(category){p.set('category',category);p.set('kind','cost');}return dashboard?'/kpi?'+p:analysisHref(p.toString(),{level:child?'transaction':'project'});}
  const columns=5+costs.length+ratios.length;
  const head=<thead><tr><th>Enhet / ingående objekt</th><th>Omsättning</th><th>Total kostnad</th><th>Resultat</th>{costs.map(([k,l])=><th key={k}>{l}</th>)}{ratios.map(([k,l,s])=><th key={k}>{l}{['cost_per_mil','fuel_cost_per_mil'].includes(k)?` (${s})`:''}</th>)}<th>Urval</th></tr></thead>;
- return <article className="panel economic-units" aria-busy={pending}><h2>Ekonomiska enheter</h2>
- <div className="unit-table-controls"><KpiGroupFilter value={selectedGroup} groups={groups} disabled={pending} onChange={filterGroup}/>
- <label>Sortera enheter<select value={sort} onChange={e=>setSort(e.target.value)}><option value="label">Namn</option><option value="revenue">Omsättning, högst först</option><option value="result">Resultat, högst först</option><option value="cost">Kostnad, högst först</option><option value="utilization">Beläggning, högst först</option><option value="cost_per_mil">Kostnad per mil, högst först</option></select></label><span role="status">{pending?'Hämtar gruppens underlag…':`${units.length} enheter i urvalet`}</span></div>
+ return <article className="panel economic-units" ><h2>Ekonomiska enheter</h2>
+ <div className="unit-table-controls"><EconomicGroupFilter query={query} groups={groups}/>
+ <label>Sortera enheter<select value={sort} onChange={e=>setSort(e.target.value)}><option value="label">Namn</option><option value="revenue">Omsättning, högst först</option><option value="result">Resultat, högst först</option><option value="cost">Kostnad, högst först</option><option value="utilization">Beläggning, högst först</option><option value="cost_per_mil">Kostnad per mil, högst först</option></select></label><span role="status">{`${units.length} enheter i urvalet`}</span></div>
  <p>Gruppvalet filtrerar hela KPI-vyn och totalsummorna. Tabellen kan scrollas i sidled. Fäll ut en enhet för ingående delar eller välj Visa endast.</p>
  <KpiTableFrame head={head}><table>{head}<tbody>{ordered.map(u=><Fragment key={u.key}>
  <tr className="economic-parent"><td><button className="unit-expand" aria-expanded={expanded.includes(u.key)} aria-label={`${expanded.includes(u.key)?'Fäll ihop':'Visa delar i'} ${u.label}`} onClick={()=>setExpanded(s=>s.includes(u.key)?s.filter(k=>k!==u.key):[...s,u.key])}>{expanded.includes(u.key)?'−':'+'} {u.label}</button><small>{u.rows} transaktioner · {u.children.length} delar</small></td><td>{money.format(u.revenue)}</td><td><Link prefetch={false} aria-label={`Total kostnad för ${u.label}`} href={analysisHref(query,{unit:u.key,vehicle:null,project:null,category:null,kind:'cost'})}>{money.format(u.cost)}</Link></td><td><strong>{money.format(u.result)}</strong></td>

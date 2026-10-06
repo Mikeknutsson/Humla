@@ -24,16 +24,17 @@ export async function loadKpiPeriod(query:string) {
  const costCenter=p.get('cost_center')?.trim()||null;
  const from=`${monthPeriod.fiscalYear}-09-01`,to=`${monthPeriod.fiscalYear+1}-08-31`;
  const db=await createClient();
- const {data:{user}}=await db.auth.getUser();
- if(!user)throw new Error('Logga in igen för att hämta rapporten.');
- const {data:member,error:memberError}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();
+ const {data:claims,error:claimsError}=await db.auth.getClaims();
+ const userId=claims?.claims?.sub;
+ if(claimsError||!userId)throw new Error('Logga in igen för att hämta rapporten.');
+ const {data:member,error:memberError}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',userId).eq('status','active').limit(1).maybeSingle();
  if(memberError||!member)throw new Error('Arbetsytan kunde inte öppnas.');
  const {data:canRead,error:permissionError}=await db.rpc('hub_has_permission',{p_tenant_id:member.tenant_id,p_permission:'kpi.read'});
  if(permissionError||!canRead)throw new Error('KPI-behörigheten kunde inte verifieras.');
- const result=await cachedKpiReport<Report>(user.id,member.tenant_id,{useMonths:true,monthPeriod,costCenter,activeFilters,from,to},async()=>db.rpc('hub_kpi_overview_months_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters}));
+ const result=await cachedKpiReport<Report>(userId,member.tenant_id,{useMonths:true,monthPeriod,costCenter,activeFilters,from,to},async()=>db.rpc('hub_kpi_overview_months_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:monthPeriod.fiscalYear,p_selected_months:monthPeriod.months,p_cost_center:costCenter,p_filters:activeFilters}));
  if(result.error||!result.data)throw new Error('Rapporten kunde inte hämtas. Tidigare urval visas fortfarande. Försök igen.');
  const saved=JSON.stringify({version:1,query:selectionFromQuery(p).toString()});
- if(readSavedSelection(saved))(await cookies()).set(selectionCookie(user.id),saved,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:31536000});
+ if(readSavedSelection(saved))(await cookies()).set(selectionCookie(userId),saved,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:31536000});
  const dashboard=result.data;
  return {monthPeriod,activeFilters,from,to,dashboard,overviewMonthly:dashboard.monthly??[],overviewPrevious:dashboard.previous??null,
   overviewPeriod:{current:{from,to},previous:{from:`${monthPeriod.fiscalYear-1}-09-01`,to:`${monthPeriod.fiscalYear}-08-31`},label:`${monthPeriod.fiscalYear}/${monthPeriod.fiscalYear+1}`},
