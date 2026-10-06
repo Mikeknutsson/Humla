@@ -7,6 +7,7 @@ export function isWorkify(table: ParsedTable) {
 export function allocateWorkify(rows: Array<ReturnType<typeof normalizeRows>[number] & { vehicle_object_id?: string | null }>, rules: ArticleRule[]) {
   const byArticle = new Map(rules.map(rule => [rule.article_number.trim().toUpperCase(), rule]));
   return rows.map(row => {
+    if (row.amount === 0 || (row.amount === null && !String(row.source_data.Summa ?? '').trim())) return { ...row, amount: 0, vehicle_registration: null, vehicle_object_id: null, is_valid: true, validation_errors: [], allocation: { target: 'ignored', resolution: 'workify_no_amount' } };
     const article = (row.source_data.Artikelnummer ?? '').trim().toUpperCase();
     const rule = byArticle.get(article);
     if (!rule) return { ...row, is_valid: false, validation_errors: [...row.validation_errors, `Ej mappad Workify-artikel: ${article || '(saknas)'}`], allocation: { article, target: 'review' } };
