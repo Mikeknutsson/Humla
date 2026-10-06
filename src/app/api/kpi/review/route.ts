@@ -4,6 +4,13 @@ export async function GET(request: Request) {
  const { data: { user } } = await supabase.auth.getUser();
  if (!user) return Response.json({ error: 'Inloggning krävs' }, { status: 401 });
  const url = new URL(request.url);
+ if(url.searchParams.get('options')==='1') {
+  const {data:member}=await supabase.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();
+  if(!member)return Response.json({error:'Aktivt företag saknas'},{status:403});
+  const {data,error}=await supabase.rpc('hub_kpi_review_options_v1',{p_tenant_id:member.tenant_id});
+  if(error)return Response.json({error:'Projekt och fordon kunde inte hämtas'},{status:403});
+  return Response.json(data,{headers:{'Cache-Control':'private, max-age=300'}});
+ }
  if(url.searchParams.get('scope')) {
   const {data:member}=await supabase.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();
   if(!member)return Response.json({error:'Aktivt företag saknas'},{status:403});

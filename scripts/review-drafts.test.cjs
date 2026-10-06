@@ -1,0 +1,15 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const ts=require('typescript');
+const vm=require('node:vm');
+function load(file){const context={exports:{},require:name=>load(path.resolve(path.dirname(file),name+'.ts'))};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,context);return context.exports;}
+const {reviewKey,changeReviewRouting,assignedWorkifyName,vehicleSelection}=load(path.resolve('src/lib/kpi/review-drafts.ts'));
+const row=(id,order,amount,date)=>({id,row_number:1,data_kind:'revenue',source_data:{Ordernummer:order,Artikelnummer:'13-01',Artikeldatum:date,Summa:amount,Fakturerad:date,Förare:'Martin Nilsson'},validation_errors:[],amount,quantity:3,occurred_on:date,vehicle_registration:null,project_reference:null});
+test('separate loads on one order share a draft key, separate orders do not',()=>{assert.equal(reviewKey(row('a','44317',6000,'2026-09-07')),reviewKey(row('b','44317',500,'2026-09-08')));assert.notEqual(reviewKey(row('a','44317',6000,'2026-09-07')),reviewKey(row('c','44381',700,'2026-09-09')));});
+test('changing another load of the same order preserves first draft line facts',()=>{const a=row('a','44317',6000,'2026-09-07');const b=row('b','44317',500,'2026-09-08');const d=changeReviewRouting(a,undefined,'vehicle_registration','9009');const next=changeReviewRouting(b,d,'cost_center','30');assert.equal(next.row.id,'a');assert.equal(next.values.amount,6000);assert.equal(next.values.quantity,3);assert.equal(next.values.occurred_on,'2026-09-07');assert.equal(next.values.vehicle_registration,'9009');assert.equal(next.values.cost_center,'30');});
+test('switching vehicle to project removes conflicting vehicle allocation',()=>{let d=changeReviewRouting(row('a','44317',6000,'2026-09-07'),undefined,'vehicle_registration','9009');d=changeReviewRouting(d.row,d,'project_reference','5001');assert.equal(d.values.vehicle_registration,null);assert.equal(d.values.review_target,'project');assert.equal(d.values.project_reference,'5001');});
+test('switching project to vehicle clears project without changing amount',()=>{let d=changeReviewRouting(row('a','44317',6000,'2026-09-07'),undefined,'project_reference','5001');d=changeReviewRouting(d.row,d,'vehicle_registration','ALD61D');assert.equal(d.values.project_reference,null);assert.equal(d.values.amount,6000);assert.equal(d.values.review_target,'vehicle');});
+test('Tilldelad uses explicit field first and Workify Förare as fallback',()=>{const a=row('a','44317',6000,'2026-09-07');assert.equal(assignedWorkifyName(a),'Martin Nilsson');a.source_data.Tilldelad=' Annan förare ';assert.equal(assignedWorkifyName(a),'Annan förare');a.source_data.Tilldelad='';a.source_data.Förare='';assert.equal(assignedWorkifyName(a),'–');});
+test('hired vehicle aliases use the same dropdown choice',()=>{assert.equal(vehicleSelection('LASTBIL'),'9009');assert.equal(vehicleSelection('INHYRDLASTBIL'),'9009');assert.equal(vehicleSelection('ALD61D'),'ALD61D');});

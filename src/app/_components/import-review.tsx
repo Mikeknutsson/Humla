@@ -3,9 +3,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DATA_KINDS, type DataKind } from '@/lib/kpi/schema';
 export type Row = {id:string;row_number:number;data_kind:DataKind;source_data:Record<string,unknown>;validation_errors:string[];[key:string]:unknown};
+import { ReviewSelect, type ReviewOptions } from './review-select';
+import { vehicleSelection,reviewValues } from '@/lib/kpi/review-drafts';
 const numbers=new Set(['amount','quantity','available_hours','occupied_hours','paid_hours','billable_hours']);
 export type ReviewResult={order_number?:string;affected?:number;pending?:number};
-export function ReviewEditor({row,onSaved}: {row:Row;onSaved:(result:ReviewResult)=>void}) {
+export function ReviewEditor({row,onSaved,options,onStaged,disabled=false}: {row:Row;onSaved:(result:ReviewResult)=>void;options?:ReviewOptions;onStaged?:(values:Record<string,unknown>,reason:string)=>void;disabled?:boolean}) {
  const orderNumber=row.data_kind==='revenue'&&['Artikelnummer','Artikeldatum','Summa','Fakturerad'].every(k=>k in row.source_data)?String(row.source_data.Ordernummer??'').trim():'';
  const [values,setValues]=useState<Record<string,string>>(()=>Object.fromEntries(DATA_KINDS[row.data_kind].fields.map(f=>[f.key,String(row[f.key]??'')])));
  const [target,setTarget]=useState(row.project_reference?'project':row.vehicle_registration?'vehicle':'');
@@ -13,7 +15,7 @@ export function ReviewEditor({row,onSaved}: {row:Row;onSaved:(result:ReviewResul
  async function save(event:React.FormEvent) {
   event.preventDefault();setBusy(true);setError('');
   try {
-   const payload:Record<string,unknown>={};
+   const payload:Record<string,unknown>=reviewValues(row);
    for(const [key,value] of Object.entries(values)) {
     const text=value.trim();
     if(numbers.has(key)) {const n=Number(text.replace(/\s/g,'').replace(',','.'));if(text&&!Number.isFinite(n))throw new Error('Kontrollera talvärdena');payload[key]=text?n:null;}
@@ -21,11 +23,12 @@ export function ReviewEditor({row,onSaved}: {row:Row;onSaved:(result:ReviewResul
    }
    if(typeof payload.vehicle_registration==='string')payload.vehicle_registration=payload.vehicle_registration.toUpperCase().replace(/[\s-]/g,'');
    if(row.data_kind==='revenue')payload.review_target=target;
+   if(onStaged){onStaged(payload,reason);return;}
    const res=await fetch('/api/kpi/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:row.id,values:payload,reason}),signal:AbortSignal.timeout(30000)});
    const data=await res.json();if(!res.ok)throw new Error(data.error);onSaved(data);
   }catch(e){setError(e instanceof Error?e.message:'Kunde inte spara. Ladda om granskningen för att kontrollera status.');}finally{setBusy(false);}
  }
- return <form onSubmit={save}><p>{orderNumber?`Kopplingen till projekt, fordon och kostnadsställe sparas på alla importerade rader i Workify-order ${orderNumber}, även redan godkända rader. Belopp, datum och beskrivning ändras bara på denna rad. Originalen bevaras och ändringarna loggas.`:'Rätta denna transaktion. Originalet bevaras och ändringen loggas. Kopplingen gäller bara denna rad.'}</p>{row.data_kind==='revenue'&&<label>Intäkten tillhör <select required value={target} onChange={e=>setTarget(e.target.value)}><option value="">Välj fördelning</option><option value="project">Projekt</option><option value="vehicle">Utförande fordon</option></select></label>}<div className="mapping-grid">{DATA_KINDS[row.data_kind].fields.filter(f=>row.data_kind!=='revenue'||(f.key!=='employee_number'&&(target!=='project'||f.key!=='vehicle_registration')&&(target!=='vehicle'||f.key!=='project_reference'))).map(f=><label key={f.key}><span>{f.label}</span><input type={f.key==='occurred_on'?'date':'text'} inputMode={numbers.has(f.key)?'decimal':undefined} value={values[f.key]??''} required={f.required} onChange={e=>setValues({...values,[f.key]:e.target.value})}/></label>)}</div><label>Motivering<input required minLength={3} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Vad har kontrollerats eller rättats?"/></label>{error&&<p role="alert">{error}</p>}<button className="primary" disabled={busy}>{busy?'Sparar…':orderNumber?'Spara kopplingen på hela ordern':'Spara och godkänn transaktionen'}</button></form>;
+ return <form onSubmit={save}><p>{orderNumber?`Kopplingen till projekt, fordon och kostnadsställe sparas på alla importerade rader i Workify-order ${orderNumber}, även redan godkända rader. Belopp, datum och beskrivning ändras bara på denna rad. Originalen bevaras och ändringarna loggas.`:'Rätta denna transaktion. Originalet bevaras och ändringen loggas. Kopplingen gäller bara denna rad.'}</p>{row.data_kind==='revenue'&&<label>Intäkten tillhör <select required value={target} onChange={e=>setTarget(e.target.value)}><option value="">Välj fördelning</option><option value="project">Projekt</option><option value="vehicle">Utförande fordon</option></select></label>}<div className="mapping-grid">{DATA_KINDS[row.data_kind].fields.filter(f=>row.data_kind!=='revenue'||(f.key!=='employee_number'&&(target!=='project'||f.key!=='vehicle_registration')&&(target!=='vehicle'||f.key!=='project_reference'))).map(f=><label key={f.key}><span>{f.label}</span>{options&&(f.key==='project_reference'||f.key==='vehicle_registration')?<ReviewSelect label={f.label} value={f.key==='vehicle_registration'?vehicleSelection(values[f.key]):values[f.key]??''} options={f.key==='project_reference'?options.projects:options.vehicles} required={f.required} disabled={disabled||busy} onChange={value=>setValues({...values,[f.key]:value})}/>:<input disabled={disabled||busy} type={f.key==='occurred_on'?'date':'text'} inputMode={numbers.has(f.key)?'decimal':undefined} value={values[f.key]??''} required={f.required} onChange={e=>setValues({...values,[f.key]:e.target.value})}/> }</label>)}</div><label>Motivering<input required minLength={3} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Vad har kontrollerats eller rättats?"/></label>{error&&<p role="alert">{error}</p>}<button className="primary" disabled={disabled||busy}>{busy?'Sparar…':onStaged?'Lägg till i ändringar':orderNumber?'Spara kopplingen på hela ordern':'Spara och godkänn transaktionen'}</button></form>;
 }
 export function ImportReview({batchId,canManage=false}: {batchId:string;canManage?:boolean}) {
  const router=useRouter();
