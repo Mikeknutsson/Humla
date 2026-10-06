@@ -5,6 +5,9 @@ The opt-in Hub report postprocessor uses an existing project unit (Elleholms:
 generation. Selection changes still read precomputed data.
 
 - NEXT material costs on vehicle carriers move to the configured material unit.
+  The dated material account rule also takes precedence over the hired carrier
+  default (9009); a quarry purchase is material, not hired transport. Explicit
+  dated Dashboard category assignments retain their existing priority.
 - Identifiable pure material article revenue moves to that unit.
 - Bundled `inkl transport` article revenue splits at purchase price; the remainder
   stays on transport. The engine reads the dated Workify rule name as source
