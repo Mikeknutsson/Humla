@@ -55,8 +55,8 @@ export function KpiRefresh() {
   return <div className="kpi-refresh-bar no-print">
     {pathname !== "/kpi" && <Link href={dashboardHref} prefetch={false}><ArrowLeft size={16}/>Dashboard</Link>}
     {pathname !== "/kpi/ai" && <Link href="/kpi/ai" prefetch={false}><MessageSquare size={16}/>Fråga Humla</Link>}
-    <span className="kpi-sync-status" role="status" title="KPI-underlaget förberäknas kl. 03.00 svensk tid. Importer och matchningar kommer med vid nästa synkning.">
-      {syncError||sync?.error||(queued?'Synkar… Senaste underlaget visas.':lastSync?`KPI synkat ${lastSync} · nattligen 03.00`:'')}
+    <span className="kpi-sync-status" role="status" title="KPI-underlaget förberäknas kl. 03.20 svensk tid. Importer och matchningar kommer med vid nästa synkning.">
+      {syncError||sync?.error||(queued?'Synkar… Senaste underlaget visas.':lastSync?`KPI synkat ${lastSync} · nattligen 03.20`:'')}
     </span>
     {sync?.can_sync&&<button type="button" disabled={requesting||queued} title="Förbered nytt KPI-underlag från Hubben. Dina filter behålls." onClick={async()=>{
       setRequesting(true);setSyncError('');
