@@ -30,6 +30,10 @@ export function defaultSelection(now=new Date()){
 // A URL with an explicit period is authoritative, including removed filters.
 // A section-only link inherits the selection without overwriting local options.
 export function restoreSelection(params:URLSearchParams,saved:URLSearchParams|null){
+ if(params.get('view')==='internal') {
+  if(!saved||params.has('cost_center')||!saved.has('cost_center'))return null;
+  const result=new URLSearchParams(params);result.set('cost_center',saved.get('cost_center')!);return result.toString();
+ }
  if(!saved||['fiscal_year','months','from','to'].some(k=>params.has(k)))return null;
  const result=new URLSearchParams(params);
  for(const [key,value] of saved)if(!result.has(key))result.set(key,value);

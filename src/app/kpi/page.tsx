@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseMonthPeriod, monthPeriodFromDates } from "@/lib/kpi/period";
 import { filterKeys } from "@/lib/kpi/analysis";
 import { KpiLiveReport } from "../_components/kpi-live-report";
+import { previousInternalMonth } from "@/lib/kpi/internal-period";
 
 export const dynamic = "force-dynamic";
 
@@ -35,10 +36,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     supabase.from("kpi_settings").select("financial_year_start_month,financial_year_start_day").eq("tenant_id", member.tenant_id).maybeSingle(),
   ]);
   if (!canRead) return <main className="access-denied"><div><span>403</span><h1>Du saknar åtkomst till KPI-appen</h1><p>Be en administratör aktivera din KPI-behörighet.</p></div></main>;
-  const fallback = fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
+  const internalDefaultPeriod = previousInternalMonth();
+  const fallback = query.view === 'internal' ? internalDefaultPeriod : fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
   const initialView = query.view === "monthly" || query.view === "internal" || query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : "overview";
   const legacyMonths = monthPeriodFromDates(query.from,query.to);
-  const useMonths = initialView === "overview" || initialView === "monthly" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || ((initialView === "kpi" || initialView === "internal") && !query.from && !query.to);
+  const useMonths = initialView !== 'internal' && (initialView === "overview" || initialView === "monthly" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || (initialView === "kpi" && !query.from && !query.to));
   let monthPeriod;
   try { monthPeriod = query.fiscal_year === undefined && query.months === undefined && legacyMonths ? legacyMonths : parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
   const activeFilters = Object.fromEntries(filterKeys.filter(k=>query[k]).map(k=>[k,query[k]!]));
@@ -72,6 +74,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const serverIssues = [readError, manageError, dashboardError, batchesError, unitsError, unitReportError, transpaError, hubReviewError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError].filter(Boolean).map((error) => error!.code) });
   return <KpiLiveReport key={initialView}
+    internalDefaultPeriod={internalDefaultPeriod}
     monthPeriod={useMonths?monthPeriod:undefined}
     overviewMonthly={(displayDashboard.monthly??[]) as never}
     activeFilters={activeFilters}

@@ -30,7 +30,7 @@ export async function proxy(request: NextRequest) {
       response.cookies.getAll().forEach(cookie=>redirected.cookies.set(cookie));
       return redirected;
     }
-    if(['fiscal_year','months','from','to'].some(k=>request.nextUrl.searchParams.has(k))){
+    if(request.nextUrl.searchParams.get('view')!=='internal'&&['fiscal_year','months','from','to'].some(k=>request.nextUrl.searchParams.has(k))){
       const value=JSON.stringify({version:1,query:selectionFromQuery(request.nextUrl.searchParams).toString()});
       if(readSavedSelection(value)&&request.cookies.get(name)?.value!==value)response.cookies.set(name,value,{httpOnly:true,secure:request.nextUrl.protocol==='https:',sameSite:'lax',path:'/',maxAge:31536000});
     }

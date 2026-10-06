@@ -1,0 +1,12 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+const vm=require('node:vm');
+const code=ts.transpileModule(fs.readFileSync('src/lib/kpi/internal-period.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+const context={exports:{}};vm.runInNewContext(code,context);
+const month=now=>JSON.parse(JSON.stringify(context.exports.previousInternalMonth(new Date(now))));
+test('previous month uses full calendar dates',()=>assert.deepEqual(month('2026-10-06T12:00:00Z'),{from:'2026-09-01',to:'2026-09-30'}));
+test('January crosses year boundary',()=>assert.deepEqual(month('2026-01-10T12:00:00Z'),{from:'2025-12-01',to:'2025-12-31'}));
+test('leap year February has 29 days',()=>assert.deepEqual(month('2024-03-10T12:00:00Z'),{from:'2024-02-01',to:'2024-02-29'}));
+test('month boundary follows Stockholm rather than server UTC',()=>assert.deepEqual(month('2026-09-30T22:30:00Z'),{from:'2026-09-01',to:'2026-09-30'}));
