@@ -11,7 +11,7 @@ async function handle(request: Request, mutation: boolean) {
   if (!['list','save','end','apply'].includes(body.action)) return Response.json({error:'Ogiltig åtgärd.'},{status:400});
   const {data,error} = await db.rpc('hub_workify_name_rules_v1',{p_tenant_id:member.tenant_id,p_action:body.action,p_rule:body.rule??{}});
   if(error) return Response.json({error:error.message},{status:400});
-  if (body.action === 'apply') {
+  if (body.action === 'apply' || (body.action === 'save' && data?.processed > 0)) {
    const { error: syncError } = await db.rpc('hub_kpi_request_report_sync_v1', { p_tenant_id: member.tenant_id });
    revalidateTag(`kpi-report:${user.id}`, { expire: 0 });
    if (syncError) return Response.json({ ...data, sync_warning: 'Raderna har uppdaterats, men rapportsynkningen kunde inte startas. Använd Uppdatera i KPI.' });
