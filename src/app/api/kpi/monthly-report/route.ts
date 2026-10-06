@@ -19,7 +19,7 @@ export async function GET(request:Request){
  if(costCenter.length>100)return Response.json({error:'Ogiltigt kostnadsställe.'},{status:400});
  const filters=Object.fromEntries(['group','unit','vehicle','project'].filter(k=>params.get(k)).map(k=>[k,params.get(k)!]));
  if(JSON.stringify(filters).length>2000)return Response.json({error:'För stort urval.'},{status:400});
- const result=await cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v1',year,month,costCenter,filters},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:year,p_month:month,p_cost_center:costCenter,p_filters:filters}));
+ const result=await cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v2',year,month,costCenter,filters},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:year,p_month:month,p_cost_center:costCenter,p_filters:filters}));
  if(result.error||!result.data){console.error('[kpi monthly] report unavailable',{code:result.error?.code});return Response.json({error:'Månadsrapporten kunde inte hämtas från Hubben. Försök igen.'},{status:503});}
  const report=result.data;
  if(!format)return Response.json(report,{headers:{'Cache-Control':'private, no-store'}});
