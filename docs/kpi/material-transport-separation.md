@@ -14,7 +14,9 @@ generation. Selection changes still read precomputed data.
   special materials, unknown quantities or prices stay reviewable and unsplit.
 - Receipt/list estimates NEVER create additional financial cost rows. NEXT is
   already the source of purchase costs. No double counting.
-- Existing storage/project and Trading/tipping allocations remain unchanged.
+- Existing storage/project and Trading/tipping destination projects remain
+  unchanged. Tipping gets the matching enabled project unit when the destination
+  is unique. Unknown or ambiguous destinations stay unresolved.
 - Source date and cost centre remain unchanged on each derived component.
 - Original vehicle, unit, project, amount and purchase evidence are preserved in
   `_humla_material_separation`. Drilldown keeps both components traceable to the
