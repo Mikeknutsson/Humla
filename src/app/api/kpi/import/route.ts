@@ -180,6 +180,16 @@ export async function POST(request: Request) {
     }).eq("id", batchId);
     if (updateError) throw updateError;
 
+    // Hub reuses confirmed, dated project/allocation rules for each new file.
+    // Unknown recipients and invalid evidence stay in review.
+    if (kind === "cost") {
+      const { data: resolved, error: resolveError } = await supabase.rpc("hub_kpi_resolve_import_allocations_v1", {
+        p_tenant_id: member.tenant_id, p_batch_id: batchId,
+      });
+      if (resolveError) throw resolveError;
+      return Response.json({ batchId, rows: normalized.length, ...resolved }, { status: 201 });
+    }
+
     return Response.json({ batchId, status, rows: normalized.length, validRows: validRows.length, invalidRows: normalized.length - validRows.length }, { status: 201 });
   } catch (error) {
     if (batchId) await supabase.from("kpi_import_batches").update({ status: "failed", error_summary: [{ message: error instanceof Error ? error.message : "Importen misslyckades" }] }).eq("id", batchId);
