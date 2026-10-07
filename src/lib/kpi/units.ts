@@ -1,5 +1,5 @@
 export type KpiUnit = {
- unit_type: 'vehicle' | 'person' | 'overhead' | 'compound';
+ unit_type: 'vehicle' | 'person' | 'overhead' | 'project' | 'compound';
  id: string; name: string; projects: string[]; registrations: string[]; employees: string[];
  valid_from: string; valid_to: string | null; enabled: boolean; revision: number;
 };
@@ -22,11 +22,12 @@ function date(value: unknown) {
 }
 export function unitPayload(body: Record<string, unknown>) {
  const unit_type=body.unit_type;
- if (unit_type !== 'vehicle' && unit_type !== 'person' && unit_type !== 'overhead' && unit_type !== 'compound') throw new Error('Välj enhetstyp.');
+ if (unit_type !== 'vehicle' && unit_type !== 'person' && unit_type !== 'overhead' && unit_type !== 'compound' && unit_type !== 'project') throw new Error('Välj enhetstyp.');
  let name = typeof body.name === 'string' ? body.name.trim() : '';
  if (!name || name.length > 120) throw new Error('Enhetsnamn krävs, högst 120 tecken.');
  const projects = values(body.projects), registrations=values(body.registrations,true), employees=values(body.employees);
  if (projects.length+registrations.length+employees.length<1 || projects.length+registrations.length+employees.length>300) throw new Error('Ange 1–300 kopplingar.');
+ if(unit_type==='project'&&(!projects.length||registrations.length||employees.length))throw new Error('En projekt- eller materialenhet behöver projektkoppling och anges utan fordons- eller personreferenser.');
  const valid_from=date(body.valid_from), valid_to=body.valid_to ? date(body.valid_to) : null;
  if (valid_to && valid_to<valid_from) throw new Error('Slutdatum får inte vara före startdatum.');
  if (typeof body.enabled !== 'boolean') throw new Error('Ogiltig status.');
