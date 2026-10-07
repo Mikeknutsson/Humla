@@ -13,6 +13,12 @@ async function save(request: Request, edit: boolean) {
  try {
   const body = await request.json();
   const payload = unitPayload(body);
+  if(!edit&&body.quick_create===true){
+   const checks=await Promise.all([db.from('kpi_units').select('id,name,valid_to').eq('tenant_id',member.tenant_id).eq('enabled',true).overlaps('registrations',payload.registrations),payload.projects.length?db.from('kpi_units').select('id,name,valid_to').eq('tenant_id',member.tenant_id).eq('enabled',true).overlaps('projects',payload.projects):Promise.resolve({data:[],error:null})]);
+   if(checks.some(c=>c.error))throw Error('Befintliga kopplingar kunde inte kontrolleras.');
+   const overlapping=checks.flatMap(c=>c.data??[]).filter(u=>!u.valid_to||u.valid_to>=payload.valid_from);
+   if(overlapping.length)return Response.json({error:'Fordonet eller projektet finns redan på '+[...new Set(overlapping.map(u=>u.name))].join(', ')+'. Använd den befintliga enheten eller komplettera historiken här.'},{status:409});
+  }
   if (edit && (!/^[0-9a-f-]{36}$/i.test(body.id ?? '') || !Number.isInteger(body.revision))) throw new Error('Ogiltig enhet eller version.');
   const {data,error} = await db.rpc('hub_kpi_save_unit_v2',{p_tenant_id:member.tenant_id,p_payload:payload,p_unit_id:edit?body.id:null,p_revision:edit?body.revision:null});
   if (error) return Response.json({error:error.message},{status:400});
