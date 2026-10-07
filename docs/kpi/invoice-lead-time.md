@@ -39,3 +39,9 @@ monthly series, units, comparison, export and drilldown from one generation.
 LMT31J September total cost becomes 111,701.74 SEK, still without a September
 chauffeur invoice. No source rows or account rules are changed. The month drilldown
 now reads the same prepared generation rather than rebuilding live classifications.
+
+From 2026-10-07, customer names containing Elleholms Maskin (case insensitive,
+including AB/STENA/service labels) identify internal transfers. Hub excludes them
+from the main positive-day average and returns a separate internal average and
+denominator. Both types remain in detail, with a Hub-provided is_internal flag.
+Other Elleholms customer names remain in the external selection.
