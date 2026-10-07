@@ -5,14 +5,19 @@ order number, article date and actual invoice date (`Fakturadatum`, falling back
 to the export's `Fakturerad` date). The financial rule treating registered revenue
 as invoiced does not change these source dates or feed this KPI.
 
-The KPI is an unweighted mean of calendar days from article date to invoice date,
-once per order and performed day within the exact active report selection.
+The KPI is an unweighted mean of calendar days from order completion to invoice date,
+once per order. `Slutdatum`, then Workify `PlaneradKlart`, provides the completion
+date. Only a missing end date falls back to the last article date. Invalid end
+dates, conflicting end dates and completion before the last article are excluded.
+Orders are selected through article rows in the exact active report selection.
+The whole prepared order supplies its dates, including rows outside selected
+months or units, so a filter cannot move completion backwards.
 Duplicate article lines and the derived material/transport split do not add weight.
 Uninvoiced lines are excluded. Negative, invalid and conflicting invoice dates are
 excluded and counted as date anomalies. No clamping to zero or absolute values.
 From 2026-10-07, zero-day invoices remain in the detail table but are excluded
-from the average. `averaged_order_days` is the positive-day denominator;
-`zero_order_days` reports the excluded zero-day count. An all-zero selection
+from the average. `averaged_orders` is the positive external-order denominator;
+`zero_orders` reports the excluded zero-day count. An all-zero selection
 returns a null average, never an invented zero.
 
 The overview card links to a paginated Dashboard report, retaining fiscal months,
@@ -45,3 +50,12 @@ including AB/STENA/service labels) identify internal transfers. Hub excludes the
 from the main positive-day average and returns a separate internal average and
 denominator. Both types remain in detail, with a Hub-provided is_internal flag.
 Other Elleholms customer names remain in the external selection.
+
+The Overview includes separate external and Elleholms Maskin invoice-time cards.
+Their links set `invoice_customer=external|internal`; Hub filters the paginated
+rows and returns `row_count` for that type. Summary columns retain both averages.
+Legacy order-day fields remain as compatibility aliases for older consumers;
+their values now represent orders, never order-day weighting. Both cards use the
+same prepared generation and daily report cache. Cache v6 invalidates old formulas.
+`supabase/tests/invoice_order_completion.sql` exercises weekly and cross-month
+orders, duplicate rows, fallback, exclusions and internal drilldown under rollback.
