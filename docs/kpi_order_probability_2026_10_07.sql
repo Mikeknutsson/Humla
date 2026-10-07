@@ -1,4 +1,4 @@
--- Hub order receipt inference, three-quarry fallback and ink/inkl transport recognition.
+-- Hub order receipt inference, three-quarry fallback and bundled source article detection.
 CREATE OR REPLACE FUNCTION private.hub_kpi_material_purchase_costs_v1(p_tenant_id uuid, p_row_ids uuid[])
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -40,7 +40,7 @@ begin
 ), raw as materialized(
  select r.*,case when coalesce(nullif(source_data->>'Kvantitet',''),'') ~ '^-?[0-9 ]+([.,][0-9]+)?$' then replace(replace(source_data->>'Kvantitet',' ',''),',','.')::numeric else quantity end effective_quantity,
  case when exists(select 1 from jsonb_array_elements(a.source_rows) e where trim(e->'values'->>'Namn') ilike 'Tippavgift%') then 'tipp_deponi'
- when exists(select 1 from jsonb_array_elements(a.source_rows) e where coalesce(e#>>'{values,Namn}',e->>'name','') ~* 'in[ck]l?[.]?[[:space:]]*transport')
+ when (exists(select 1 from jsonb_array_elements(a.source_rows) e where coalesce(e#>>'{values,Namn}',e->>'name','') ~* 'in[ck]l?[.]?[[:space:]]*transport') or concat_ws(' ',a.article_name,r.source_data->>'Artikelnamn',r.description) ~* 'in[ck]l?[.]?[[:space:]]*transport')
  and coalesce(r.source_data->>'Artikelnamn',r.description,'') ~* 'förstärkningslager|bärlager|slitlager|makadam|stenmjöl|råberg|dräneringsgrus|matjord|fyllnadsmaterial' then 'material'
  else a.revenue_category end category,
  (regexp_match(coalesce(r.source_data->>'Artikelnamn',r.description),'([0-9]+)[/-]([0-9]+)'))[1]||'-'||(regexp_match(coalesce(r.source_data->>'Artikelnamn',r.description),'([0-9]+)[/-]([0-9]+)'))[2] fraction,
@@ -56,7 +56,7 @@ begin
  left join order_receipts o on o.order_number=nullif(trim(r.source_data->>'Ordernummer'),'')
  left join order_comments c on c.order_number=nullif(trim(r.source_data->>'Ordernummer'),'')
  left join private.hub_kpi_internal_receipt_reads e on e.tenant_id=r.tenant_id and e.receipt_url=nullif(r.source_data->>'FilUrl','')
- left join lateral(select a.revenue_category,a.source_rows from public.kpi_workify_article_rules a where a.tenant_id=r.tenant_id and a.enabled and a.article_number=r.source_data->>'Artikelnummer' and a.valid_from<=r.occurred_on and (a.valid_to is null or a.valid_to>=r.occurred_on) order by a.valid_from desc,a.id limit 1)a on true
+ left join lateral(select a.revenue_category,a.source_rows,a.article_name from public.kpi_workify_article_rules a where a.tenant_id=r.tenant_id and a.enabled and a.article_number=r.source_data->>'Artikelnummer' and a.valid_from<=r.occurred_on and (a.valid_to is null or a.valid_to>=r.occurred_on) order by a.valid_from desc,a.id limit 1)a on true
  where r.tenant_id=p_tenant_id and r.id=any(p_row_ids) and r.data_kind='revenue' 
  ), scoped as(
  select r.*,case when cardinality(material_fractions)=1 and (material_fractions[1]=fraction or material_fractions[1]=regexp_replace(source_data->>'Artikelnummer','^[A-Za-z]+','') or (split_part(material_fractions[1],'-',1)=split_part(fraction,'-',1) and coalesce(source_data->>'Artikelnamn',description) ~ ('/'||split_part(material_fractions[1],'-',2)||'([^0-9]|$)'))) then material_fractions[1] else fraction end price_fraction,
