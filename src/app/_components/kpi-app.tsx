@@ -38,7 +38,7 @@ const UnitManager = dynamic(() => import('./unit-manager').then(m => m.UnitManag
 import type {KpiUnit,UnitReport} from '@/lib/kpi/units';
 
 export type Dashboard = {
-  invoice_lead_time?: {average_days:number|null;order_days:number;orders:number;invalid_order_days:number};
+  invoice_lead_time?: {average_days:number|null;order_days:number;averaged_order_days?:number;zero_order_days?:number;orders:number;invalid_order_days:number};
   material_separation?: {active:boolean;review_rows:number;split_rows:number};
   group_options?:string[];
   economic_units?:EconomicUnit[];
@@ -226,7 +226,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
     { label: "Inhyrd kapacitet", value: scopedOperationsUnavailable?"–":percentDisplay(hiredShare), icon: Truck, tone: "orange", detail: scopedOperationsUnavailable?"Kostnadsställesfördelad kapacitet är inte verifierad":`${currency.format(numeric(hiredCapacity?.hired_revenue))} av ${currency.format(numeric(hiredCapacity?.total_revenue))}` },
     { label: "Dieselkostnad av omsättning", value: metrics.diesel_share==null?"–":`${number.format(numeric(metrics.diesel_share))} %`, icon: Fuel, tone: "orange" },
     { label: "Intäktskopplad tid chaufför", value: scopedOperationsUnavailable?"–":percentDisplay(productivePercent), icon: Users, tone: "cyan", detail: scopedOperationsUnavailable?"Kostnadsställesfördelad förartid är inte verifierad":`${number.format(numeric(driverProductivity?.productive_hours))} h av ${number.format(numeric(driverProductivity?.total_hours))} h · ${number.format(numeric(driverProductivity?.unclassified_hours))} h oklassificerat` },
-    { label: "Genomsnittlig faktureringstid", value: dashboard.invoice_lead_time?.average_days == null ? "–" : `${number.format(dashboard.invoice_lead_time.average_days)} dagar`, icon: Gauge, tone: "blue", detail: dashboard.invoice_lead_time ? `${dashboard.invoice_lead_time.invalid_order_days>0?"Preliminärt · ":""}${number.format(dashboard.invoice_lead_time.order_days)} utförda orderdagar · ${number.format(dashboard.invoice_lead_time.invalid_order_days)} datumavvikelser uteslutna` : "Inväntar fakturadatum" },
+    { label: "Genomsnittlig faktureringstid", value: dashboard.invoice_lead_time?.average_days == null ? "–" : `${number.format(dashboard.invoice_lead_time.average_days)} dagar`, icon: Gauge, tone: "blue", detail: dashboard.invoice_lead_time ? `${dashboard.invoice_lead_time.invalid_order_days>0?"Preliminärt · ":""}${number.format(dashboard.invoice_lead_time.averaged_order_days??dashboard.invoice_lead_time.order_days)} orderdagar i snittet · 0 dagar räknas inte` : "Inväntar fakturadatum" },
   ];
 
   const selectedDefinition = DATA_KINDS[dataKind];

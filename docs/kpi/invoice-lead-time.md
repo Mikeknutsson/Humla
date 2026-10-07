@@ -10,6 +10,10 @@ once per order and performed day within the exact active report selection.
 Duplicate article lines and the derived material/transport split do not add weight.
 Uninvoiced lines are excluded. Negative, invalid and conflicting invoice dates are
 excluded and counted as date anomalies. No clamping to zero or absolute values.
+From 2026-10-07, zero-day invoices remain in the detail table but are excluded
+from the average. `averaged_order_days` is the positive-day denominator;
+`zero_order_days` reports the excluded zero-day count. An all-zero selection
+returns a null average, never an invented zero.
 
 The overview card links to a paginated Dashboard report, retaining fiscal months,
 cost centres, business groups and unit filters. The public RPC is an invoker and
