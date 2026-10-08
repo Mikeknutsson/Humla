@@ -335,6 +335,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
         <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>KPI</Link>
         <Link prefetch={false} className={view === "internal" ? "active" : ""} href={kpiHref("internal")} onClick={() => setMobileMenu(false)}><Truck size={18}/>Interna körningar</Link>
         <Link prefetch={false} className={view === "monthly" ? "active" : ""} href={kpiHref("monthly")} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Månadsrapport</Link>
+        {canManage&&<Link prefetch={false} href="/kpi/betalningsprognos" onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Betalningsprognos</Link>}
         <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
         <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
         {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
