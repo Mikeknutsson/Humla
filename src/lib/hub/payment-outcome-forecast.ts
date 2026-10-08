@@ -6,7 +6,7 @@ const name=(s:string)=>s.toLocaleLowerCase('sv-SE').normalize('NFKC').replace(/[
 /** Source customer names are adapted to payment policies only; no persistent identity guesses. */
 export function customerTerm(party:string){
  const n=name(party);
- if(/^stena(?:\s|$)/.test(n))return {code:'stena_month_end',days:45};
+ if(n==='elleholms maskin stena'||/^stena(?:\s|$)/.test(n))return {code:'stena_month_end',days:45};
  if(['linnestofta maskin','linnestofta maskin ab','thomas håkansson entreprenad','thomas håkansson entreprenad ab'].includes(n))return {code:'invoice_45',days:45};
  return {code:'invoice_30',days:30};
 }
@@ -65,7 +65,6 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  result.unknown=external.filter(r=>!Object.hasOwn(departments,r.center)).map(toPayment);result.overdue=[];
  result.historyCoverage={from:source.rows.length?source.rows.reduce((a,r)=>a<r.date?a:r.date,source.rows[0].date):'',to:source.rows.length?source.rows.reduce((a,r)=>a>r.date?a:r.date,source.rows[0].date):''};
  result.method=`Workify-intäkter och NeXT-kostnader, exklusive moms. Föregående års beräknade betalningsvecka × årets verksamhetsårstrend ${iso(trendStart)}–${iso(trendEnd)} jämfört med samma datum förra året. Registrerade externa rader räknas av från prognosen. Standard kund 30 dagar, Linnestofta Maskin och Thomas Håkansson Entreprenad 45 dagar från fakturadatum (annars leveransdatum som antagande). Stena: 45 kalenderdagar från sista dagen i leveransmånaden. Leverantörer: ${supplierDays} dagar som antagande. Interna körningar prognostiseras separat med sin egen historik och trend och ingår inte i externa belopp eller netto. Banksaldo och momsprognos ingår inte.`;
- if(source.rows.some(r=>r.internal&&name(r.party)==='elleholms maskin stena'))warnings.push('Elleholms Maskin (STENA) undantas som interna Workify-rader. Externa Stena-avräkningar behöver finnas som separat underlag.');
  if(result.weeks.some(w=>w.parts.some(p=>p.net===null)))warnings.push('En eller flera avdelningar saknar tillräckligt jämförbart underlag. Totalsiffror visas inte som kompletta när någon del saknas.');
  for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}
  if(source.review_rows)warnings.push(`${source.review_rows} importrader för granskning ingår inte; belopp ${round(source.review_amount)} kr.`);

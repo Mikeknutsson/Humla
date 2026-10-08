@@ -11,7 +11,7 @@ begin
   select f.cost_center center,'in'::text kind,f.occurred_on date,f.amount,
    coalesce(f.original->>'Kundnamn','') party,
    private.hub_kpi_workify_date_v1(coalesce(nullif(trim(f.original->>'Fakturadatum'),''),nullif(trim(f.original->>'Fakturerad'),''))) invoice_date,
-   coalesce(f.original->>'Kundnamn','')~*'^elleholms[[:space:]]+maskin' internal
+   private.hub_workify_customer_is_internal_v1(f.original->>'Kundnamn') internal
   from private.hub_kpi_prepared_facts f where f.generation_id=generation and f.tenant_id=p_tenant_id and f.source='Workify' and f.kind='revenue'
    and f.occurred_on between p_as_of-730 and p_as_of+90
  ), costs as (
