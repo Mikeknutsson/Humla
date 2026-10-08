@@ -33,23 +33,29 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  const sum=(rs:typeof rows,a:number,b:number)=>round(rs.filter(r=>r.dateValue>=a&&r.dateValue<=b).reduce((s,r)=>s+Number(r.amount),0));
  for(const w of result.weeks){
   const start=dateValue(w.from),end=dateValue(w.to);
-  for(const p of w.parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){
-   const group=external.filter(r=>r.center===p.center&&r.kind===kind);
+  for(const p of w.parts)for(const internalScope of [false,true])for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){
+   const group=rows.filter(r=>r.internal===internalScope&&r.center===p.center&&r.kind===kind);
    const dates=group.map(r=>r.dateValue),min=dates.length?Math.min(...dates):Infinity,max=dates.length?Math.max(...dates):-Infinity;
    const before=sum(group,previous(trendStart),previous(trendEnd)),current=sum(group,trendStart,trendEnd);
    const enough=group.length>0&&min<=previous(trendStart)&&max>=trendEnd;
    const factor=enough&&before>0?current/before:null;
    const baselineRows=group.filter(r=>{const n=dateValue(r.paymentDate);return n>=start-364*day&&n<=end-364*day});
    // Earliest source coverage must reach the source months that can feed this payment week.
-   const baselineCovered=min<=start-364*day-(kind==='in'?80:supplierDays)*day&&max>=end-364*day;
+   const paymentDates=group.map(r=>dateValue(r.paymentDate));
+   // Internal rows have their own actual assumed payment-date coverage, not the
+   // external Stena/customer lag envelope. Missing history is never treated as zero.
+   const baselineCovered=internalScope
+    ?paymentDates.length>0&&Math.min(...paymentDates)<=start-364*day&&Math.max(...paymentDates)>=end-364*day
+    :min<=start-364*day-(kind==='in'?80:supplierDays)*day&&max>=end-364*day;
    const baseline=baselineCovered?round(baselineRows.reduce((s,r)=>s+Number(r.amount),0)):null;
    const registered=group.filter(r=>r.dateValue<=now&&dateValue(r.paymentDate)>=start&&dateValue(r.paymentDate)<=end);
    const known=round(registered.reduce((s,r)=>s+Number(r.amount),0));
    const forecast=baseline!==null&&factor!==null?round(Math.max(0,baseline*factor-known)):null;
-   p[key]={known,forecast,total:forecast===null?null:round(known+forecast),baseline,factor};
+   const total=forecast===null?null:round(known+forecast);
+   if(internalScope)p.internal[key]=total;
+   else p[key]={known,forecast,total,baseline,factor};
   }
-  for(const p of w.parts){const internal=rows.filter(r=>r.internal&&r.center===p.center&&r.dateValue<=now&&dateValue(r.paymentDate)>=start&&dateValue(r.paymentDate)<=end);p.internal={incoming:round(internal.filter(r=>r.kind==='in').reduce((s,r)=>s+Number(r.amount),0)),outgoing:round(internal.filter(r=>r.kind==='out').reduce((s,r)=>s+Number(r.amount),0))};}
-  w.internal={incoming:round(w.parts.reduce((s,p)=>s+p.internal.incoming,0)),outgoing:round(w.parts.reduce((s,p)=>s+p.internal.outgoing,0))};
+  for(const k of ['incoming','outgoing'] as const)w.internal[k]=w.parts.some(p=>p.internal[k]===null)?null:round(w.parts.reduce((s,p)=>s+p.internal[k]!,0));
   for(const p of w.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
   for(const k of ['incoming','outgoing'] as const)w.total[k]={known:round(w.parts.reduce((s,p)=>s+p[k].known,0)),forecast:w.parts.some(p=>p[k].forecast===null)?null:round(w.parts.reduce((s,p)=>s+p[k].forecast!,0)),total:w.parts.some(p=>p[k].total===null)?null:round(w.parts.reduce((s,p)=>s+p[k].total!,0))};
   w.total.net=w.parts.some(p=>p.net===null)?null:round(w.parts.reduce((s,p)=>s+p.net!,0));
@@ -58,7 +64,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  result.excludedInternal=result.internal.history.length;
  result.unknown=external.filter(r=>!Object.hasOwn(departments,r.center)).map(toPayment);result.overdue=[];
  result.historyCoverage={from:source.rows.length?source.rows.reduce((a,r)=>a<r.date?a:r.date,source.rows[0].date):'',to:source.rows.length?source.rows.reduce((a,r)=>a>r.date?a:r.date,source.rows[0].date):''};
- result.method=`Workify-intäkter och NeXT-kostnader, exklusive moms. Föregående års beräknade betalningsvecka × årets verksamhetsårstrend ${iso(trendStart)}–${iso(trendEnd)} jämfört med samma datum förra året. Registrerade externa rader räknas av från prognosen. Standard kund 30 dagar, Linnestofta Maskin och Thomas Håkansson Entreprenad 45 dagar från fakturadatum (annars leveransdatum som antagande). Stena: 45 kalenderdagar från sista dagen i leveransmånaden. Leverantörer: ${supplierDays} dagar som antagande. Interna körningar undantas. Banksaldo och momsprognos ingår inte.`;
+ result.method=`Workify-intäkter och NeXT-kostnader, exklusive moms. Föregående års beräknade betalningsvecka × årets verksamhetsårstrend ${iso(trendStart)}–${iso(trendEnd)} jämfört med samma datum förra året. Registrerade externa rader räknas av från prognosen. Standard kund 30 dagar, Linnestofta Maskin och Thomas Håkansson Entreprenad 45 dagar från fakturadatum (annars leveransdatum som antagande). Stena: 45 kalenderdagar från sista dagen i leveransmånaden. Leverantörer: ${supplierDays} dagar som antagande. Interna körningar prognostiseras separat med sin egen historik och trend och ingår inte i externa belopp eller netto. Banksaldo och momsprognos ingår inte.`;
  if(source.rows.some(r=>r.internal&&name(r.party)==='elleholms maskin stena'))warnings.push('Elleholms Maskin (STENA) undantas som interna Workify-rader. Externa Stena-avräkningar behöver finnas som separat underlag.');
  if(result.weeks.some(w=>w.parts.some(p=>p.net===null)))warnings.push('En eller flera avdelningar saknar tillräckligt jämförbart underlag. Totalsiffror visas inte som kompletta när någon del saknas.');
  for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}

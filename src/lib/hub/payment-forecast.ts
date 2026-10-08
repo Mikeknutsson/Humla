@@ -37,10 +37,10 @@ export function paymentForecast(input:ForecastInput){
  const sum=(rows:Payment[],c:string,k:string,a:number,b:number)=>money(rows.filter(r=>r.center===c&&r.kind===k&&dateValue(r.date)>=a&&dateValue(r.date)<=b).reduce((s,r)=>s+r.amount,0));
  const covered=(a:number,b:number)=>hf!==null&&ht!==null&&hf<=a&&ht>=b;
  const recentStart=monday-91*day,recentEnd=monday-day;
- const trend=(c:string,k:string)=>{
+ const trend=(c:string,k:string,source=history)=>{
   if(!covered(recentStart-364*day,recentEnd)||!covered(recentStart,recentEnd))return null;
-  const previous=sum(history,c,k,recentStart-364*day,recentEnd-364*day);
-  return previous>0?sum(history,c,k,recentStart,recentEnd)/previous:null;
+  const previous=sum(source,c,k,recentStart-364*day,recentEnd-364*day);
+  return previous>0?sum(source,c,k,recentStart,recentEnd)/previous:null;
  };
  const weeks=Array.from({length:4},(_,i)=>{
   const start=monday+(i+4+periodOffset)*7*day,end=start+6*day;
@@ -57,12 +57,19 @@ export function paymentForecast(input:ForecastInput){
     return {known,forecast,total:forecast===null?null:money(known+forecast),baseline,factor};
    };
    const incoming=calc('in'),outgoing=calc('out');
-   return {center,name,incoming,outgoing,internal:{incoming:sum(input.ledger.filter(r=>r.internal),center,'in',start,end),outgoing:sum(input.ledger.filter(r=>r.internal),center,'out',start,end)},net:incoming.total===null||outgoing.total===null?null:money(incoming.total-outgoing.total)};
+   const internalEstimate=(kind:'in'|'out'):number|null=>{
+    const factor=trend(center,kind,input.history.filter(r=>r.internal));
+    const lag=basis==='booked'?(kind==='in'?inDays:outDays)*day:0;
+    if(factor===null||!covered(start-364*day-lag,end-364*day-lag))return null;
+    const baseline=sum(input.history.filter(r=>r.internal),center,kind,start-364*day-lag,end-364*day-lag);
+    const known=sum(input.ledger.filter(r=>r.internal),center,kind,start,end);
+    return money(known+Math.max(0,money(baseline*factor)-known));
+   };
+   return {center,name,incoming,outgoing,internal:{incoming:internalEstimate('in'),outgoing:internalEstimate('out')},net:incoming.total===null||outgoing.total===null?null:money(incoming.total-outgoing.total)};
   });
   const aggregate=(kind:'incoming'|'outgoing')=>({known:money(parts.reduce((s,p)=>s+p[kind].known,0)),forecast:parts.some(p=>p[kind].forecast===null)?null:money(parts.reduce((s,p)=>s+p[kind].forecast!,0)),total:parts.some(p=>p[kind].total===null)?null:money(parts.reduce((s,p)=>s+p[kind].total!,0))});
-  const internalRows=input.ledger.filter(r=>r.internal);
-  const internalFor=(kind:'in'|'out')=>money(Object.keys(departments).reduce((s,c)=>s+sum(internalRows,c,kind,start,end),0));
-  return {from:iso(start),to:iso(end),year,number,parts,internal:{incoming:internalFor('in'),outgoing:internalFor('out')},total:{incoming:aggregate('incoming'),outgoing:aggregate('outgoing'),net:parts.some(p=>p.net===null)?null:money(parts.reduce((s,p)=>s+p.net!,0))}};
+  const internalFor=(kind:'incoming'|'outgoing')=>parts.some(p=>p.internal[kind]===null)?null:money(parts.reduce((s,p)=>s+p.internal[kind]!,0));
+  return {from:iso(start),to:iso(end),year,number,parts,internal:{incoming:internalFor('incoming'),outgoing:internalFor('outgoing')},total:{incoming:aggregate('incoming'),outgoing:aggregate('outgoing'),net:parts.some(p=>p.net===null)?null:money(parts.reduce((s,p)=>s+p.net!,0))}};
  });
  const internal={ledger:input.ledger.filter(r=>r.internal),history:input.history.filter(r=>r.internal)};
  return {asOf:input.asOf,weeks,internal,unknown:ledger.filter(r=>!Object.hasOwn(departments,r.center)),overdue:ledger.filter(r=>dateValue(r.date)<now),excludedInternal:internal.ledger.length+internal.history.length,historyCoverage:{from:input.historyFrom,to:input.historyTo},method:`${basis==='booked'?`Bokfört utfall med antagen betalningstid ${inDays} dagar kund / ${outDays} dagar leverantör`:'Betalningshistorik'} 52 veckor bakåt × trend för 13 avslutade veckor. Interna körningar och överföringar ingår varken i extern reskontra, historisk bas eller årets trend. Känd reskontra dras av från prognosen. Belopp inklusive moms; öppet restbelopp, kreditposter med minus. Förfallodatum är ett antagande om betalningsdag. Ingen banksaldoprognos.`};

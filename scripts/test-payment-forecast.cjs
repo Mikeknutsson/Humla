@@ -26,4 +26,4 @@ console.log('Payment forecast checks passed (week/year boundary, trend, totals, 
 
 const next=paymentForecast({...data,periodOffset:4});assert.equal(next.weeks[0].number,9);assert.equal(next.weeks[3].number,12);const back=paymentForecast({...data,periodOffset:-4});assert.equal(back.weeks[0].number,1);assert.equal(back.weeks[3].number,4);assert.throws(()=>paymentForecast({...data,periodOffset:1.5}),/prognosperiod/);const excluded=paymentForecast({...data,ledger:[...data.ledger,row('workshop','40','in','2026-01-26',999999)]});assert.equal(excluded.weeks[0].total.incoming.total,2400);assert.equal(excluded.weeks[0].parts.length,2);
 
-assert.equal(withInternal.weeks[0].parts.find(p=>p.center==='30').internal.incoming,500);assert.equal(withInternal.weeks[0].internal.incoming,500);
+assert.equal(withInternal.weeks[0].parts.find(p=>p.center==='30').internal.incoming,55555.56);assert.equal(withInternal.weeks[0].internal.incoming,null);assert.equal(withInternal.weeks[0].total.incoming.total,2400);
