@@ -1,6 +1,5 @@
 'use client';
 import {useState} from 'react';
-import Link from 'next/link';
 import {parsePaymentCsv} from '@/lib/hub/payment-import';
 import type {Payment,PaymentForecast} from '@/lib/hub/payment-forecast';
 const money=(n:number|null)=>n===null?'Underlag saknas':new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0}).format(n);
@@ -31,8 +30,7 @@ export function PaymentForecastWorkspace(){
   const csv=rows.map(row=>row.map(v=>'"'+String(typeof v==='number'?String(v).replace('.',','):String(v).replace(/^[=+@-]/,"'$&")).replaceAll('"','""')+'"').join(';')).join('\r\n');
   download(`Betalningsprognos_${result.asOf}.csv`,'\uFEFF'+csv);
  }
- return <main className="content" style={{maxWidth:1400,margin:'auto',padding:24}}>
-  <Link href="/kpi" prefetch={false}>← Översikt</Link><h1>Betalningsprognos till ekonomi</h1>
+ return <div className="content" style={{maxWidth:1400,margin:'auto'}}>
   <p>Hela avdelningen: <strong>30 Transport · 20 Sortergården · 40 Verkstad</strong>. Vecka 1 visar vecka 5–8. Fordons- och projektfilter används inte.</p>
   <section className="panel"><h2>1. Underlag</h2><p>Automatisk reskontrakoppling är inte ansluten. Importera en komplett öppen kund- och leverantörsreskontra per rapportdatum. Ange återstående betalning <strong>inklusive moms</strong>. Markera interna överföringar.</p>
    <label>Rapportdatum <input type="date" disabled={busy} value={asOf} onChange={e=>{invalidate();setAsOf(e.target.value)}}/></label>
@@ -50,5 +48,5 @@ export function PaymentForecastWorkspace(){
    {['total','30','20','40'].map(center=><section className="panel" key={center}><h2>{center==='total'?'Sammanlagt — 30 + 20 + 40':result.weeks[0].parts.find(p=>p.center===center)?.name+' — KST '+center}</h2><div style={{overflowX:'auto'}}><table className="data-table"><thead><tr><th scope="col">Betalningar</th>{result.weeks.map(w=><th scope="col" key={w.from}>V{w.number} / {w.year}<br/><small>{w.from} – {w.to}</small></th>)}</tr></thead><tbody>{[['incoming','known','Kundinbetalningar — kända'],['incoming','forecast','Kundinbetalningar — prognos'],['outgoing','known','Leverantörsutbetalningar — kända'],['outgoing','forecast','Leverantörsutbetalningar — prognos'],['net','','Netto']].map(([kind,field,label])=><tr key={label}><th scope="row">{label}</th>{result.weeks.map(w=>{const p=center==='total'?w.total:w.parts.find(p=>p.center===center)!;const v=kind==='net'?p.net:p[kind as 'incoming'|'outgoing'][field as 'known'|'forecast'];return <td key={w.from}>{money(v)}</td>})}</tr>)}</tbody></table></div></section>)}
    <section className="panel"><h2>Interna körningar — särredovisning</h2><p>Beloppen nedan avser hela respektive importunderlaget, inte bara de fyra prognosveckorna. De ingår inte i prognosen, föregående års bas eller årets trend. Externa kostnader för att utföra interna körningar ska fortfarande finnas med.</p><div style={{overflowX:'auto'}}><table className="data-table"><thead><tr><th scope="col">Underlag</th><th scope="col">KST</th><th scope="col">Intern intäkt</th><th scope="col">Intern kostnad</th></tr></thead><tbody>{Object.entries(result.internal).flatMap(([source,items])=>['30','20','40'].map(center=><tr key={source+center}><th scope="row">{source==='ledger'?'Reskontra':'Historiskt utfall'}</th><td>{center}</td><td>{money(items.filter(r=>r.center===center&&r.kind==='in').reduce((sum,r)=>sum+r.amount,0))}</td><td>{money(items.filter(r=>r.center===center&&r.kind==='out').reduce((sum,r)=>sum+r.amount,0))}</td></tr>))}</tbody></table></div><p>Samtliga interna rader, även utan rätt kostnadsställe, finns i exporten.</p></section>
   </>}
- </main>;
+ </div>;
 }
