@@ -18,7 +18,7 @@ export async function POST(req:Request){
    if(!member)throw Error('Arbetsyta saknas');
    const {data,error}=await db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf});
    if(error||!data)return Response.json({error:'Workify/NeXT-underlaget kunde inte hämtas från Hubben.'},{status:503});
-   return Response.json(outcomeForecast(data as OutcomeSource,body.asOf,body.supplierDays??30),{headers:{'Cache-Control':'no-store'}});
+   return Response.json(outcomeForecast(data as OutcomeSource,body.asOf,body.supplierDays??30,body.periodOffset??0),{headers:{'Cache-Control':'no-store'}});
   }
   return Response.json(paymentForecast(body as ForecastInput),{headers:{'Cache-Control':'no-store'}});
  }catch(e){return Response.json({error:e instanceof Error?e.message:'Ogiltigt underlag'},{status:400})}

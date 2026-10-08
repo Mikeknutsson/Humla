@@ -20,7 +20,7 @@ export function expectedPaymentDate(row:Outcome,supplierDays=30){
  return iso(anchor+(row.kind==='in'?term.days:supplierDays)*day);
 }
 export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number}};
-export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30):AutomaticForecast{
+export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0):AutomaticForecast{
  const now=dateValue(asOf);if(!Number.isInteger(supplierDays)||supplierDays<0||supplierDays>180)throw Error('Leverantörstid måste vara 0–180 dagar');
  const monthStart=Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),1),trendEnd=monthStart-day;
  const endDate=new Date(trendEnd),fyYear=endDate.getUTCMonth()>=8?endDate.getUTCFullYear():endDate.getUTCFullYear()-1;
@@ -29,7 +29,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  const rows=source.rows.map((r,i)=>({...r,id:'outcome:'+i,dateValue:dateValue(r.date),paymentDate:expectedPaymentDate(r,supplierDays)}));
  const external=rows.filter(r=>!r.internal);
  const toPayment=(r:typeof rows[number]):Payment=>({id:r.id,center:r.center,kind:r.kind,date:r.paymentDate,amount:Number(r.amount),internal:r.internal});
- const result=paymentForecast({asOf,ledger:[],history:[],historyFrom:'',historyTo:''});
+ const result=paymentForecast({asOf,periodOffset,ledger:[],history:[],historyFrom:'',historyTo:''});
  const sum=(rs:typeof rows,a:number,b:number)=>round(rs.filter(r=>r.dateValue>=a&&r.dateValue<=b).reduce((s,r)=>s+Number(r.amount),0));
  for(const w of result.weeks){
   const start=dateValue(w.from),end=dateValue(w.to);
@@ -48,6 +48,8 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
    const forecast=baseline!==null&&factor!==null?round(Math.max(0,baseline*factor-known)):null;
    p[key]={known,forecast,total:forecast===null?null:round(known+forecast),baseline,factor};
   }
+  for(const p of w.parts){const internal=rows.filter(r=>r.internal&&r.center===p.center&&r.dateValue<=now&&dateValue(r.paymentDate)>=start&&dateValue(r.paymentDate)<=end);p.internal={incoming:round(internal.filter(r=>r.kind==='in').reduce((s,r)=>s+Number(r.amount),0)),outgoing:round(internal.filter(r=>r.kind==='out').reduce((s,r)=>s+Number(r.amount),0))};}
+  w.internal={incoming:round(w.parts.reduce((s,p)=>s+p.internal.incoming,0)),outgoing:round(w.parts.reduce((s,p)=>s+p.internal.outgoing,0))};
   for(const p of w.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
   for(const k of ['incoming','outgoing'] as const)w.total[k]={known:round(w.parts.reduce((s,p)=>s+p[k].known,0)),forecast:w.parts.some(p=>p[k].forecast===null)?null:round(w.parts.reduce((s,p)=>s+p[k].forecast!,0)),total:w.parts.some(p=>p[k].total===null)?null:round(w.parts.reduce((s,p)=>s+p[k].total!,0))};
   w.total.net=w.parts.some(p=>p.net===null)?null:round(w.parts.reduce((s,p)=>s+p.net!,0));
