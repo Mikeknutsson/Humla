@@ -21,4 +21,9 @@ if(process.argv[2]){const actual=outcomeForecast(JSON.parse(fs.readFileSync(proc
 
 const withoutWorkshop=outcomeForecast({...source,rows:[...rows,row('40','in','2026-10-05',999999)]},'2026-10-08');assert.equal(withoutWorkshop.weeks[0].total.incoming.total,2400);assert.equal(withoutWorkshop.weeks[0].parts.length,2);const shifted=outcomeForecast(source,'2026-10-08',30,4);assert.equal(shifted.weeks[0].number,49);assert.equal(shifted.weeks[3].number,52);assert.equal(shifted.automatic.trendFrom,'2026-09-01');
 
-const internalWeek=outcomeForecast({...source,rows:[...rows,row('30','in','2026-10-05',500,'Elleholms Maskin AB',null,true)]},'2026-10-08');assert.equal(internalWeek.weeks[0].internal.incoming,500);assert.equal(internalWeek.weeks[0].total.net,outcomeForecast(source,'2026-10-08').weeks[0].total.net);
+const internalHistory=rows.filter(r=>!r.internal).map(r=>({...r,amount:r.amount/2,party:'Elleholms Maskin AB',internal:true}));
+const internalWeek=outcomeForecast({...source,rows:[...rows.filter(r=>!r.internal),...internalHistory,row('30','in','2026-10-05',500,'Elleholms Maskin AB',null,true)]},'2026-10-08');
+assert.equal(internalWeek.weeks[0].parts.find(p=>p.center==='30').internal.incoming,600);assert.equal(internalWeek.weeks[0].internal.incoming,1200);
+assert.equal(internalWeek.weeks[0].total.net,outcomeForecast(source,'2026-10-08').weeks[0].total.net);
+const noInternalHistory=outcomeForecast({...source,rows:rows.filter(r=>!r.internal)},'2026-10-08');assert.equal(noInternalHistory.weeks[0].internal.incoming,null);
+const extraInternal=outcomeForecast({...source,rows:[...rows.filter(r=>!r.internal),...internalHistory,row('30','in','2026-10-05',1000,'Elleholms Maskin AB',null,true)]},'2026-10-08');assert.equal(extraInternal.weeks[0].parts.find(p=>p.center==='30').internal.incoming,1025);assert.equal(extraInternal.weeks[0].total.net,internalWeek.weeks[0].total.net);
