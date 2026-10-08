@@ -1,4 +1,5 @@
 import {dateValue,departments,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
+import {payrollForecast,type PayrollSource} from './payment-payroll-forecast';
 export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean};
 export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number};
 const day=86400000,iso=(n:number)=>new Date(n).toISOString().slice(0,10),round=(n:number)=>Math.round(n*100)/100;
@@ -19,8 +20,8 @@ export function expectedPaymentDate(row:Outcome,supplierDays=30){
  const anchor=row.kind==='in'&&row.invoiceDate?dateValue(row.invoiceDate):delivery;
  return iso(anchor+(row.kind==='in'?term.days:supplierDays)*day);
 }
-export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number}};
-export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0):AutomaticForecast{
+export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;payroll?:ReturnType<typeof payrollForecast>}};
+export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0,payrollSource?:PayrollSource):AutomaticForecast{
  const now=dateValue(asOf);if(!Number.isInteger(supplierDays)||supplierDays<0||supplierDays>180)throw Error('Leverantörstid måste vara 0–180 dagar');
  const monthStart=Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),1),trendEnd=monthStart-day;
  const endDate=new Date(trendEnd),fyYear=endDate.getUTCMonth()>=8?endDate.getUTCFullYear():endDate.getUTCFullYear()-1;
@@ -31,6 +32,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  const toPayment=(r:typeof rows[number]):Payment=>({id:r.id,center:r.center,kind:r.kind,date:r.paymentDate,amount:Number(r.amount),internal:r.internal});
  const result=paymentForecast({asOf,periodOffset,ledger:[],history:[],historyFrom:'',historyTo:''});
  const sum=(rs:typeof rows,a:number,b:number)=>round(rs.filter(r=>r.dateValue>=a&&r.dateValue<=b).reduce((s,r)=>s+Number(r.amount),0));
+ const payroll=payrollSource?payrollForecast(payrollSource,asOf,result.weeks):undefined;
  for(const w of result.weeks){
   const start=dateValue(w.from),end=dateValue(w.to);
   for(const p of w.parts)for(const internalScope of [false,true])for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){
@@ -56,6 +58,12 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
    else p[key]={known,forecast,total,baseline,factor};
   }
   for(const k of ['incoming','outgoing'] as const)w.internal[k]=w.parts.some(p=>p.internal[k]===null)?null:round(w.parts.reduce((s,p)=>s+p.internal[k]!,0));
+  if(payroll){const salaryWeek=payroll.weeks.find(s=>s.from===w.from)!;w.total.payroll=salaryWeek.total;
+   for(const p of w.parts){p.payroll=salaryWeek.parts.find(s=>s.center===p.center)!.amount;
+    p.outgoing.forecast=p.outgoing.forecast===null||p.payroll===null?null:round(p.outgoing.forecast+p.payroll);
+    p.outgoing.total=p.outgoing.total===null||p.payroll===null?null:round(p.outgoing.total+p.payroll);
+   }
+  }
   for(const p of w.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
   for(const k of ['incoming','outgoing'] as const)w.total[k]={known:round(w.parts.reduce((s,p)=>s+p[k].known,0)),forecast:w.parts.some(p=>p[k].forecast===null)?null:round(w.parts.reduce((s,p)=>s+p[k].forecast!,0)),total:w.parts.some(p=>p[k].total===null)?null:round(w.parts.reduce((s,p)=>s+p[k].total!,0))};
   w.total.net=w.parts.some(p=>p.net===null)?null:round(w.parts.reduce((s,p)=>s+p.net!,0));
@@ -68,5 +76,6 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  if(result.weeks.some(w=>w.parts.some(p=>p.net===null)))warnings.push('En eller flera avdelningar saknar tillräckligt jämförbart underlag. Totalsiffror visas inte som kompletta när någon del saknas.');
  for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}
  if(source.review_rows)warnings.push(`${source.review_rows} importrader för granskning ingår inte; belopp ${round(source.review_amount)} kr.`);
- return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays}};
+ if(payroll){warnings.push(...payroll.warnings);result.method+=' Löner: föregående månads TransPA-bruttolöneschablon betalas den 25:e; egen historik/trend eller tydligt märkt senaste-månad-reserv. PO-pålägg ingår inte i löneutbetalningen.';}
+ return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,payroll}};
 }

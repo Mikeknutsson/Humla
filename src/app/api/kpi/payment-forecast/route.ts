@@ -1,6 +1,7 @@
 import {createClient} from '@/lib/supabase/server';
 import {paymentForecast,type ForecastInput} from '@/lib/hub/payment-forecast';
 import {outcomeForecast,type OutcomeSource} from '@/lib/hub/payment-outcome-forecast';
+import type {PayrollSource} from '@/lib/hub/payment-payroll-forecast';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 export const maxDuration=60;
@@ -16,9 +17,14 @@ export async function POST(req:Request){
   const body=JSON.parse(text);
   if(body.mode==='automatic'){
    if(!member)throw Error('Arbetsyta saknas');
-   const {data,error}=await db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf});
+   const [{data,error},salary]=await Promise.all([
+    db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf}),
+    db.rpc('hub_payment_payroll_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf})
+   ]);
    if(error||!data)return Response.json({error:'Workify/NeXT-underlaget kunde inte hämtas från Hubben.'},{status:503});
-   return Response.json(outcomeForecast(data as OutcomeSource,body.asOf,body.supplierDays??30,body.periodOffset??0),{headers:{'Cache-Control':'no-store'}});
+   if(salary.error||!salary.data)return Response.json({error:'TransPA-löneunderlaget kunde inte hämtas från Hubben.'},{status:503});
+   if(data.synced_at!==salary.data.synced_at)return Response.json({error:'Hubben uppdaterades under hämtningen. Hämta underlaget igen.'},{status:503});
+   return Response.json(outcomeForecast(data as OutcomeSource,body.asOf,body.supplierDays??30,body.periodOffset??0,salary.data as PayrollSource),{headers:{'Cache-Control':'no-store'}});
   }
   return Response.json(paymentForecast(body as ForecastInput),{headers:{'Cache-Control':'no-store'}});
  }catch(e){return Response.json({error:e instanceof Error?e.message:'Ogiltigt underlag'},{status:400})}

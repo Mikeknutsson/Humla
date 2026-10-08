@@ -1,5 +1,5 @@
 const fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm'),assert=require('node:assert/strict');
-function load(file){const exports={};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(code,{exports,require:p=>p==='./payment-forecast'?load('src/lib/hub/payment-forecast.ts'):require(p),Date,Set,Map,Number,Math,Object,Array,Error});return exports}
+function load(file){const exports={};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(code,{exports,require:p=>p.startsWith('./payment-')?load('src/lib/hub/'+p.slice(2)+'.ts'):require(p),Date,Set,Map,Number,Math,Object,Array,Error});return exports}
 const {customerTerm,expectedPaymentDate,outcomeForecast}=load('src/lib/hub/payment-outcome-forecast.ts');
 const row=(center,kind,date,amount,party='Kund AB',invoiceDate=null,internal=false)=>({center,kind,date,amount,party,invoiceDate,internal});
 assert.equal(customerTerm('Linnestofta Maskin AB').days,45);assert.equal(customerTerm('Thomas Håkansson Entreprenad').days,45);assert.equal(customerTerm('Kenny Håkansson').days,30);assert.equal(customerTerm('Elleholms Maskin (STENA)').code,'stena_month_end');
