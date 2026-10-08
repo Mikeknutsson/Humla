@@ -1,5 +1,17 @@
 # Avdelningens betalningsprognos – första version
 
+## Current default: Workify and NeXT outcome forecast
+
+No upload required: Dashboard calls the permission-guarded `hub_payment_outcome_source_v1` RPC. Revenue comes from the active prepared Workify snapshot; cost comes from valid NeXT import rows before vehicle-result/Piusi/material filters. Date-versioned project classification is used; conflicting cost-center classifications remain unclassified. Source rows are aggregated before leaving the database. Existing records and KPI reports are not modified.
+
+Customer terms: 30 calendar days from invoice date normally; 45 for Linnestofta Maskin AB and Thomas Håkansson Entreprenad (including explicit AB aliases). Stena names beginning with Stena use 45 calendar days after the last delivery-month day, regardless of invoice date; deliveries in the same month land on the same assumed settlement date. Missing invoice dates use delivery date as an explicit assumption. No bank-day or unverified payment-status inference. Internal Elleholms customers, including Elleholms Maskin (STENA), remain excluded and separately shown; external Stena settlements need external source evidence.
+
+`payment-outcome-forecast.ts` computes trends from completed months in the current September–August fiscal year, compared with identical dates last year, by cost center and direction. Prior comparable payment weeks are aligned 364 days back; existing registered outcomes with estimated payment dates in the target week reduce the forecast remainder. Department-specific source date coverage is checked; missing/sparse comparison coverage produces null, including totals when any department is incomplete. Coverage is an availability check, not an audited completeness certification. No automated VAT uplift: outcomes are ex VAT and the report explicitly distinguishes estimated payments from real reskontra. Supplier payment lag is a separately editable assumption, initially 30 days.
+
+Validated on 8,992 aggregated live-source rows as of 2026-10-08. Cost-center 20 cost coverage ends 2026-09-11, cost-center 40 cost coverage ends 2026-09-04, and 40 lacks external Workify revenue. These remain incomplete, rather than zero or an invented trend. Tests cover terms, monthly Stena aggregation, leap/year boundaries, registered remainder, internal exclusions and missing departments.
+
+The following describes the optional manual CSV mode, retained as a fallback.
+
 Route: `/kpi/betalningsprognos`. Whole-department scope: cost centers 30 Transport, 20 Sortergården and 40 Verkstad, individually and summed. No inherited KPI vehicle/project filters. Both page and API require active tenant membership and `kpi.manage`.
 
 ## Calculation owned by Hub
