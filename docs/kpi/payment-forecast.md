@@ -12,7 +12,7 @@ Validated on 8,992 aggregated live-source rows as of 2026-10-08. Cost-center 20 
 
 The following describes the optional manual CSV mode, retained as a fallback.
 
-Route: `/kpi/betalningsprognos`. Whole-department scope: cost centers 30 Transport, 20 Sortergården and 40 Verkstad, individually and summed. No inherited KPI vehicle/project filters. Both page and API require active tenant membership and `kpi.manage`.
+Route: `/kpi/betalningsprognos`. Whole-department scope: cost centers 30 Transport, 20 Sortergården only, individually and summed. No inherited KPI vehicle/project filters. Both page and API require active tenant membership and `kpi.manage`.
 
 ## Calculation owned by Hub
 
@@ -31,3 +31,9 @@ Internal runs/transfers are separately shown per cost center and source dataset 
 Excel-compatible CSV contains all four views, report date, provenance filenames, assumptions, overdue and unassigned rows. Not an XLSX workbook with separate tabs. No automatic reskontra ingestion, stored weekly snapshots or unattended delivery yet. Uploaded source rows are request-scoped, not persisted. No bank balance, payroll/tax/loan completeness assertion, or automatic VAT calculation. Historical period is user-attested; not independently verified against accounting controls. API is origin-checked and not cacheable.
 
 Tests: `node scripts/test-payment-forecast.cjs`; TypeScript: `npx tsc --noEmit`. Public release requires verified access to existing Vercel Humla project; do not register a replacement project or publish unrelated dirty changes. Browser/authenticated integration flow and actual data remain to be verified.
+
+## Period navigation and department scope
+
+Payment forecast includes only 30 Transport and 20 Sortergården. KST 40 is excluded from totals and remains outside-scope source data. The initial window is ISO weeks +4 through +7. Previous/next move the four-week window by four weeks without changing the report date, source cutoff or trend period. The API validates the week offset within ±104 weeks. Summary rows appear first (customer forecast, cost forecast, net); registered-source rows follow in regular weight. CSV columns use the same order.
+
+Internal revenue and costs are shown in regular-weight rows directly under the three summary rows, per department and total. They are registered source amounts assigned to the displayed payment weeks (estimated dates in automatic mode); they are excluded from external forecasts, trend and net.
