@@ -1,5 +1,15 @@
 # Interna körningar / ekonomins omföringsunderlag
 
+## Simplified primary view (2026-10-09)
+
+Dashboard now displays exactly two period totals: KST 10 Entreprenad (cost) → KST 30 Transport (income), and KST 10 Entreprenad (cost) → KST 20 Sortergården (income). Only period/month filters are inherited; carrier, category and other cost-center filters do not hide either requested transfer. Both totals are clickable to show included rows. CSV exports the same two totals and their evidence, with excluded counts and a combined sum. No purchase-price RPC or vehicle/project grouping is needed in this view.
+
+The backend projection reuses the existing Hub read RPC and finished-row checks. Credits retain their sign. Review/changed/unclassified/unsafe tipping rows remain excluded and are disclosed; unresolved income KSTs are never guessed. Existing exported/posted evidence remains part of period totals. Summary downloads are read-only and are not new accounting instructions: existing ledger reservations, booking references, status and legacy detailed export APIs remain intact. No KPI revenue or cash-flow amount is added by this change.
+
+The historical detailed workflow below remains available in the API, not the primary tab.
+
+Purchase pricing work remains accessible in a separate expandable, lazy-loaded section, using the existing purchase RPC and Excel evidence export without changing its pricing rules. It covers all internal material/tipping rows in the period, clearly labelled separately from the two KST sums. Existing receipt readings, supplier price lists, preliminary flags and missing-price guards are preserved. Opening purchase evidence does not change transfer totals or ledger status.
+
 Dashboard: `/kpi?view=internal`. Exact Workify customer `Elleholms Maskin AB`; STENA excluded. Period follows occurred_on / Artikeldatum, including selected fiscal months. Separate transport/material/tipp categories use dated Hub article rules. Missing categories are not guessed.
 
 Source and receiver centers are separate: dated vehicle registration classification versus dated Littranummer project classification. Canonical Vehicle/Project object IDs resolve only through existing confirmed Hub identities; ambiguous or absent links remain reviewable in the existing Control Panel. No new guessed identity registry, automatic BAS account mapping or bookkeeping is introduced.

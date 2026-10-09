@@ -1,5 +1,6 @@
 import {createClient} from '@/lib/supabase/server';
 import {internalQuery,transferWorkbook,transferGroups,transferTotals,finishedRows,type InternalRow} from '@/lib/kpi/internal-transfers';
+import {internalCenterSummary,internalCenterSummaryCsv} from '@/lib/kpi/internal-center-summary';
 export const runtime='nodejs';export const maxDuration=60;
 async function context(){const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return null;const {data:m}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();return m?{db,tenant:m.tenant_id}:null;}
 const headers={'Cache-Control':'private, no-store'};
@@ -8,8 +9,14 @@ export async function GET(req:Request){
  const ctx=await context();if(!ctx)return Response.json({error:'Inloggning och arbetsyta krävs'},{status:401});
  try{const p=new URL(req.url).searchParams;
   if(p.has('export_id')){const id=p.get('export_id')!;if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Ogiltigt export-ID');const {data,error}=await ctx.db.from('kpi_internal_transfer_ledger').select('snapshot').eq('tenant_id',ctx.tenant).eq('export_id',id).limit(2001);if(error||!data?.length) return Response.json({error:'Export saknas eller åtkomst nekad'},{status:404});if(data.length>2000)throw Error('Exportgränsen överskreds');return download(data.map(r=>r.snapshot as InternalRow),id);}
-  const {data,error}=await ctx.db.rpc('hub_kpi_internal_transfers_with_purchase_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
+  const simple=p.get('view')==='summary';
+  const {data,error}=await ctx.db.rpc(simple?'hub_kpi_internal_transfers_v1':'hub_kpi_internal_transfers_with_purchase_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
   if(error)return Response.json({error:'Underlaget kunde inte läsas. Kontrollera period och KPI-behörighet.'},{status:403});
+  if(simple){
+   const summary=internalCenterSummary(data.rows as InternalRow[]);
+   if(p.get('download')==='summary')return new Response(internalCenterSummaryCsv(summary,p.get('from')!,p.get('to')!),{headers:{...headers,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="humla-interna-kst.csv"'}});
+   return Response.json(summary,{headers});
+  }
   for(const key of ['from_center','to_center'])if(p.has(key)&&!['10','20','30','40','50','60','90'].includes(p.get(key)!))throw Error('Invalid center');
   const filteredRows=(data.rows as InternalRow[]).filter(r=>(!p.get('from_center')||r.receiver_center===p.get('from_center'))&&(!p.get('to_center')||r.source_center===p.get('to_center')));
   if(p.get('download')==='purchase'){
