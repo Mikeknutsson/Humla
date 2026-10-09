@@ -8,6 +8,7 @@ import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
 import {ProjectInternalEvidence} from '@/app/_components/project-internal-evidence';
 import {ProjectCostCenterSelect} from '@/app/_components/project-cost-center-select';
 import {ProjectReportExport} from '@/app/_components/project-report-export';
+import {ProjectReportLoading} from '@/app/_components/project-report-loading';
 import type {ProjectReport} from '@/lib/hub/project-report';
 import styles from './project-report.module.css';
 export const dynamic='force-dynamic';
@@ -28,17 +29,19 @@ export default async function Page({searchParams}:{searchParams:Promise<Record<s
  const query=projectPeriodParams(selection);
  for(const [k,v] of Object.entries({center,manager,project,kind,search:q.search}))if(v)query.set(k,v);
  for(const g of groups)query.append('group',g);
+ const firstMonth=selection.from.slice(0,7)+'-01',lastDay=new Date(Date.UTC(Number(firstMonth.slice(0,4)),Number(firstMonth.slice(5,7)),0)).toISOString().slice(0,10);
+ const monthHref=projectReportHref(query,{from:firstMonth,to:lastDay});
  return <KpiDetailShell query="" title="Projektuppföljning" breadcrumb="Humla Dashboard / Projekt" extraNavigation={<><Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanel</Link><Link href="/kpi?view=internal" prefetch={false}>Interna körningar</Link></>}>
   {selection.custom&&<p className="panel">Eget datumintervall: {selection.from}–{selection.to}. Månadsval nedan ersätter intervallet med hela månader.</p>}
   <KpiMonthPeriod period={selection.period} costCenter="" costCenters={[]} pathname="/kpi/projekt" showFilters={false}/>
-  <Suspense key={query.toString()+':'+page} fallback={<section className="panel" aria-busy="true" role="status"><h2>Hämtar projektunderlag från Humla Hub…</h2><p>Helår kan ta längre tid. Inga preliminära belopp visas.</p></section>}>
+  <Suspense key={query.toString()+':'+page} fallback={<ProjectReportLoading monthHref={monthHref}/>}>
    <ProjectReportBody db={db} tenant={member.tenant_id} selection={selection} query={query.toString()} q={q} groups={groups} center={center} manager={manager} project={project} page={page} kind={kind}/>
   </Suspense>
  </KpiDetailShell>;
 }
 async function ProjectReportBody({db,tenant,selection,query,q,groups,center,manager,project,page,kind}:{db:Awaited<ReturnType<typeof createClient>>;tenant:string;selection:ProjectPeriod;query:string;q:Record<string,string|undefined>;groups:string[];center:string|null;manager:string|null;project:string|null;page:number;kind:string|null}){
  const {from,to,months}=selection;
- const {data,error}=await db.rpc('hub_kpi_project_report_v5',{p_tenant_id:tenant,p_from:from,p_to:to,p_center:center,p_manager:manager,p_project:project,p_page:page,p_kind:kind,p_groups:groups.length?groups:null,p_months:months});
+ const {data,error}=await db.rpc('hub_kpi_project_report_v5',{p_tenant_id:tenant,p_from:from,p_to:to,p_center:center,p_manager:manager,p_project:project,p_page:page,p_kind:kind,p_groups:groups.length?groups:null,p_months:months}).abortSignal(AbortSignal.timeout(48_000));
  const href=(changes:Record<string,string|null>)=>projectReportHref(new URLSearchParams(query),changes);
  if(error||!data)return <section className="panel" role="alert"><h2>Projektunderlaget kunde inte hämtas</h2><p>Inga belopp visas när underlaget inte kan läsas. Välj en kortare period ovan eller försök igen.</p><Link prefetch={false} href={href({})}>Försök igen</Link></section>;
  const report=data as ProjectReport,selected=report.projects.find(p=>p.id===project),visible=report.projects.filter(p=>p.rows>0&&(!q.search||[p.project_number,p.project_name,p.project_manager,p.business_group].join(' ').toLocaleLowerCase('sv-SE').includes(q.search.toLocaleLowerCase('sv-SE'))));
