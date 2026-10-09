@@ -11,10 +11,10 @@ export async function GET(req:Request){
  try{
   if(!project||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(project))throw Error('project');
   const period=internalQuery(q);
-  const {data:report,error:reportError}=await db.rpc('hub_kpi_project_report_v1',{p_tenant_id:member.tenant_id,p_from:period.p_from,p_to:period.p_to,p_project:project});
+  const {data:report,error:reportError}=await db.rpc('hub_kpi_project_report_v3',{p_tenant_id:member.tenant_id,p_from:period.p_from,p_to:period.p_to,p_project:project});
   if(reportError)return Response.json({error:'Projektunderlaget kunde inte läsas.'},{status:reportError.code==='42501'?403:503,headers});
   const selected=(report as ProjectReport).projects.find(p=>p.id===project);
-  if(!selected)return Response.json({error:'Projektet finns inte i KST 10 eller 60.'},{status:404,headers});
+  if(!selected)return Response.json({error:'Projektet finns inte i projektregistret.'},{status:404,headers});
   const {data,error}=await db.rpc('hub_kpi_internal_transfers_v1',{p_tenant_id:member.tenant_id,...period});
   if(error)return Response.json({error:'Internunderlaget kunde inte läsas. Välj en kortare period och försök igen.'},{status:error.code==='42501'?403:503,headers});
   const rows=(data.rows as InternalRow[]).filter(r=>r.project===selected.project_number).map(r=>({id:r.row_id,date:r.occurred_on,order:r.order,article:r.article,description:r.description,amount:r.amount,source_center:r.source_center,receiver_center:r.receiver_center,ready:r.ready,status:r.status,review_reason:r.review_reason}));

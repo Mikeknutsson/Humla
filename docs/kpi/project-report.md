@@ -1,15 +1,17 @@
-# Projektuppföljning KST 10 och 60
+# Projektuppföljning
 
-Dashboard `/kpi/projekt` visar bokfört utfall exklusive moms: intäkter, kostnader, resultat, viktad marginal och personal. Projektledare, period och KST begränsar samtliga belopp. Textsökning begränsar endast projektlistan. CSV innehåller projekt och månadsutfall; detaljposter är uttryckligen endast aktuell sida.
+Dashboard `/kpi/projekt` har KST 10, 20, 30, 40, 50, 60 och 90. Alla kostnadsställen är standard. Verksamhetsgrupper väljs med kryssrutor; inga kryss betyder alla grupper. Period, KST, projektledare och flera grupper filtrerar före beräkning i Hubben och följer med i månadslänkar, projektdetaljer och CSV. Textsökning begränsar endast projektlistan.
 
-Projekturvalet använder senaste bekräftade projektregister och kanoniska Hub-ID:n. Det ändrar inte historiska KST-kopplingar. Underlag från Projektöversikt(6).xlsx har registrerats med källa och versioner från 2026-10-09.
+Urvalet använder senaste bekräftade projektregister med kanoniska Hub-ID:n. Det ändrar inte historiska KST-kopplingar. v1 och v2-RPC:er bevaras för äldre konsumenter; v3 utökar urval och källor.
 
-Bokförda projektposter hämtas från importerade NeXT-rader med Projektnr och Bokf datum. Personal ingår en gång i projektkostnaden. Löner kommer från NeXT för KST 10/60; Transport använder befintlig TransPA API-källa. Detta återinför inte löneprognoser i betalningsprognosens kostnader/netto.
+NeXT ger projektkostnader och intäkter för KST 10, 40, 50, 60 och 90. Externa Workify-intäkter från den aktiva Hub-generationen ersätter NeXT-intäkter för KST 20/30. TransPA-personalkostnader för KST 30 hämtas från samma befintliga Hub-underlag och beräkningsmotor. De är en tidsbaserad kostnadsberäkning, inte bokförda löner. För övriga KST används NeXT-personal.
 
-Fordonsfördelning kan kvarstå när projektnummer, belopp och datum är säkra. Endast två befintliga feltyper för fordonsfördelning tolereras; andra fel undantas. Okategoriserade kostnader ingår och flaggas. Inga nya fordonskopplingar eller importstatusar skapas. NeXT-kontobeskrivningen Löner till kollektivanställda identifierar löner när kategoriregel saknas.
+TransPA och Workify kopplas via befintliga bekräftade Hub-identitetsnycklar och kanoniska objekt, aldrig nya gissningar. Endast entydiga objekt med ett aktuellt registerprojekt och matchande KST inkluderas. NeXT-löner, pensionsförsäkringspremier, arbetsgivaravgifter och sociala avgifter för KST 30 undantas på uttrycklig kontobeskrivning så befintlig TransPA-schablon inte läggs ovanpå löneunderlaget. Övriga personalkostnader såsom utbildning och arbetskläder behålls.
 
-Interna bokförda NeXT-poster särredovisas som delar av totalsummorna. Workify-körningar hämtas först när användaren begär dem och kopplas till mottagande projekt via exakt registrerat projektnummer. De visas med granskningsstatus och läggs inte ovanpå NeXT eftersom dubbelbokföring annars kan uppstå. Kontrollpanelen äger kopplingarna.
+Personalkostnaden ingår en gång i totalkostnad och resultat. Ingen löneprognos återinförs i betalningsprognosens kostnader/netto. Interna NeXT-poster är delar av totalsummorna. Interna Workify-körningar visas separat för avstämning och läggs inte ovanpå bokföringen. Kontrollpanelen äger kopplingarna.
 
-Alla rapportanrop kräver aktiv medlemskap och kpi.read. RPC:n kontrollerar behörigheten i databasen. Anonyma anrop saknar execute. Ingen budget eller slutprognos räknas utan kalkyl och återstående arbete.
+Fordonsfördelning kan kvarstå när NeXT-projekt, belopp och datum är säkra. Endast befintliga två feltyper för fordonsfördelning tolereras; andra fel undantas. Okategoriserade kostnader ingår och flaggas. Inga nya identiteter eller importstatusar skapas.
 
-Gruppfiltret använder befintlig verksamhetsgrupp i bekräftat projektregister. Alla grupper är standard och Ingen grupp samlar tomma gruppvärden. Urvalet följer med i månadsval, projektdetaljer och CSV. v2-RPC:n filtrerar före beräkning; befintlig v1 är oförändrad.
+Aktivt medlemskap och kpi.read krävs. Anon saknar execute. CSV innehåller projekt och månadsutfall; detaljposter är endast aktuell sida. Budget och slutprognos kräver kalkyl och återstående arbete.
+
+Hub-källor begränsas till kostnadsställen som finns i urvalet. Kanonisk identitet löses en gång per distinkt källreferens. Importkoppling använder UUID-index. Tilldelade Hub-belopp avrundas en gång till ören före projekt/månadsberäkning; undantagna Workify/TransPA-rader redovisas när kopplingen inte är entydig.
