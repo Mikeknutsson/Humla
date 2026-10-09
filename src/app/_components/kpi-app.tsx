@@ -333,6 +333,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       <nav className="nav">
         <Link prefetch={false} className={view === "overview" ? "active" : ""} href={kpiHref()} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
         <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>KPI</Link>
+        <Link prefetch={false} href="/kpi/projekt" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Projekt — KST 10 och 60</Link>
         <Link prefetch={false} className={view === "internal" ? "active" : ""} href={kpiHref("internal")} onClick={() => setMobileMenu(false)}><Truck size={18}/>Interna körningar</Link>
         <Link prefetch={false} className={view === "monthly" ? "active" : ""} href={kpiHref("monthly")} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Månadsrapport</Link>
         {canManage&&<Link prefetch={false} href="/kpi/betalningsprognos" onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Betalningsprognos</Link>}
