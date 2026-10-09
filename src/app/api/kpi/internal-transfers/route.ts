@@ -11,7 +11,12 @@ export async function GET(req:Request){
   if(p.has('export_id')){const id=p.get('export_id')!;if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Ogiltigt export-ID');const {data,error}=await ctx.db.from('kpi_internal_transfer_ledger').select('snapshot').eq('tenant_id',ctx.tenant).eq('export_id',id).limit(2001);if(error||!data?.length) return Response.json({error:'Export saknas eller åtkomst nekad'},{status:404});if(data.length>2000)throw Error('Exportgränsen överskreds');return download(data.map(r=>r.snapshot as InternalRow),id);}
   const simple=p.get('view')==='summary';
   const {data,error}=await ctx.db.rpc(simple?'hub_kpi_internal_transfers_v1':'hub_kpi_internal_transfers_with_purchase_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
-  if(error)return Response.json({error:'Underlaget kunde inte läsas. Kontrollera period och KPI-behörighet.'},{status:403});
+  if(error){
+   console.error('[kpi.internal-transfers] Hub read failed',{rpc:simple?'summary':'purchase',code:error.code});
+   if(error.code==='57014')return Response.json({error:'Hämtningen av interna körningar tog för lång tid. Försök igen eller välj en kortare period.'},{status:504});
+   if(error.code==='42501')return Response.json({error:'Du saknar KPI-behörighet för detta underlag.'},{status:403});
+   return Response.json({error:'Hubben kunde inte läsa underlaget för interna körningar. Försök igen.'},{status:503});
+  }
   if(simple){
    const summary=internalCenterSummary(data.rows as InternalRow[]);
    if(p.get('download')==='summary')return new Response(internalCenterSummaryCsv(summary,p.get('from')!,p.get('to')!),{headers:{...headers,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="humla-interna-kst.csv"'}});

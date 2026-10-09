@@ -2,6 +2,8 @@
 
 ## Simplified primary view (2026-10-09)
 
+Read timeout fix (2026-10-09): both internal read RPCs have a scoped 45-second statement timeout, hoisted by PostgREST before execution. The ordinary authenticated role remains at 8 seconds. The earlier live SQL check used a longer transaction timeout and therefore missed the Data API's 8-second cancellation. Reproduced September cancellation at 8 seconds; verified source and purchase reads under the scoped setting. No auth grants, RLS, row calculations, ledger status or source classifications are changed. API error text now distinguishes cancellation (504), permission denial (403) and other Hub failures (503), logging only RPC kind and error code.
+
 Dashboard now displays exactly two period totals: KST 10 Entreprenad (cost) → KST 30 Transport (income), and KST 10 Entreprenad (cost) → KST 20 Sortergården (income). Only period/month filters are inherited; carrier, category and other cost-center filters do not hide either requested transfer. Both totals are clickable to show included rows. CSV exports the same two totals and their evidence, with excluded counts and a combined sum. No purchase-price RPC or vehicle/project grouping is needed in this view.
 
 The backend projection reuses the existing Hub read RPC and finished-row checks. Credits retain their sign. Review/changed/unclassified/unsafe tipping rows remain excluded and are disclosed; unresolved income KSTs are never guessed. Existing exported/posted evidence remains part of period totals. Summary downloads are read-only and are not new accounting instructions: existing ledger reservations, booking references, status and legacy detailed export APIs remain intact. No KPI revenue or cash-flow amount is added by this change.
