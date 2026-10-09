@@ -22,7 +22,7 @@ Validated on 8,992 aggregated live-source rows as of 2026-10-08. Cost-center 20 
 
 The following describes the optional manual CSV mode, retained as a fallback.
 
-Route: `/kpi/betalningsprognos`. Whole-department scope: cost centers 30 Transport, 20 Sortergården only, individually and summed. No inherited KPI vehicle/project filters. Both page and API require active tenant membership and `kpi.manage`.
+Route: `/kpi/betalningsprognos`. Whole-department scope: cost centers 30 Transport and 20 Sortergården, plus cost-only KST 40 Verkstad, individually and summed. No inherited KPI vehicle/project filters. Both page and API require active tenant membership and `kpi.manage`.
 
 ## Calculation owned by Hub
 
@@ -44,6 +44,6 @@ Tests: `node scripts/test-payment-forecast.cjs`; TypeScript: `npx tsc --noEmit`.
 
 ## Period navigation and department scope
 
-Payment forecast includes only 30 Transport and 20 Sortergården. KST 40 is excluded from totals and remains outside-scope source data. The initial window is ISO weeks +4 through +7. Previous/next move the four-week window by four weeks without changing the report date, source cutoff or trend period. The API validates the week offset within ±104 weeks. Summary rows appear first (customer forecast, cost forecast, net); registered-source rows follow in regular weight. CSV columns use the same order.
+Payment forecast includes 30 Transport and 20 Sortergården revenue and costs. Since 2026-10-09, KST 40 Verkstad is a separate cost-only section: NeXT expenses and mapped TransPA payroll enter combined costs and net once. Workshop incoming and internal incoming do not enter totals; external workshop income remains visible as excluded source evidence in CSV. Missing expense history/trend or mapped payroll remains null, never zero. The source RPCs already return all KSTs; no new identities, allocations or SQL are required. Live check on 2026-10-09 found NeXT workshop expenses but no mapped TransPA workshop payroll; cost history starts 2025-09-30 and cannot supply the current September year-on-year trend. The initial window is ISO weeks +4 through +7. Previous/next move the four-week window by four weeks without changing the report date, source cutoff or trend period. The API validates the week offset within ±104 weeks. Summary rows appear first (customer forecast, cost forecast, net); registered-source rows follow in regular weight. CSV columns use the same order.
 
 Internal revenue and costs are shown in regular-weight forecast rows directly under the three summary rows, per department and total. They use their own prior-year weekly baseline and their own current-year trend, with the same registered-remainder safeguard as external forecasts. Internal history and trend never mix with external amounts and net. Internal totals stay incomplete if a department lacks comparable internal history; missing is not zero. Automatic internal baseline coverage is evaluated on assumed payment dates rather than the external customer/Stena lag envelope. Manual mode uses declared historical coverage and the separate internal 13-week trend.

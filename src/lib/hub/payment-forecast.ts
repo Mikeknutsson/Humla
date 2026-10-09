@@ -1,5 +1,8 @@
 /** Hub domain calculation. KPI filters and vehicle identities deliberately do not apply. */
-export const departments = {'30':'Transport','20':'Sortergården'} as const;
+export const departments = {'30':'Transport','20':'Sortergården','40':'Verkstad'} as const;
+/** Workshop is included as a cost department only. */
+export const costOnly = (center:string) => center==='40';
+export const emptyIncoming = () => ({known:0,forecast:0,total:0,baseline:0,factor:1});
 export type Payment = {id:string; center:string; kind:'in'|'out'; date:string; amount:number; internal:boolean};
 export type ForecastInput = {asOf:string; periodOffset?:number; ledger:Payment[]; history:Payment[]; historyFrom:string; historyTo:string;basis?:'payment'|'booked';inDays?:number;outDays?:number};
 const day = 86400000;
@@ -56,7 +59,7 @@ export function paymentForecast(input:ForecastInput){
     const forecast=estimate!==null?money(Math.max(0,estimate-known)):null;
     return {known,forecast,total:forecast===null?null:money(known+forecast),baseline,factor};
    };
-   const incoming=calc('in'),outgoing=calc('out');
+   const incoming=costOnly(center)?emptyIncoming():calc('in'),outgoing=calc('out');
    const internalEstimate=(kind:'in'|'out'):number|null=>{
     const factor=trend(center,kind,input.history.filter(r=>r.internal));
     const lag=basis==='booked'?(kind==='in'?inDays:outDays)*day:0;
@@ -65,13 +68,13 @@ export function paymentForecast(input:ForecastInput){
     const known=sum(input.ledger.filter(r=>r.internal),center,kind,start,end);
     return money(known+Math.max(0,money(baseline*factor)-known));
    };
-   return {center,name,incoming,outgoing,payroll:null as number|null,internal:{incoming:internalEstimate('in'),outgoing:internalEstimate('out')},net:incoming.total===null||outgoing.total===null?null:money(incoming.total-outgoing.total)};
+   return {center,name,incoming,outgoing,payroll:null as number|null,internal:{incoming:costOnly(center)?0:internalEstimate('in'),outgoing:internalEstimate('out')},net:incoming.total===null||outgoing.total===null?null:money(incoming.total-outgoing.total)};
   });
   const aggregate=(kind:'incoming'|'outgoing')=>({known:money(parts.reduce((s,p)=>s+p[kind].known,0)),forecast:parts.some(p=>p[kind].forecast===null)?null:money(parts.reduce((s,p)=>s+p[kind].forecast!,0)),total:parts.some(p=>p[kind].total===null)?null:money(parts.reduce((s,p)=>s+p[kind].total!,0))});
   const internalFor=(kind:'incoming'|'outgoing')=>parts.some(p=>p.internal[kind]===null)?null:money(parts.reduce((s,p)=>s+p.internal[kind]!,0));
   return {from:iso(start),to:iso(end),year,number,parts,internal:{incoming:internalFor('incoming'),outgoing:internalFor('outgoing')},total:{incoming:aggregate('incoming'),outgoing:aggregate('outgoing'),payroll:null as number|null,net:parts.some(p=>p.net===null)?null:money(parts.reduce((s,p)=>s+p.net!,0))}};
  });
  const internal={ledger:input.ledger.filter(r=>r.internal),history:input.history.filter(r=>r.internal)};
- return {asOf:input.asOf,weeks,internal,unknown:ledger.filter(r=>!Object.hasOwn(departments,r.center)),overdue:ledger.filter(r=>dateValue(r.date)<now),excludedInternal:internal.ledger.length+internal.history.length,historyCoverage:{from:input.historyFrom,to:input.historyTo},method:`${basis==='booked'?`Bokfört utfall med antagen betalningstid ${inDays} dagar kund / ${outDays} dagar leverantör`:'Betalningshistorik'} 52 veckor bakåt × trend för 13 avslutade veckor. Interna körningar och överföringar ingår varken i extern reskontra, historisk bas eller årets trend. Känd reskontra dras av från prognosen. Belopp inklusive moms; öppet restbelopp, kreditposter med minus. Förfallodatum är ett antagande om betalningsdag. Ingen banksaldoprognos.`};
+ return {asOf:input.asOf,weeks,internal,unknown:ledger.filter(r=>!Object.hasOwn(departments,r.center)||(costOnly(r.center)&&r.kind==='in')),overdue:ledger.filter(r=>dateValue(r.date)<now),excludedInternal:internal.ledger.length+internal.history.length,historyCoverage:{from:input.historyFrom,to:input.historyTo},method:`${basis==='booked'?`Bokfört utfall med antagen betalningstid ${inDays} dagar kund / ${outDays} dagar leverantör`:'Betalningshistorik'} 52 veckor bakåt × trend för 13 avslutade veckor. Interna körningar och överföringar ingår varken i extern reskontra, historisk bas eller årets trend. Känd reskontra dras av från prognosen. Belopp inklusive moms; öppet restbelopp, kreditposter med minus. Förfallodatum är ett antagande om betalningsdag. Ingen banksaldoprognos.`};
 }
 export type PaymentForecast=ReturnType<typeof paymentForecast>;
