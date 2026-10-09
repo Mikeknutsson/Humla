@@ -2,7 +2,7 @@
 import type {ProjectReport} from '@/lib/hub/project-report';
 export function ProjectReportExport({report}:{report:ProjectReport}){
  const exportRows=()=>{
-  const rows:unknown[][]=[['Humla – Projekt KST 10 och 60'],['Period',report.from,report.to],['Källa',report.source],['Uppdelning',report.scope],['Personal',report.salary_source],['Projekt','Namn','KST','Projektledare','Verksamhetsgrupp','Intäkter','Kostnader','Bokfört resultat','Marginal %','Personal (ingår i kostnad)','Intern intäkt (ingår)','Intern kostnad (ingår)','Underlagsrader']];
+  const rows:unknown[][]=[['Humla – Projekt KST 10 och 60'],['Period',report.from,report.to],['Verksamhetsgrupp',report.selected_group??'Alla grupper'],['Källa',report.source],['Uppdelning',report.scope],['Personal',report.salary_source],['Projekt','Namn','KST','Projektledare','Verksamhetsgrupp','Intäkter','Kostnader','Bokfört resultat','Marginal %','Personal (ingår i kostnad)','Intern intäkt (ingår)','Intern kostnad (ingår)','Underlagsrader']];
   for(const p of report.projects)rows.push([p.project_number,p.project_name,p.cost_center,p.project_manager,p.business_group,p.revenue,p.cost,p.result,p.margin,p.personnel,p.internal_revenue,p.internal_cost,p.rows]);
   rows.push([],['Månad','Intäkter','Kostnader','Resultat']);for(const m of report.months)rows.push([m.month_start,m.revenue,m.cost,m.result]);
   if(report.transactions.length){rows.push([],['Underlag – endast denna sida, inte alla projektposter'],['Datum','Typ','Belopp','Konto','Kategori','Beskrivning','Fil','Filrad','Rad-ID','Fordonsfördelning']);for(const t of report.transactions)rows.push([t.date,t.kind,t.amount,t.account,t.category,t.description,t.file_name,t.row_number,t.id,t.validation_errors.join('; ')]);}

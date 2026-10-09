@@ -11,3 +11,5 @@ Fordonsfördelning kan kvarstå när projektnummer, belopp och datum är säkra.
 Interna bokförda NeXT-poster särredovisas som delar av totalsummorna. Workify-körningar hämtas först när användaren begär dem och kopplas till mottagande projekt via exakt registrerat projektnummer. De visas med granskningsstatus och läggs inte ovanpå NeXT eftersom dubbelbokföring annars kan uppstå. Kontrollpanelen äger kopplingarna.
 
 Alla rapportanrop kräver aktiv medlemskap och kpi.read. RPC:n kontrollerar behörigheten i databasen. Anonyma anrop saknar execute. Ingen budget eller slutprognos räknas utan kalkyl och återstående arbete.
+
+Gruppfiltret använder befintlig verksamhetsgrupp i bekräftat projektregister. Alla grupper är standard och Ingen grupp samlar tomma gruppvärden. Urvalet följer med i månadsval, projektdetaljer och CSV. v2-RPC:n filtrerar före beräkning; befintlig v1 är oförändrad.
