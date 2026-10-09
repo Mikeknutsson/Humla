@@ -61,8 +61,6 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
   for(const k of ['incoming','outgoing'] as const)w.internal[k]=w.parts.some(p=>p.internal[k]===null)?null:round(w.parts.reduce((s,p)=>s+p.internal[k]!,0));
   if(payroll){const salaryWeek=payroll.weeks.find(s=>s.from===w.from)!;w.total.payroll=salaryWeek.total;
    for(const p of w.parts){p.payroll=salaryWeek.parts.find(s=>s.center===p.center)!.amount;
-    p.outgoing.forecast=p.outgoing.forecast===null||p.payroll===null?null:round(p.outgoing.forecast+p.payroll);
-    p.outgoing.total=p.outgoing.total===null||p.payroll===null?null:round(p.outgoing.total+p.payroll);
    }
   }
   for(const p of w.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
@@ -77,6 +75,6 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  if(result.weeks.some(w=>w.parts.some(p=>p.net===null)))warnings.push('En eller flera avdelningar saknar tillräckligt jämförbart underlag. Totalsiffror visas inte som kompletta när någon del saknas.');
  for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}
  if(source.review_rows)warnings.push(`${source.review_rows} importrader för granskning ingår inte; belopp ${round(source.review_amount)} kr.`);
- if(payroll){warnings.push(...payroll.warnings);result.method+=' Löner: föregående månads TransPA-bruttolöneschablon betalas den 25:e; egen historik/trend eller tydligt märkt senaste-månad-reserv. PO-pålägg ingår inte i löneutbetalningen.';}
+ if(payroll){warnings.push(...payroll.warnings);result.method+=' Löner: föregående månads TransPA-bruttolöneschablon betalas den 25:e; egen historik/trend eller tydligt märkt senaste-månad-reserv. Löneprognosen särredovisas och ingår inte i kostnader eller netto. PO-pålägg ingår inte i löneutbetalningen.';}
  return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,payroll}};
 }

@@ -58,9 +58,9 @@ export function payrollForecast(source:PayrollSource,asOf:string,weeks:{from:str
   return {from:w.from,parts,total:parts.some(p=>p.amount===null)?null:round(parts.reduce((s,p)=>s+p.amount!,0))};
  });
  const warnings=['Löner är uppskattad bruttolön från TransPA, inte verifierad nettoutbetalning. PO-pålägg, arbetsgivaravgifter, pension, skatt, semesterlön och OB räknas inte som verifierade utbetalningar här. Den 25:e används som kalenderdatum utan automatisk helgjustering.'];
- warnings.push('Löneprognosen läggs till NeXT-kostnaderna enligt bekräftelsen att löner saknas där. Om löner senare importeras i NeXT behöver de stämmas av för att undvika dubbelräkning.');
+ warnings.push('Löneprognosen särredovisas och ingår inte i Kostnader — prognos eller Netto.');
  if(details.some(d=>d.method==='latest_month'))warnings.push('Jämförbar lönehistorik/trend saknas: senaste tillräckligt rapporterade avslutade månad används som reservprognos.');
- if(details.some(d=>d.method==='missing'))warnings.push('En avdelning saknar tillräckligt löneunderlag. Kostnader och netto för dess lönevecka visas därför ofullständiga.');
+ if(details.some(d=>d.method==='missing'))warnings.push('En avdelning saknar tillräckligt löneunderlag. Dess lönerad visas ofullständig; kostnader och netto påverkas inte av saknat löneunderlag.');
  if(!source.settings_match)warnings.push(source.reason||'Löneinställningar och Hub-underlag är inte synkroniserade.');
  const unassignedGross=round(source.rows.filter(r=>!Object.hasOwn(departments,r.center)).reduce((s,r)=>s+r.gross,0));
  if(unassignedGross)warnings.push('TransPA-belopp utan bekräftat kostnadsställe undantas och behöver fördelas i Hubben.');
