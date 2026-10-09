@@ -15,3 +15,5 @@ Fordonsfördelning kan kvarstå när NeXT-projekt, belopp och datum är säkra. 
 Aktivt medlemskap och kpi.read krävs. Anon saknar execute. CSV innehåller projekt och månadsutfall; detaljposter är endast aktuell sida. Budget och slutprognos kräver kalkyl och återstående arbete.
 
 Hub-källor begränsas till kostnadsställen som finns i urvalet. Kanonisk identitet löses en gång per distinkt källreferens. Importkoppling använder UUID-index. Tilldelade Hub-belopp avrundas en gång till ören före projekt/månadsberäkning; undantagna Workify/TransPA-rader redovisas när kopplingen inte är entydig.
+
+Gruppalternativen hämtas från projekt med intäkter eller kostnader inom valt KST, period och projektledare. Aktiva gruppkryss och detaljprojekt begränsar inte vilka övriga grupper som kan väljas. Vid byte av KST skickas formuläret direkt och tidigare grupp-/projektval rensas. Perioder utan belopp visar ett tomt gruppval; kvarvarande val utan belopp anges separat och kan rensas.
