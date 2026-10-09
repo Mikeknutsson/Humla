@@ -23,7 +23,7 @@ export function KpiRefresh() {
   const generation=useRef<string|null>(null);
   const queued=sync?.status==='queued';
   useEffect(()=>{
-    if(pathname==='/kpi/login')return;
+    if(pathname==='/kpi/login'||pathname==='/kpi/fordon')return;
     const controller=new AbortController();
     let timer:ReturnType<typeof setTimeout>|undefined;
     let failures=0;
@@ -50,7 +50,7 @@ export function KpiRefresh() {
     return ()=>{controller.abort();if(timer)clearTimeout(timer);};
   },[pathname,queued,router]);
   const lastSync=sync?.synced_at?new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',dateStyle:'short',timeStyle:'short'}).format(new Date(sync.synced_at)):null;
-  if (pathname === "/kpi/login") return null;
+  if (pathname === "/kpi/login" || pathname === "/kpi/fordon") return null;
 
   return <div className="kpi-refresh-bar no-print">
     {pathname !== "/kpi" && <Link href={dashboardHref} prefetch={false}><ArrowLeft size={16}/>Dashboard</Link>}
