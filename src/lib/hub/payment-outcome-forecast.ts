@@ -1,4 +1,4 @@
-import {dateValue,departments,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
+import {dateValue,departments,costOnly,emptyIncoming,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
 import {payrollForecast,type PayrollSource} from './payment-payroll-forecast';
 export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean};
 export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number};
@@ -36,6 +36,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  for(const w of result.weeks){
   const start=dateValue(w.from),end=dateValue(w.to);
   for(const p of w.parts)for(const internalScope of [false,true])for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){
+   if(costOnly(p.center)&&kind==='in'){if(internalScope)p.internal.incoming=0;else p.incoming=emptyIncoming();continue;}
    const group=rows.filter(r=>r.internal===internalScope&&r.center===p.center&&r.kind===kind);
    const dates=group.map(r=>r.dateValue),min=dates.length?Math.min(...dates):Infinity,max=dates.length?Math.max(...dates):-Infinity;
    const before=sum(group,previous(trendStart),previous(trendEnd)),current=sum(group,trendStart,trendEnd);
@@ -70,7 +71,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  }
  result.internal={ledger:[],history:rows.filter(r=>r.internal).map(toPayment)};
  result.excludedInternal=result.internal.history.length;
- result.unknown=external.filter(r=>!Object.hasOwn(departments,r.center)).map(toPayment);result.overdue=[];
+ result.unknown=external.filter(r=>!Object.hasOwn(departments,r.center)||(costOnly(r.center)&&r.kind==='in')).map(toPayment);result.overdue=[];
  result.historyCoverage={from:source.rows.length?source.rows.reduce((a,r)=>a<r.date?a:r.date,source.rows[0].date):'',to:source.rows.length?source.rows.reduce((a,r)=>a>r.date?a:r.date,source.rows[0].date):''};
  result.method=`Workify-intäkter och NeXT-kostnader, exklusive moms. Föregående års beräknade betalningsvecka × årets verksamhetsårstrend ${iso(trendStart)}–${iso(trendEnd)} jämfört med samma datum förra året. Registrerade externa rader räknas av från prognosen. Standard kund 30 dagar, Linnestofta Maskin och Thomas Håkansson Entreprenad 45 dagar från fakturadatum (annars leveransdatum som antagande). Stena: 45 kalenderdagar från sista dagen i leveransmånaden. Leverantörer: ${supplierDays} dagar som antagande. Interna körningar prognostiseras separat med sin egen historik och trend och ingår inte i externa belopp eller netto. Banksaldo och momsprognos ingår inte.`;
  if(result.weeks.some(w=>w.parts.some(p=>p.net===null)))warnings.push('En eller flera avdelningar saknar tillräckligt jämförbart underlag. Totalsiffror visas inte som kompletta när någon del saknas.');
