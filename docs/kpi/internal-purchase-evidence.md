@@ -11,7 +11,7 @@ Inköp och materialmellanskillnad beräknas av Hub-RPC `hub_kpi_internal_transfe
 - Vambåsa/Össjö/Önnestad använder sista nettopriskolumnen; rabatt dras inte igen. Schweden saknar giltighetsdatum och markeras preliminär.
 - Kylinges befintliga 2025-prisgrund behålls. Den tidigare godkända december-PDF-prislistan används endast som ett uttryckligt augusti-2026-undantag; den skrivs inte bakåt över andra månader.
 - Tvetydig fraktion, specialprodukt, inköp på kundens konto och saknad mängd/inköpsgrund hålls utanför beräknad kostnad. Saknad kostnad är null, inte noll.
-- Tippkostnad kräver separat pris-/fakturaunderlag. Transportartiklar får inte materialinköp.
+- Bekräftad regel 2026-10-09: intern tippavgifts satt Workify-radbelopp används även som inköpskostnad, med bibehållet tecken för krediter/negativa priser. Mellanskillnad är noll. À-pris härleds från radbelopp/mängd; om mängd saknas kan källans Kundpris visas medan det kända radbeloppet fortfarande är kostnadsgrund. Saknat belopp blir null, aldrig gissat noll. Prisstatus `tipping_set_price` och prisunderlag beskriver den bekräftade kostnadsschablonen, inte en verifierad leverantörsfaktura. Kvittomatchad kostnad/mängd och täktprissampling används inte för tippavgiften. Transportartiklar får inte materialinköp. Ingen extra KPI-kostnad, omföring eller ledgerändring skapas; regeln gäller det separata interna inköpsunderlaget och dess Excel-export.
 
 `Exportera inköpsunderlag – alla orderrader` är en rapportexport för period/KST, även granskningsrader. Den bokför eller markerar inget som omfört. Befintlig färdigdataexport behåller sin avgränsning.
 
