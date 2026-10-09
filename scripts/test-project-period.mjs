@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import vm from 'node:vm';
+const cache=new Map();
+function module(name){
+ if(cache.has(name))return cache.get(name);
+ const context={exports:{},Intl,Date,Number,URLSearchParams,Error,require:p=>module(p.replace('./',''))};
+ const code=ts.transpileModule(fs.readFileSync(`src/lib/kpi/${name}.ts`,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+ vm.runInNewContext(code,context);cache.set(name,context.exports);return context.exports;
+}
+const {parseProjectPeriod,projectPeriodParams,projectReportHref}=module('project-period');
+const now=new Date('2026-08-31T22:30:00Z');
+let p=parseProjectPeriod({},now);
+assert.equal(p.from,'2026-09-01');assert.equal(p.to,'2027-08-31');
+p=parseProjectPeriod({fiscal_year:'2025',months:'1,9,9'},now);
+assert.deepEqual(Array.from(p.months),[9,1]);assert.equal(p.from,'2025-09-01');assert.equal(p.to,'2026-01-31');
+assert.equal(projectPeriodParams(p).get('months'),'9,1');
+p=parseProjectPeriod({from:'2025-12-01',to:'2026-02-28'},now);
+assert.deepEqual(Array.from(p.months),[12,1,2]);assert.equal(p.custom,false);
+p=parseProjectPeriod({from:'2026-09-01',to:'2026-10-09'},now);
+assert.equal(p.custom,true);assert.equal(p.months,null);assert.equal(projectPeriodParams(p).has('months'),false);
+for(const q of [{from:'2026-02-30',to:'2026-03-01'},{from:'2026-10-01',to:'2026-09-01'},{fiscal_year:'0'},{months:''},{months:'0'},{months:'13'},{from:'2020-01-01',to:'2026-10-09'}])assert.throws(()=>parseProjectPeriod(q,now));
+const query=new URLSearchParams('fiscal_year=2025&months=9,1&group=A&group=B&center=10&project=P&page=2');
+let url=new URL('https://humla.test'+projectReportHref(query,{page:'3'}));
+assert.deepEqual(url.searchParams.getAll('group'),['A','B']);assert.equal(url.searchParams.get('months'),'9,1');assert.equal(url.searchParams.get('page'),'3');
+url=new URL('https://humla.test'+projectReportHref(query,{from:'2026-01-01',to:'2026-01-31'}));
+assert.equal(url.searchParams.has('fiscal_year'),false);assert.equal(url.searchParams.has('months'),false);assert.equal(url.searchParams.has('page'),false);assert.equal(url.searchParams.get('center'),'10');
+url=new URL('https://humla.test'+projectReportHref(query,{group:null,project:null}));
+assert.equal(url.searchParams.has('group'),false);assert.equal(url.searchParams.has('project'),false);
+console.log('Project fiscal-period and drilldown regression tests passed.');
