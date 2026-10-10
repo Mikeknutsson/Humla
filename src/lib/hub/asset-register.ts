@@ -1,0 +1,2 @@
+export type AssetRegisterRow={asset_id:string|null;source_key:string;link_kind:'asset'|'related'|'bundle'|'review';sold:boolean;imported_at:string;evidence:{asset_number:number;description:string;purchase_date:string|null;purchase_cost:number|null;useful_life_years:number|null;monthly_depreciation:number|null;warnings:string}};
+export type AssetRegisterReport={summary:{rows:number;exact_links:number;active_acquisitions:number;review_rows:number};rows:AssetRegisterRow[]};
