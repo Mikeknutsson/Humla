@@ -22,7 +22,7 @@ export default async function Page({searchParams}:{searchParams:Promise<{asset?:
  const fleetHref=`/kpi/fordon?${params}`;params.set('tab','tco');const tcoHref=`/kpi/fordon?${params}`;
  const [result,registerResult]=await Promise.all([
  isTco?db.rpc('hub_asset_tco_v1',{p_tenant_id:member.tenant_id,p_as_of:asOf,p_asset:asset}):db.rpc('hub_fleet_comparison_v1',{p_tenant:member.tenant_id,p_year:period.fiscalYear,p_months:period.months,p_asset:asset,p_department:q.department||null}),
- isTco?db.rpc('hub_asset_register_v1',{p_tenant:member.tenant_id,p_asset:asset}):Promise.resolve(null)
+ isTco?db.rpc('hub_asset_register_projection_v1',{p_tenant:member.tenant_id,p_as_of:asOf,p_asset:asset}):Promise.resolve(null)
  ]);
  const {data,error}=result;
  const selectedTco=isTco&&!error?(data as AssetTcoReport)?.assets.find(a=>a.id===asset):null;
