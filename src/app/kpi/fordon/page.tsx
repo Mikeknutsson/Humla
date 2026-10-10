@@ -7,7 +7,7 @@ import {FleetKpiWorkspace} from '@/app/_components/fleet-kpi-workspace';
 import {KpiMonthPeriod} from '@/app/_components/kpi-month-period';
 import {parseMonthPeriod,monthPeriodQuery} from '@/lib/kpi/period';
 import type {AssetTcoReport} from '@/lib/hub/asset-tco';
-import type {FleetKpiReport} from '@/lib/hub/fleet-kpi';
+import type {FleetComparisonReport} from '@/lib/hub/fleet-kpi';
 export const dynamic='force-dynamic';
 export default async function Page({searchParams}:{searchParams:Promise<{asset?:string;date?:string;tab?:string;fiscal_year?:string;months?:string;department?:string}>}){
  const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)redirect('/kpi/login');
@@ -18,8 +18,8 @@ export default async function Page({searchParams}:{searchParams:Promise<{asset?:
  let period;try{period=parseMonthPeriod(q.fiscal_year,q.months);}catch{return <KpiDetailShell query="" title="Fordon & maskiner"><div className="content"><section className="panel"><p role="alert">Ogiltig period. Välj ett verksamhetsår och minst en månad.</p><Link href="/kpi/fordon">Återställ perioden</Link></section></div></KpiDetailShell>;}
  const params=new URLSearchParams(monthPeriodQuery(period));if(asset)params.set('asset',asset);if(q.department)params.set('department',q.department);params.set('date',asOf);
  const fleetHref=`/kpi/fordon?${params}`;params.set('tab','tco');const tcoHref=`/kpi/fordon?${params}`;
- const {data,error}=isTco?await db.rpc('hub_asset_tco_v1',{p_tenant_id:member.tenant_id,p_as_of:asOf,p_asset:asset}):await db.rpc('hub_fleet_kpi_v1',{p_tenant:member.tenant_id,p_year:period.fiscalYear,p_months:period.months,p_asset:asset,p_department:q.department||null});
+ const {data,error}=isTco?await db.rpc('hub_asset_tco_v1',{p_tenant_id:member.tenant_id,p_as_of:asOf,p_asset:asset}):await db.rpc('hub_fleet_comparison_v1',{p_tenant:member.tenant_id,p_year:period.fiscalYear,p_months:period.months,p_asset:asset,p_department:q.department||null});
  return <KpiDetailShell query={monthPeriodQuery(period)} title="Fordon & maskiner" breadcrumb="Humla / Fordonsansvarig"><div className="content"><nav className="panel" aria-label="Fordonsvyer"><div className="fiscal-shortcuts"><Link className={isTco?'secondary':'primary'} aria-current={!isTco?'page':undefined} prefetch={false} href={fleetHref}>Fordons-KPI</Link><Link className={isTco?'primary':'secondary'} aria-current={isTco?'page':undefined} prefetch={false} href={tcoHref}>TCO & marknadsvärde</Link></div></nav>
- {error?<section className="panel"><h2>Fordonsvyn kunde inte öppnas</h2><p role="alert">{error.code==='42501'?'Du behöver behörigheten Visa fordonskostnader och TCO.':'Underlaget kunde inte hämtas. Kontrollera perioden och försök igen.'}</p></section>:isTco?<AssetTcoWorkspace report={data as AssetTcoReport} selectedId={asset} today={today}/>:<><KpiMonthPeriod period={period} costCenter="" costCenters={[]} pathname="/kpi/fordon" showFilters={false}/><FleetKpiWorkspace report={data as FleetKpiReport} selectedId={asset} department={q.department??''}/></>}
+ {error?<section className="panel"><h2>Fordonsvyn kunde inte öppnas</h2><p role="alert">{error.code==='42501'?'Du behöver behörigheten Visa fordonskostnader och TCO.':'Underlaget kunde inte hämtas. Kontrollera perioden och försök igen.'}</p></section>:isTco?<AssetTcoWorkspace report={data as AssetTcoReport} selectedId={asset} today={today}/>:<><KpiMonthPeriod period={period} costCenter="" costCenters={[]} pathname="/kpi/fordon" showFilters={false}/><FleetKpiWorkspace report={data as FleetComparisonReport} selectedId={asset} department={q.department??''}/></>}
  </div></KpiDetailShell>;
 }
