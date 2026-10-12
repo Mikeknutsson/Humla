@@ -42,6 +42,14 @@ export default async function TransportManagerKpi({
   ]);
 
   if (reportError || !report) return <main className="content"><h1>Ekonomin kunde inte hämtas</h1><p>Inga belopp visas när underlaget saknas.</p></main>;
+  // The Hub report uses the canonical financial cost-center code 30.
+  // NEXT project register stores the human-readable label "Transport".
+  // Keep both source values intact and resolve project classification separately.
+  const {data:transportProjects,error:projectError} = await supabase
+    .from("kpi_next_project_register")
+    .select("project_number,project_name,project_manager,cost_center")
+    .eq("tenant_id",member.tenant_id)
+    .in("cost_center",["30","Transport"]);
   const rows:VehicleRow[] = Array.isArray(report.vehicles) ? report.vehicles : [];
   const goals:TargetRow[] = (targets ?? []) as TargetRow[];
   return <main className="content" style={{maxWidth:1200,margin:"0 auto",padding:24}}>
@@ -49,7 +57,7 @@ export default async function TransportManagerKpi({
     <h1>Transportledare – fordonsuppföljning</h1>
     <p>Period: {from} – {to}. Transport, material och tippavgifter redovisas separat i ekonomins originalunderlag.</p>
     {targetError && <p role="alert">Målregistret är inte tillgängligt. Mål visas inte.</p>}
-    <p>Denna vy visar transportens enheter. Personlig områdes- och fordonstilldelning kopplas på separat innan vyn ges till arbetsledare.</p>
+    <p>Projekt i importerat transportregister: {projectError ? "kunde inte hämtas" : (transportProjects ?? []).length}. Kostnadsställe 30 och Transport ingår i samma projekturval.</p>\n    <p>Denna vy visar transportens enheter. Personlig områdes- och fordonstilldelning kopplas på separat innan vyn ges till arbetsledare.</p>
     <table style={{width:"100%",borderCollapse:"collapse"}}>
       <thead><tr><th align="left">Enhet</th><th align="right">Intäkt</th><th align="right">Kostnad</th><th align="right">Resultat</th><th align="right">Marginal</th><th align="right">Mål</th><th align="left">Detaljer</th></tr></thead>
       <tbody>{rows.map((row,index)=>{
