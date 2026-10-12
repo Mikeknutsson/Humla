@@ -113,10 +113,14 @@ export async function POST(request: Request) {
     if (kind === "cost") normalized = normalized.map((row) => {
       const errors = row.validation_errors.filter((error) => error !== "Fordonsbeteckning saknar verifierad regnummerkoppling");
       const verifiedVehicle = row.vehicle_registration && /^[A-Z]{3}[0-9]{2}[A-Z0-9]$/.test(row.vehicle_registration);
+      // Missing vehicle allocation must never invalidate an otherwise valid financial row.
+      // Preserve unrelated validation errors and keep the allocation separately traceable.
+      const financialErrors = errors.filter((error) => error !== "Kostnadsfördelning behöver granskas");
       return { ...row, vehicle_registration: verifiedVehicle ? row.vehicle_registration : null,
-        validation_errors: verifiedVehicle ? errors : [...errors, "Kostnadsfördelning behöver granskas"],
-        is_valid: Boolean(verifiedVehicle) && errors.length === 0,
-        allocation: { allocation_status: verifiedVehicle ? "vehicle_direct" : "unallocated_review",
+        validation_errors: financialErrors,
+        is_valid: financialErrors.length === 0,
+        allocation: { ...(row.allocation ?? {}),
+          allocation_status: verifiedVehicle ? "vehicle_direct" : "unallocated",
           allocation_type: verifiedVehicle ? "vehicle" : null } };
     });
     // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
