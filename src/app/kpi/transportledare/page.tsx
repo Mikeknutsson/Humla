@@ -46,10 +46,10 @@ export default async function TransportManagerKpi({
   // NEXT project register stores the human-readable label "Transport".
   // Keep both source values intact and resolve project classification separately.
   const {data:transportProjects,error:projectError} = await supabase
-    .from("kpi_next_project_register")
-    .select("project_number,project_name,project_manager,cost_center")
+    .from("hub_kpi_project_register_canonical_v1")
+    .select("project_number,project_name,project_manager,cost_center,source_cost_center")
     .eq("tenant_id",member.tenant_id)
-    .in("cost_center",["30","Transport"]);
+    .eq("cost_center","30");
   const rows:VehicleRow[] = Array.isArray(report.vehicles) ? report.vehicles : [];
   const goals:TargetRow[] = (targets ?? []) as TargetRow[];
   return <main className="content" style={{maxWidth:1200,margin:"0 auto",padding:24}}>
