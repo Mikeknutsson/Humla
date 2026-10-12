@@ -180,6 +180,16 @@ export async function POST(request: Request) {
       return Response.json({batchId,rows:ingested.insertedRows,...ingested,...resolved.data},{status:201});
     }
 
+    if (kind === 'cost') {
+      // Dashboard is only an upload client. Hub owns identity, deduplication and storage.
+      // The original file has already been persisted in the tenant-scoped Hub bucket.
+      const {data:ingested,error:ingestError}=await supabase.rpc('hub_kpi_ingest_cost_file_v1',{
+        p_tenant_id:member.tenant_id,p_batch_id:batchId,p_rows:normalized,
+      });
+      if(ingestError)throw ingestError;
+      return Response.json({batchId,rows:ingested.insertedRows,...ingested},{status:201});
+    }
+
     for (let offset = 0; offset < normalized.length; offset += 500) {
       const payload = normalized.slice(offset, offset + 500).map((row) => ({ ...row, tenant_id: member.tenant_id, batch_id: batchId, currency: "SEK" }));
       async function saveRows(items: typeof payload): Promise<void> {
