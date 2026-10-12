@@ -4,7 +4,7 @@ import type { DataKind, ParsedRow, ParsedTable } from "./schema";
 import { DATA_KINDS } from "./schema";
 import { parseVehicleRules, resolveVehicle } from "./vehicle-rules";
 
-const MAX_ROWS = 20_000;
+const MAX_ROWS = 50_000;
 
 function uniqueHeaders(values: unknown[]) {
   const seen = new Map<string, number>();
@@ -27,7 +27,7 @@ function parseWorkbook(buffer: Uint8Array): ParsedTable {
   const workify = ['Ordernummer', 'Artikelnummer', 'Artikeldatum', 'Summa', 'Fakturerad'].every(h => headers.includes(h));
   // Workify emits attachment-only continuation rows; these are not transactions.
   const dataRows = nonEmpty.slice(1).filter(values => !workify || values.some((value, i) => String(value ?? '').trim() && !['Platser', 'FilUrl'].includes(headers[i])));
-  if (dataRows.length > MAX_ROWS) throw new Error("Filen innehåller fler än 20 000 rader. Dela upp filen; inga rader har importerats.");
+  if (dataRows.length > MAX_ROWS) throw new Error("Filen innehåller fler än 50 000 rader. Dela upp filen; inga rader har importerats.");
   const rows = dataRows.map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
   return { headers, rows, sheetName };
 }
@@ -54,7 +54,8 @@ async function parsePdf(buffer: Uint8Array): Promise<ParsedTable> {
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
-    const rows = result.text.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter((line) => line.length > 2).slice(0, MAX_ROWS).map(parsePdfLine);
+    const rows = result.text.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter((line) => line.length > 2).map(parsePdfLine);
+    if (rows.length > MAX_ROWS) throw new Error("PDF-filen innehåller fler än 50 000 textrader. Dela upp filen; inga rader har importerats.");
     if (!rows.length) throw new Error("PDF-filen saknar maskinläsbar text. Skannade dokument behöver OCR innan import.");
     return { headers: ["Radtext", "Datum", "Registreringsnummer", "Belopp", "Antal", "Timmar", "Anställningsnummer"], rows, pageCount: result.total };
   } finally {
