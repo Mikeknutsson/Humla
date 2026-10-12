@@ -55,7 +55,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     needsBatches ? supabase.from("kpi_import_batches").select("id,data_kind,file_name,status,row_count,valid_row_count,invalid_row_count,period_start,period_end,created_at,column_mapping,error_summary,provenance").eq("tenant_id", member.tenant_id).order("created_at", { ascending: false }).limit(12) : Promise.resolve({ data: [], error: null }),
   ]);
   if ((initialView === "overview" || initialView === "kpi") && (dashboardError || !dashboard)) {
-    console.error("[kpi] financial report unavailable", { code: dashboardError?.code });
+    console.error("[kpi] financial report unavailable", { code: dashboardError?.code, message: dashboardError?.message?.slice(0,400), fiscalYear: monthPeriod.fiscalYear, months: monthPeriod.months, costCenter });
     const retryQuery = new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
     return <main className="access-denied"><div role="alert"><h1>Rapporten kunde inte hämtas</h1><p>Hubben kunde inte lämna ett verifierat resultat för urvalet. Inga KPI-belopp visas eftersom saknade data inte är samma sak som noll.</p><a className="primary" href={`/kpi?${retryQuery.toString()}`}>Försök igen med samma urval</a></div></main>;
   }

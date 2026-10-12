@@ -7,12 +7,12 @@ import {getKpiReportStatus} from './report-sync';
 export async function cachedKpiReport<T>(userId:string,tenantId:string,scope:unknown,load:()=>Promise<{data:T|null;error:{message:string;code?:string}|null}>) {
  try {
   const status=await getKpiReportStatus(tenantId);
-  if(status.error||!status.data?.generation)throw new Error('Prepared Hub report unavailable');
+  if(status.error||!status.data?.generation)throw Object.assign(new Error(status.error?.message??'Prepared Hub report unavailable'),{code:status.error?.code??'HUB_GENERATION_UNAVAILABLE'});
   const data=await unstable_cache(async()=>{
    const result=await load();
-   if(result.error||!result.data)throw new Error(result.error?.message??'Hub report unavailable');
+   if(result.error||!result.data)throw Object.assign(new Error(result.error?.message??'Hub report unavailable'),{code:result.error?.code??'HUB_REPORT_UNAVAILABLE'});
    return result.data;
   },['kpi-report-prepared-v8',userId,tenantId,status.data.generation,JSON.stringify(scope)],{revalidate:86400,tags:[`kpi-report:${userId}`]})();
   return {data,error:null};
- }catch(error){return {data:null,error:{message:error instanceof Error?error.message:'Hub report unavailable',code:undefined as string|undefined}};}
+ }catch(error){return {data:null,error:{message:error instanceof Error?error.message:'Hub report unavailable',code:error instanceof Error&&'code' in error&&typeof error.code==='string'?error.code:'REPORT_LOAD_FAILURE'}};}
 }
