@@ -1,6 +1,6 @@
 import {createClient} from '@/lib/supabase/server';
 import {internalQuery,transferWorkbook,transferGroups,transferTotals,finishedRows,type InternalRow} from '@/lib/kpi/internal-transfers';
-import {internalCenterSummary,internalCenterSummaryCsv} from '@/lib/kpi/internal-center-summary';
+import {internalCenterSummaryCsv,type InternalCenterSummary} from '@/lib/kpi/internal-center-summary';
 export const runtime='nodejs';export const maxDuration=60;
 async function context(){const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return null;const {data:m}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();return m?{db,tenant:m.tenant_id}:null;}
 const headers={'Cache-Control':'private, no-store'};
@@ -10,7 +10,7 @@ export async function GET(req:Request){
  try{const p=new URL(req.url).searchParams;
   if(p.has('export_id')){const id=p.get('export_id')!;if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Ogiltigt export-ID');const {data,error}=await ctx.db.from('kpi_internal_transfer_ledger').select('snapshot').eq('tenant_id',ctx.tenant).eq('export_id',id).limit(2001);if(error||!data?.length) return Response.json({error:'Export saknas eller åtkomst nekad'},{status:404});if(data.length>2000)throw Error('Exportgränsen överskreds');return download(data.map(r=>r.snapshot as InternalRow),id);}
   const simple=p.get('view')==='summary';
-  const {data,error}=await ctx.db.rpc(simple?'hub_kpi_internal_transfers_v1':'hub_kpi_internal_transfers_with_purchase_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
+  const {data,error}=await ctx.db.rpc(simple?'hub_kpi_internal_center_summary_v2':'hub_kpi_internal_transfers_with_purchase_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
   if(error){
    console.error('[kpi.internal-transfers] Hub read failed',{rpc:simple?'summary':'purchase',code:error.code});
    if(error.code==='57014')return Response.json({error:'Hämtningen av interna körningar tog för lång tid. Försök igen eller välj en kortare period.'},{status:504});
@@ -18,7 +18,7 @@ export async function GET(req:Request){
    return Response.json({error:'Hubben kunde inte läsa underlaget för interna körningar. Försök igen.'},{status:503});
   }
   if(simple){
-   const summary=internalCenterSummary(data.rows as InternalRow[]);
+   const summary=data as InternalCenterSummary;
    if(p.get('download')==='summary')return new Response(internalCenterSummaryCsv(summary,p.get('from')!,p.get('to')!),{headers:{...headers,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="humla-interna-kst.csv"'}});
    return Response.json(summary,{headers});
   }

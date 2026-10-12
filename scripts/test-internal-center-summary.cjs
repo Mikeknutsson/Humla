@@ -1,13 +1,22 @@
 const fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm'),assert=require('node:assert/strict');
-function load(file){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:p=>p==='./internal-transfers'?load('src/lib/kpi/internal-transfers.ts'):require(p),Buffer,Date,URLSearchParams,Set,Map,Number,JSON});return exports;}
-const {internalCenterSummary,internalCenterSummaryCsv}=load('src/lib/kpi/internal-center-summary.ts');
-const base={row_id:'a',source_key:'a',ready:true,status:'new',receiver_center:'10',source_center:'30',category:'transport',amount:100.01,order:'123',littra:'12664',occurred_on:'2026-09-01'};
-const row=(id,props={})=>({...base,row_id:id,source_key:id,...props});
-const rows=[row('a'),row('b',{status:'exported',vehicle_id:'different',amount:50.02}),row('c',{status:'posted',amount:-10.01}),row('d',{source_center:'20',category:'tipp_deponi',carrier_type:'project',amount:200}),row('e',{source_center:'20',category:'material',amount:20}),row('f',{receiver_center:'20',amount:999}),row('g',{receiver_center:'30',amount:999}),row('h',{source_center:'40',amount:999}),row('review',{ready:false,status:'review',amount:900}),row('changed',{status:'changed',amount:800}),row('unknown',{source_center:null,ready:false,status:'review',amount:500}),row('null',{amount:null}),row('unsafe-tip',{category:'tipp_deponi',carrier_type:'vehicle',amount:700})];
-const s=internalCenterSummary(rows);assert.equal(s.transfers.length,2);assert.equal(s.transfers[0].toCenter,'30');assert.equal(s.transfers[0].amount,140.02);assert.equal(s.transfers[0].rows.length,3);assert.equal(s.transfers[0].excludedRows,4);assert.equal(s.transfers[0].excludedAmount,2400);assert.equal(s.transfers[1].amount,220);assert.equal(s.total,360.02);assert.equal(s.unassignedRows,1);
-const empty=internalCenterSummary([]);assert.equal(empty.transfers.length,2);assert.equal(empty.total,0);assert.equal(empty.transfers[1].amount,0);
-const csv=internalCenterSummaryCsv(s,'2026-09-01','2026-09-30');assert.ok(csv.startsWith('\uFEFF'));assert.ok(csv.includes('"10";"Entreprenad";"30";"Transport";"140,02"'));assert.ok(csv.includes('"-10,01"'));assert.ok(!csv.includes('"900,00";"review"'));assert.ok(csv.includes('"360,02"'));
-const dangerous=internalCenterSummary([row('danger',{order:'=HYPERLINK("evil")'})]);assert.ok(internalCenterSummaryCsv(dangerous,'2026-09-01','2026-09-30').includes("'="));
-assert.equal(rows[1].status,'exported');assert.equal(rows[2].status,'posted');
-console.log('PASS two KST totals, direction, carrier collapse, credits, exclusions, zero periods, read-only status and CSV reconciliation');
-if(process.argv[2]){const live=internalCenterSummary(JSON.parse(fs.readFileSync(process.argv[2],'utf8')).rows);console.log(JSON.stringify({...live,transfers:live.transfers.map(t=>({...t,rows:t.rows.length}))}));}
+const exportsObject={};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/kpi/internal-center-summary.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exportsObject});
+const {internalCenterSummaryCsv}=exportsObject;
+const row=(id,amount,props={})=>({row_id:id,source_key:id,occurred_on:'2026-09-01',order:'123',littra:'12664',receiver_center:'10',source_center:'30',amount,status:'review',review_reason:'Till granskning',report_basis:'preliminary',report_copies:1,...props});
+const a=row('a',100,{order:'=HYPERLINK("evil")',report_copies:2});
+const credit=row('b',-10,{source_center:'20',status:'posted',report_basis:'confirmed'});
+const unassigned=row('c',50,{source_center:null}),other=row('d',7,{receiver_center:'30'});
+const variants=[row('e1',100),row('e2',120)];
+const s={transfers:[{fromCenter:'10',fromName:'Entreprenad',toCenter:'30',toName:'Transport',amount:100,confirmedAmount:0,preliminaryAmount:100,rows:[a]},{fromCenter:'10',fromName:'Entreprenad',toCenter:'20',toName:'Sortergården',amount:-10,confirmedAmount:-10,preliminaryAmount:0,rows:[credit]}],total:90,confirmedTotal:-10,preliminaryTotal:100,sourceAmount:467,sourceRows:7,unassignedAmount:50,unassignedRows:1,unassignedItems:[unassigned],otherAmount:7,otherRows:1,otherItems:[other],duplicateAmountRemoved:100,duplicateRowsRemoved:1,conflictRawAmount:220,conflictCount:1,conflicts:[{sourceKey:'conflict',rawAmount:220,variants}],invalidAmountRows:0,reconciles:true};
+const snapshot=JSON.stringify(s);
+const csv=internalCenterSummaryCsv(s,'2026-09-01','2026-09-30');
+assert.ok(csv.startsWith('\uFEFF'));
+assert.ok(csv.includes('"10";"Entreprenad";"30";"Transport";"100,00";"0,00";"100,00"'));
+assert.ok(csv.includes('"-10,00"'));
+assert.ok(csv.includes('"Utan intäkts-KST";"50,00"'));
+assert.ok(csv.includes('"Motstridiga källrader – brutto, kan innehålla kopior"'));
+assert.ok(csv.includes("'=HYPERLINK"));
+assert.ok(csv.includes('"conflict";"review"'));
+assert.ok(csv.includes('"467,00"'));
+assert.equal(JSON.stringify(s),snapshot,'CSV export must not change business data or export status');
+console.log('PASS CSV includes all reconciliation buckets and review variants, retains credits, escapes source formulas and leaves statuses unchanged');

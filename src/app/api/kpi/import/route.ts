@@ -5,6 +5,7 @@ import { DATA_KINDS, type DataKind } from "@/lib/kpi/schema";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 function normalizeProjectReference(value: string | null | undefined) {
   return String(value ?? "").normalize("NFKC").trim().toUpperCase().replace(/^(?:PROJEKT(?:NR|NUMMER)?|PROJECT|NR)\s*[:#-]?\s*/i, "").replace(/\s+/g, "").replace(/\.0+$/, "");
@@ -147,11 +148,37 @@ export async function POST(request: Request) {
       provenance: { channel: "manual_upload", original_preserved: true, parser: "humla-kpi/1.0" },
       created_by: user.id,
     });
-    if (batchError?.code === "23505") return Response.json({ error: "Samma fil har redan importerats för denna datatyp." }, { status: 409 });
+    if (batchError?.code === "23505") {
+      if(kind==='revenue'&&isWorkify(table)){
+        const {data:previous}=await supabase.from('kpi_import_batches').select('id,status,provenance').eq('tenant_id',member.tenant_id).eq('data_kind',kind).eq('file_hash',fileHash).maybeSingle();
+        if(previous&&['completed','needs_review'].includes(previous.status)&&previous.provenance?.workify_import_result?.status!=='blocked_changes'){
+          const ignoredZeroRows=normalized.filter(r=>r.amount===0).length;
+          return Response.json({batchId:previous.id,status:previous.status,rows:0,insertedRows:0,duplicateRowsSkipped:normalized.length-ignoredZeroRows,ignoredZeroRows,validRows:0,invalidRows:0},{status:200});
+        }
+      }
+      return Response.json({error:'Samma fil finns redan. Kontrollera den tidigare importens status i Senaste importer; inga nya rader har lagts till.'},{status:409});
+    }
     if (batchError) throw batchError;
 
     const { error: uploadError } = await supabase.storage.from("kpi-imports").upload(path, bytes, { contentType: mimeForFile(file), upsert: false });
     if (uploadError) throw new Error(`Originalfilen kunde inte sparas: ${uploadError.message}`);
+
+    if (kind === 'revenue' && isWorkify(table)) {
+      // One atomic Hub transaction protects overlapping full-year imports,
+      // legitimate repeated source lines and simultaneous uploads.
+      const {data:ingested,error:ingestError}=await supabase.rpc('hub_kpi_ingest_workify_file_v1', {
+        p_tenant_id:member.tenant_id,p_batch_id:batchId,p_rows:normalized,
+      });
+      if(ingestError)throw ingestError;
+      if(ingested.status==='blocked_changes')return Response.json({
+        ...ingested,batchId,error:`Importen stoppades: ${ingested.changedRows} rader på befintliga ordrar har ändrats eller kan inte skiljas säkert från tidigare rader. Originalfilen är sparad. Inga nya ekonomirader har lagts till och inga tidigare belopp har skrivits över.`,
+      },{status:409});
+      const resolved=ingested.insertedRows>0?await supabase.rpc('hub_kpi_resolve_workify_import_v1',{
+        p_tenant_id:member.tenant_id,p_batch_id:batchId,
+      }):{data:{},error:null};
+      if(resolved.error)throw resolved.error;
+      return Response.json({batchId,rows:ingested.insertedRows,...ingested,...resolved.data},{status:201});
+    }
 
     for (let offset = 0; offset < normalized.length; offset += 500) {
       const payload = normalized.slice(offset, offset + 500).map((row) => ({ ...row, tenant_id: member.tenant_id, batch_id: batchId, currency: "SEK" }));
