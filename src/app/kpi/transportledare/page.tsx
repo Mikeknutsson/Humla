@@ -50,6 +50,15 @@ export default async function TransportManagerKpi({
     .select("project_number,project_name,project_manager,cost_center,source_cost_center")
     .eq("tenant_id",member.tenant_id)
     .eq("cost_center","30");
+  const {data:projectMappings,error:mappingError} = await supabase
+    .from("kpi_project_unit_mappings")
+    .select("project_reference,vehicle_registration,valid_from,valid_to,enabled")
+    .eq("tenant_id",member.tenant_id)
+    .eq("enabled",true)
+    .lte("valid_from",to)
+    .or(`valid_to.is.null,valid_to.gte.${from}`);
+  const transportKeys = new Set((transportProjects ?? []).map(p=>String(p.project_number)));
+  const linkedMappings = (projectMappings ?? []).filter(m=>transportKeys.has(String(m.project_reference)));
   const rows:VehicleRow[] = Array.isArray(report.vehicles) ? report.vehicles : [];
   const goals:TargetRow[] = (targets ?? []) as TargetRow[];
   return <main className="content" style={{maxWidth:1200,margin:"0 auto",padding:24}}>
@@ -58,7 +67,20 @@ export default async function TransportManagerKpi({
     <p>Period: {from} – {to}. Transport, material och tippavgifter redovisas separat i ekonomins originalunderlag.</p>
     {targetError && <p role="alert">Målregistret är inte tillgängligt. Mål visas inte.</p>}
     <p>Projekt i importerat transportregister: {projectError ? "kunde inte hämtas" : (transportProjects ?? []).length}. Kostnadsställe 30 och Transport ingår i samma projekturval.</p>\n    <p>Denna vy visar transportens enheter. Personlig områdes- och fordonstilldelning kopplas på separat innan vyn ges till arbetsledare.</p>
-    <table style={{width:"100%",borderCollapse:"collapse"}}>
+    <h2>Projekt från NEXT</h2>
+    <p>Aktiva projekt–fordonskopplingar inom vald period: {mappingError ? "kunde inte hämtas" : linkedMappings.length}. Kopplingarna visar ansvar och tillhörighet, inte summerad ekonomi.</p>
+    {projectError ? <p role="alert">Projektregistret kunde inte läsas.</p> :
+      <details><summary>Visa projekt och kopplade fordon ({transportProjects?.length ?? 0})</summary>
+      <div style={{overflowX:"auto"}}><table style={{width:"100%"}}>
+        <thead><tr><th align="left">Projekt</th><th align="left">Namn</th><th align="left">Projektledare</th><th align="left">Kopplade fordon</th></tr></thead>
+        <tbody>{(transportProjects ?? []).map(project=><tr key={project.project_number}>
+          <td>{project.project_number}</td><td>{project.project_name}</td>
+          <td>{project.project_manager || "Ej angiven"}</td>
+          <td>{linkedMappings.filter(m=>m.project_reference===project.project_number).map(m=>m.vehicle_registration).filter(Boolean).join(", ") || "Ej kopplat"}</td>
+        </tr>)}</tbody>
+      </table></div></details>}
+    <h2>Ekonomiska enheter</h2>
+    <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
       <thead><tr><th align="left">Enhet</th><th align="right">Intäkt</th><th align="right">Kostnad</th><th align="right">Resultat</th><th align="right">Marginal</th><th align="right">Mål</th><th align="left">Detaljer</th></tr></thead>
       <tbody>{rows.map((row,index)=>{
         const key=String(row.registration ?? row.registration_number ?? row.unit_name ?? row.name ?? row.vehicle_registration ?? "");
