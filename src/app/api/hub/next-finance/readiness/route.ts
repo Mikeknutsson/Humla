@@ -11,5 +11,18 @@ export async function GET() {
   if (error || !member) return Response.json({ error: 'Entydig aktiv arbetsyta krävs' }, { status: 403 });
   const permission = await db.rpc('hub_has_permission', { p_tenant_id: member.tenant_id, p_permission: 'kpi.manage' });
   if (permission.error || permission.data !== true) return Response.json({ error: 'Behörighet saknas' }, { status: 403 });
-  return Response.json({ ...NEXT_FINANCE_CONTRACT, enabled: false, tenantId: member.tenant_id }, { headers: { 'Cache-Control': 'private, no-store' } });
+  const connections = await db.from('hub_connections')
+    .select('id,name,status,configuration,last_success_at')
+    .eq('tenant_id', member.tenant_id).eq('connector_type', 'next_project_api');
+  if (connections.error) return Response.json({ error: 'Anslutningsstatus kunde inte hämtas' }, { status: 503 });
+  // Only expose operational status; never return configuration or credential references.
+  const connectionStatus = (connections.data ?? []).map(connection => ({
+    id: connection.id, name: connection.name, status: connection.status,
+    environment: connection.configuration?.environment ?? 'unknown',
+    readOnly: connection.configuration?.read_only !== false,
+    lastSuccessAt: connection.last_success_at,
+  }));
+  return Response.json({ ...NEXT_FINANCE_CONTRACT, enabled: false, tenantId: member.tenant_id,
+    connections: connectionStatus, financialLedgerConnected: false,
+  }, { headers: { 'Cache-Control': 'private, no-store' } });
 }

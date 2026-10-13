@@ -37,3 +37,15 @@ Verifierat isolerat i PGlite: anonym/annan tenant nekas, sidindelning utan förl
 3. Avstäm alla konsumenter och beredda KPI-fakta före eventuell historisk korrigering. Rapportgenerationer har inte byggts om.
 4. Verifiera tidsbegränsade manuella matchningar, fordonsfördelning, släp/ekipage, gemensamma kostnader och verklig ekonomisk före/efter-effekt.
 5. Godkänn avstämningen och aktivera först därefter berörda regler. Kontrollsidorna i sig är ingen ekonomisk aktivering.
+
+## Workify-jämförelse mot aktiv KPI-generation
+
+`/intaktskontroll` visar alla Workify-ursprungsrader och deras belopp i dagens KPI. Statusarna Reported, ReadyForInvoicing och Invoiced ingår i förslaget. Statusobservationer används separat från originalraden. Kandidater utan artikel- eller fordonsmappning behålls, medan andra ekonomiska valideringsfel redovisas för granskning.
+
+Uppdelade fakta (ursprungligt rad-ID samt `:material`) summeras per ursprungsrad. Både totalsummor och månadsjämförelser skiljer råbelopp från omräknade KPI-belopp. Föreslagen avstämning med saknade KPI-rader är inte en aktiverad KPI-generation.
+
+Dubblettförslaget använder innehåll, valuta och förekomst inom en import. Återtagna, ekonomiskt stoppade och giltiga rader hålls åtskilda vid identitetsberäkningen. Rader med nollbelopp ignoreras enligt befintlig importregel även om datum saknas. Originalrader och aktiva rapportgenerationer ändras inte av kontrollen.
+
+NEXT:s förberedelsestatus redovisar nu separat de faktiska anslutningarnas miljö och lässtatus. En fungerande testanslutning till projekt är inte i sig en verifierad produktionstjänst för ekonomiska transaktionsrader.
+
+Verifiering: isolerade PostgreSQL-tester täcker statusbyten, genuina identiska förekomster, krediter, valuta, mappningsfel, återtagna importer, materialuppdelning, tenantbehörighet och oförändrade original. Produktionsbygge och riktad ESLint godkända. Produktionsbelopp publiceras endast i den behörighetskontrollerade vyn och återrapporteringen till beställaren.
