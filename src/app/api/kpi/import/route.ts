@@ -224,8 +224,8 @@ export async function POST(request: Request) {
 
     // Hub reuses confirmed, dated project/allocation rules for each new file.
     // Unknown recipients and invalid evidence stay in review.
-    if (kind === "cost" || (kind === "revenue" && isWorkify(table))) {
-      const { data: resolved, error: resolveError } = await supabase.rpc(kind === "cost" ? "hub_kpi_resolve_import_allocations_v1" : "hub_kpi_resolve_workify_import_v1", {
+    if (kind === "revenue" && isWorkify(table)) {
+      const { data: resolved, error: resolveError } = await supabase.rpc("hub_kpi_resolve_workify_import_v1", {
         p_tenant_id: member.tenant_id, p_batch_id: batchId,
       });
       if (resolveError) throw resolveError;
