@@ -103,6 +103,7 @@ const auditMigration=await readFile(new URL('../supabase/migrations/202610131459
 await db.exec(auditMigration.slice(0,auditMigration.indexOf('do $migration$')));
 await db.exec(await readFile(new URL('../supabase/migrations/20261013150826_hub_workify_activation_batches.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../supabase/migrations/20261013152752_hub_workify_cost_comparison_details.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../supabase/migrations/20261013161133_hub_workify_approved_group_changes.sql',import.meta.url),'utf8'));
 const controls=(await db.query(`select jsonb_agg(to_jsonb(t)order by currency,review_state) controls from(
  select currency,review_state,count(*) rows,sum(amount)::text amount from private.hub_workify_review_rows_v1($1)group by 1,2)t`,[tenant])).rows[0].controls;
 await assert.rejects(db.query('select private.hub_workify_apply_approved_review_v1($1,$2,$3)',[tenant,JSON.stringify([]),'Test approval']),/Approved source scope changed/);
@@ -142,8 +143,15 @@ await db.query('update private.hub_kpi_prepared_facts set vehicle=null where fac
 await db.query("update private.hub_kpi_prepared_facts set amount=81 where fact_id='next-cost' and tenant_id=$1 and generation_id=$2",[t3,g3]);
 await assert.rejects(db.query('select private.hub_workify_validate_approved_generation_v1($1,$2)',[t3,g3]),/Existing cost split changed/);
 await db.query("update private.hub_kpi_prepared_facts set amount=80 where fact_id='next-cost' and tenant_id=$1 and generation_id=$2",[t3,g3]);
+await db.query("update private.hub_kpi_prepared_facts set business_group=case when generation_id=$2 then 'New group' else 'Old group' end where fact_id='next-cost' and tenant_id=$1",[t3,g3]);
+await assert.rejects(db.query('select private.hub_workify_validate_approved_generation_v1($1,$2)',[t3,g3]),/Existing cost split changed/);
+await db.query("insert into private.hub_workify_approved_cost_groups(run_id,tenant_id,fact_id,old_group,new_group,approval_reference) select id,tenant_id,'next-cost','Old group','New group','Isolated test approval' from private.hub_workify_activation_runs where tenant_id=$1",[t3]);
+await db.query("update private.hub_kpi_prepared_facts set amount=81 where fact_id='next-cost' and tenant_id=$1 and generation_id=$2",[t3,g3]);
+await assert.rejects(db.query('select private.hub_workify_validate_approved_generation_v1($1,$2)',[t3,g3]),/Existing cost split changed/);
+await db.query("update private.hub_kpi_prepared_facts set amount=80 where fact_id='next-cost' and tenant_id=$1 and generation_id=$2",[t3,g3]);
 await db.query('select private.hub_workify_validate_approved_generation_v1($1,$2)',[t3,g3]);
 const verified=(await db.query("select result from private.hub_workify_activation_runs where tenant_id=$1 and status='verified'",[t3])).rows[0].result;
-assert.equal(verified.preparedAmount,125);assert.equal(verified.difference,0);assert.equal(verified.costSplitPreserved,true);
+assert.equal(verified.preparedAmount,125);assert.equal(verified.difference,0);assert.equal(verified.costSplitPreserved,false);
+assert.equal(verified.costAmountsAndTargetsPreserved,true);assert.equal(verified.approvedCostGroupChanges,1);
 console.log('PASS: approved scope is frozen, publication rejects amount mismatch, uncertain allocation and altered cost split; verified generation preserves cost mappings');
 await db.close();
