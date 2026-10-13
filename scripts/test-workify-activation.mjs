@@ -247,4 +247,15 @@ await db.query("update public.kpi_import_batches set status='failed',provenance=
 assert.equal((await db.query('select private.hub_next_approved_cost_in_scope_v1($1,$2,$3,$4)a',[approvedCost.id,approvedCost.occurred_on,approvedCost.amount,'[]'])).rows[0].a,false);
 assert.equal((await db.query('select public.hub_next_completeness_review_v1($1,0,$2)r',[completeTenant,'included_unallocated'])).rows[0].r.selectedRows,0);
 console.log('PASS: completion review protects access, exposes active vs pending status, and honors later withdrawals and changed economic values');
+await db.exec(await readFile(new URL('../supabase/migrations/20261013183930_hub_next_financial_flag_is_not_validity.sql',import.meta.url),'utf8'));
+await db.query("update public.kpi_import_batches set provenance='{}',status='needs_review'where id=$1",[completeA]);
+const flagIndependent=(await db.query('select review_state,count(*)n,sum(amount)amount from private.hub_next_completeness_rows_v1($1)group by 1',[completeTenant])).rows;
+assert.equal(flagIndependent.find(r=>r.review_state==='candidate_include_unallocated').n,4);
+assert.equal(Number(flagIndependent.find(r=>r.review_state==='candidate_include_unallocated').amount),240);
+assert.equal(flagIndependent.find(r=>r.review_state==='source_policy_review').n,2);
+await db.query(`insert into public.kpi_import_rows(tenant_id,batch_id,row_number,data_kind,occurred_on,amount,account,project_reference,currency,is_valid,validation_errors,source_data)
+ values($1,$2,20,'cost','2026-09-01',15,'5656','9001','SEK',false,'["Kostnadsfördelning behöver granskas"]',$3)`,[completeTenant,completeA,JSON.stringify({...completeSource,Leverantör:'','Verifikation nr':'16D20',Verifikationstext:'Levfakt External supplier (12345)',Nettobelopp:'15.00','Inkludera i rapporter':'FALSE'})]);
+const invoiceId=(await db.query('select id from public.kpi_import_rows where tenant_id=$1 and row_number=20',[completeTenant])).rows[0].id;
+assert.equal((await db.query('select review_state from private.hub_next_completeness_rows_v1($1)where row_id=$2',[completeTenant,invoiceId])).rows[0].review_state,'candidate_include_unallocated');
+console.log('PASS: TRUE/FALSE never substitutes for validity; external voucher evidence qualifies without supplier-field guesses, while internal/unmapped rows remain held');
 await db.close();

@@ -27,13 +27,14 @@ export default async function NextCompleteness({ searchParams }: { searchParams:
   const report = error ? null : data as Report | null;
   return <KpiDetailShell query="" title="NEXT – kostnadsavstämning" breadcrumb="Humla Dashboard / Avstämning / NEXT" extraNavigation={<Link href="/kpi/avstamning" prefetch={false}>Avstämning & regler</Link>}>
     <div className="content">{!report ? <section className="panel"><p>Kostnadsavstämningen kunde inte hämtas. Saknat underlag visas inte som noll.</p></section> : <>
-      <section className="panel"><h2>Komplettering av saknade kostnader</h2>
+      <section className="panel"><h2>Senaste kompletteringen av saknade kostnader</h2>
         {report.activation ? <>
           <p>{report.activation.active ? 'Kompletteringen är verifierad och aktiv i dashboarden.' : 'Kompletteringen väntar på verifierad publicering.'}</p>
           <p>{report.activation.rows} externa, kontomappade rader · {money(report.activation.amount, 'SEK')}.</p>
           {report.activation.active && report.activation.difference !== null && <p>Avstämningsdifferens för kompletteringen: {money(String(report.activation.difference), 'SEK')}.</p>}
         </> : <p>Ingen komplettering är publicerad.</p>}
         <p>Giltiga kostnader kan ingå i totalresultatet utan en säker fordonsfördelning. Dessa rader fördelas inte automatiskt på fordon. Konton utan regel, interna poster och rapportpolicy granskas separat.</p>
+        <p>Flaggan TRUE/FALSE i NEXT avgör inte om en ekonomisk transaktion är giltig. Kontrollerna nedan utgår från radidentitet, dokument, kontoregler och eventuella ekonomiska valideringsfel. Samtliga verifierade kompletteringar finns i listan ”Ingår – fordonsfördelning granskas”.</p>
       </section>
       <section className="panel"><h2>Hela importhistoriken – {report.totalRows} rader</h2>
         <p>Beloppen nedan är ursprungsbelopp, inte en summering av KPI-kostnaden. Återtagna importer, återimporter och interna/schablonposter ska inte summeras till ett resultat. Bränsleavstämningen kan också ändra hur ett befintligt ursprungsbelopp representeras i KPI.</p>
