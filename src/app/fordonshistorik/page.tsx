@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { resolveHistoricalTrips } from "../../../../lib/hub/historical-transpa-evidence";
+import { resolveHistoricalTrips } from "../../../lib/hub/historical-transpa-evidence";
 export const dynamic = "force-dynamic";
 export default async function HistoricalVehicleReview() {
   const s = await createClient();
