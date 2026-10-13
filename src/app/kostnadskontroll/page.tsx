@@ -11,6 +11,7 @@ type CostReview = {
     file_name: string; source_data: Record<string, unknown>; validation_errors: unknown }[];
 };
 const reasons: Record<string,string> = {
+  confirmed_reexport_overlap: 'Återimport – undantas från KPI efter verifierad publicering',
   possible_duplicate_without_source_line_id: 'Möjlig dubblett – källrad-ID saknas',
   batch_and_source_identity_need_review: 'Import och radidentitet behöver granskas',
   missing_verified_source_line_id: 'Verifierad radidentitet saknas', invalid_economic_data: 'Ogiltigt belopp eller datum'

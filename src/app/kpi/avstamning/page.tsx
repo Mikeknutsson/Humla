@@ -11,6 +11,7 @@ type Review = {
   totals: { currency: string; review_state: string; rows: number; current_prepared_amount: string; allocation_review_rows: number }[];
   controls: { currency: string; partition_difference: string }[];
 };
+type NextStatus = { active: boolean; status: string; rows: number; amount: string; difference: number | null };
 const labels: Record<string, string> = {
   candidate_include: 'Unika rader med godkänd orderstatus',
   candidate_duplicate: 'Dubblettrader', excluded_status: 'Annan orderstatus',
@@ -29,12 +30,14 @@ export default async function Reconciliation({ searchParams }: { searchParams: P
   for (const key of ['fiscal_year', 'months', 'from', 'to', 'cost_center', 'group', 'unit', 'vehicle', 'project']) {
     if (typeof params[key] === 'string') query.set(key, params[key]);
   }
-  const [status, revenue, rules] = await Promise.all([
+  const [status, revenue, rules, next] = await Promise.all([
     getKpiReportStatus(access.tenantId),
     access.db.rpc('hub_workify_review_v1', { p_tenant_id: access.tenantId, p_page: 0, p_state: 'all' }),
     loadCostRules(access.db, access.tenantId).then(data => ({ data, error: false })).catch(() => ({ data: [], error: true })),
+    access.db.rpc('hub_next_reexport_status_v1', { p_tenant_id: access.tenantId }),
   ]);
   const report = revenue.error ? null : revenue.data as Review | null;
+  const nextStatus = next.error ? null : next.data as NextStatus | null;
   return <KpiDetailShell query={query.toString()} title="Avstämning & regler" breadcrumb="Humla Dashboard / Avstämning">
     <div className="content">
       <section className="panel"><h2>KPI-underlag</h2>
@@ -55,6 +58,15 @@ export default async function Reconciliation({ searchParams }: { searchParams: P
           {report.controls.map(c => <p key={c.currency}>Kontrolldifferens vid uppdelning av KPI-beloppen: <strong>{money(c.partition_difference, c.currency)}</strong>.</p>)}
         </>}
         <Link href="/intaktskontroll" prefetch={false}>Visa orderrader och originalunderlag →</Link>
+      </section>
+      <section className="panel"><h2>NEXT – återimporterade kostnader</h2>
+        {!nextStatus ? <p>Kontrollstatus kunde inte hämtas.</p> : <>
+          <p>{nextStatus.active ? 'Korrigeringen är verifierad och aktiv i dashboarden.' : nextStatus.status === 'pending' ? 'Korrigeringen väntar på verifierad publicering.' : 'Ingen korrigering är publicerad.'}</p>
+          <p>{nextStatus.rows} återimporterade rader · {money(nextStatus.amount, 'SEK')} {nextStatus.active ? 'undantas från KPI.' : 'i korrigeringsunderlaget.'}</p>
+          {nextStatus.active && nextStatus.difference !== null && <p>Avstämningsdifferens för korrigeringen: {money(String(nextStatus.difference), 'SEK')}.</p>}
+          <p>Originalraderna är kvar. Kontrollen gäller återimporter, inte en färdig avstämning av alla NEXT-kostnader.</p>
+        </>}
+        <Link href="/kostnadskontroll" prefetch={false}>Visa kostnadsrader och spårbarhet →</Link>
       </section>
       <section className="panel"><h2>Kostnadsfördelningsregler</h2>
         {rules.error ? <p>Reglerna kunde inte hämtas.</p> : <>
