@@ -40,4 +40,15 @@ assert.equal(report.centers.find(c=>c.code==='30').sources[0].source_label,'Work
 assert.equal(report.centers.find(c=>c.code==='40').revenue_rows,0);
 assert.equal((await db.query("select has_function_privilege('anon','public.hub_kpi_center_reconciliation_v1(uuid,date,date)','execute')a")).rows[0].a,false);
 console.log('PASS: ledger/order distinction, credit preservation, immutable financial amounts, unrelated-row guard, original project evidence, permission/tenant/period checks and missing-revenue row counts');
+await db.exec(`create table public.kpi_transpa_time_facts(tenant_id uuid,time_report_id text,employee_id text,work_date date,work_hours numeric,cost_distribution_codes jsonb);`);
+const fuelMigration=(await readFile(new URL('../supabase/migrations/20261013182005_hub_exact_ps_fuel_reconciliation.sql',import.meta.url),'utf8')).replace(/do \$migration\$[\s\S]*?end \$migration\$;/g,b=>b.includes('hub_kpi_center_reconciliation_v1')?b:'');
+await db.exec(fuelMigration);
+await db.query(`insert into public.kpi_transpa_time_facts values($1,'T1','PERSON1','2026-09-01',8,'["30"]'),($1,'T2','PERSON2','2026-09-02',9,'["0","30"]'),($1,'T3','PERSON1','2026-08-01',100,'["20"]'),('20000000-0000-0000-0000-000000000002','OTHER','OTHER','2026-09-01',100,'["40"]')`,[tenant]);
+const covered=(await db.query("select public.hub_kpi_center_reconciliation_v1($1,'2026-09-01','2026-09-30')r",[tenant])).rows[0].r;
+assert.equal(covered.transpa_coverage.reports,2);
+assert.equal(covered.transpa_coverage.hours,17);
+assert.equal(covered.transpa_coverage.cost_codes.find(c=>c.code==='30').reports,2);
+assert.equal(covered.transpa_coverage.cost_codes.some(c=>['20','40'].includes(c.code)),false);
+assert.equal(covered.centers.find(c=>c.code==='30').revenue,200);
+console.log('PASS: personnel coverage respects tenant/period, does not double-count mixed-code hours, and never changes financial totals');
 await db.close();
