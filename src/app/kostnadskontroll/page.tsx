@@ -60,7 +60,7 @@ export default async function CostReviewPage({ searchParams }: { searchParams: P
         </td></tr>)}
       </tbody></table>
       <nav aria-label="Sidor">{page>0 && <Link href={`?page=${page-1}`}>Föregående sida</Link>} {' '}{(page+1)*100<report.totalRows && <Link href={`?page=${page+1}`}>Nästa sida</Link>}</nav>
-      <p><Link href="/intaktskontroll">Granska Workify-intäkter mot KPI</Link> · <Link href="/fordonshistorik">Granska daterat fordonsunderlag</Link></p>
+      <p><Link href="/kpi/next-avstamning">NEXT – saknade kostnader och ekonomisk granskning</Link> · <Link href="/intaktskontroll">Granska Workify-intäkter mot KPI</Link> · <Link href="/fordonshistorik">Granska daterat fordonsunderlag</Link></p>
     </section>
   </>;
 }

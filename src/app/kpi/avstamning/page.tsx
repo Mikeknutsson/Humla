@@ -60,6 +60,7 @@ export default async function Reconciliation({ searchParams }: { searchParams: P
         <Link href="/intaktskontroll" prefetch={false}>Visa orderrader och originalunderlag →</Link>
       </section>
       <section className="panel"><h2>NEXT – återimporterade kostnader</h2>
+        <p><Link href="/kpi/next-avstamning" prefetch={false}>Kontrollera saknade kostnader, konton och rapportpolicy →</Link></p>
         {!nextStatus ? <p>Kontrollstatus kunde inte hämtas.</p> : <>
           <p>{nextStatus.active ? 'Korrigeringen är verifierad och aktiv i dashboarden.' : nextStatus.status === 'pending' ? 'Korrigeringen väntar på verifierad publicering.' : 'Ingen korrigering är publicerad.'}</p>
           <p>{nextStatus.rows} återimporterade rader · {money(nextStatus.amount, 'SEK')} {nextStatus.active ? 'undantas från KPI.' : 'i korrigeringsunderlaget.'}</p>

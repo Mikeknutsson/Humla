@@ -191,4 +191,60 @@ await db.query("update public.kpi_import_batches set status='completed' where id
 assert.equal((await db.query('select count(*)n from private.hub_next_reexport_audit where tenant_id=$1',[nextTenant])).rows[0].n,4);
 assert.equal((await db.query("select count(*)n from public.kpi_import_rows r where tenant_id=$1 and private.hub_kpi_import_row_in_scope_v2(id,data_kind,occurred_on,amount,is_valid,validation_errors,source_data)",[nextTenant])).rows[0].n,5);
 console.log('PASS: authenticated completed-file hook rejects unauthorized changes, excludes repeated exports and preserves an additional genuine occurrence');
+await db.exec(`create table public.kpi_cost_category_rules(tenant_id uuid,account text,cost_category text,valid_from date,valid_to date);
+create function private.hub_kpi_financial_facts_v1(uuid,date,date) returns void language plpgsql as $$declare x record;cr record;f record;begin
+ perform x.source_data||jsonb_build_object('_humla_include_in_vehicle_result',cr.include_in_vehicle_result);
+ perform 1 where f.k='cost' and f.src='NEXT' and f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','');end $$;
+create function private.hub_kpi_financial_month_facts_v1(uuid,date,date,integer[]) returns void language plpgsql as $$declare x record;cr record;f record;begin
+ perform x.source_data||jsonb_build_object('_humla_include_in_vehicle_result',cr.include_in_vehicle_result);
+ perform 1 where f.k='cost' and f.src='NEXT' and f.raw#>>'{_humla_assignment,shared_cost}' not in ('none','');end $$;`);
+await db.exec(await readFile(new URL('../supabase/migrations/20261013171324_hub_next_missing_financial_cost_scope.sql',import.meta.url),'utf8'));
+const completeTenant='20000000-0000-0000-0000-000000000005',completeA='70000000-0000-0000-0000-000000000007',completeB='70000000-0000-0000-0000-000000000008';
+await db.query("insert into public.kpi_import_batches(id,tenant_id,data_kind,status)values($1,$3,'cost','needs_review'),($2,$3,'cost','needs_review')",[completeA,completeB,completeTenant]);
+await db.query("insert into public.kpi_cost_category_rules values($1,'5656','service_repair','2025-09-01',null),($1,'4015','personnel','2025-09-01',null)",[completeTenant]);
+const completeSource={...nextSource,'Verifikation nr':'16D1','Inkludera i rapporter':'TRUE'};
+const completeRows=[
+ [completeA,1,100,'5656',completeSource], [completeA,2,100,'5656',completeSource],
+ [completeB,1,100,'5656',completeSource], [completeB,2,100,'5656',{...completeSource,'Upparb intäkt':'0'}],
+ [completeA,3,-30,'5656',{...completeSource,Nettobelopp:'-30.00'}],
+ [completeA,4,500,'1181',{...completeSource,Konto:'1181',Nettobelopp:'500.00'}],
+ [completeA,5,70,'5656',{...completeSource,'Inkludera i rapporter':'FALSE',Nettobelopp:'70.00'}],
+ [completeA,6,80,'4015',{...completeSource,Konto:'4015',Nettobelopp:'80.00'}],
+ [completeA,7,90,'5656',{...completeSource,Leverantör:'Elleholms test',Nettobelopp:'90.00'}],
+ [completeA,8,0,'5656',{...completeSource,Nettobelopp:'0'}],
+];
+for(const [batch,ordinal,amount,account,source] of completeRows) await db.query("insert into public.kpi_import_rows(tenant_id,batch_id,row_number,data_kind,occurred_on,amount,account,project_reference,currency,is_valid,validation_errors,source_data)values($1,$2,$3,'cost','2026-09-01',$4,$5,'9001','SEK',false,'[\"Kostnadsfördelning behöver granskas\"]',$6)",[completeTenant,batch,ordinal,amount,account,JSON.stringify(source)]);
+const completeStates=(await db.query('select review_state,count(*)n,sum(amount)amount from private.hub_next_completeness_rows_v1($1)group by 1',[completeTenant])).rows;
+assert.equal(completeStates.find(r=>r.review_state==='candidate_include_unallocated').n,3);
+assert.equal(Number(completeStates.find(r=>r.review_state==='candidate_include_unallocated').amount),170);
+assert.equal(completeStates.find(r=>r.review_state==='reexport').n,2);
+assert.equal(completeStates.find(r=>r.review_state==='account_rule_review').n,1);
+assert.equal(completeStates.find(r=>r.review_state==='source_policy_review').n,3);
+const completeOld='60000000-0000-0000-0000-000000000006',completeNew='60000000-0000-0000-0000-000000000007';
+const completeRun=(await db.query("insert into private.hub_next_completeness_runs(tenant_id,previous_generation,expected_rows,expected_amount,original_hash,approval_reference)select $1,$2,3,170,md5(string_agg(md5(to_jsonb(r)::text),','order by id)),'Isolated test' from public.kpi_import_rows r where tenant_id=$1 returning id",[completeTenant,completeOld])).rows[0].id;
+await db.query("insert into private.hub_next_completeness_items(row_id,run_id,tenant_id,amount,occurred_on,account,evidence)select row_id,$2,$1,amount,occurred_on,account,'{}'from private.hub_next_completeness_rows_v1($1)where review_state='candidate_include_unallocated'",[completeTenant,completeRun]);
+await db.query("insert into private.hub_kpi_prepared_facts(tenant_id,generation_id,fact_id,kind,amount,original)values($1,$2,'unchanged-revenue','revenue',200,'{}'),($1,$3,'unchanged-revenue','revenue',200,'{}')",[completeTenant,completeOld,completeNew]);
+await db.query("insert into private.hub_kpi_prepared_facts(tenant_id,generation_id,fact_id,occurred_on,kind,amount,source,original)select r.tenant_id,$2,r.id::text,r.occurred_on,'cost',r.amount,'NEXT',private.hub_next_completion_source_v1(r.id,r.source_data)from public.kpi_import_rows r join private.hub_next_completeness_items i on i.row_id=r.id where r.tenant_id=$1",[completeTenant,completeNew]);
+await db.query("update private.hub_kpi_prepared_facts set vehicle='GUESSED'where tenant_id=$1 and generation_id=$2 and kind='cost'",[completeTenant,completeNew]);
+await assert.rejects(db.query('select private.hub_next_validate_completeness_v1($1,$2)',[completeTenant,completeNew]),/Uncertain NEXT allocation/);
+await db.query("update private.hub_kpi_prepared_facts set vehicle=null where tenant_id=$1 and generation_id=$2 and kind='cost'",[completeTenant,completeNew]);
+await db.query("update private.hub_kpi_prepared_facts set amount=201 where tenant_id=$1 and generation_id=$2 and kind='revenue'",[completeTenant,completeNew]);
+await assert.rejects(db.query('select private.hub_next_validate_completeness_v1($1,$2)',[completeTenant,completeNew]),/changed other financial rows/);
+await db.query("update private.hub_kpi_prepared_facts set amount=200 where tenant_id=$1 and generation_id=$2 and kind='revenue'",[completeTenant,completeNew]);
+await db.query('select private.hub_next_validate_completeness_v1($1,$2)',[completeTenant,completeNew]);
+assert.equal((await db.query('select result from private.hub_next_completeness_runs where id=$1',[completeRun])).rows[0].result.difference,0);
+console.log('PASS: NEXT completeness preserves multiplicity and credits, holds source-policy and unmapped-account rows, rejects guessed vehicles and unrelated financial changes');
+await db.exec(await readFile(new URL('../supabase/migrations/20261013171815_hub_next_completeness_review_api.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../supabase/migrations/20261013172201_hub_next_completion_withdrawal_guard.sql',import.meta.url),'utf8'));
+const completionReview=(await db.query('select public.hub_next_completeness_review_v1($1,0,$2)r',[completeTenant,'included_unallocated'])).rows[0].r;
+assert.equal(completionReview.selectedRows,3);assert.equal(completionReview.activation.active,true);
+assert.equal((await db.query("select has_function_privilege('anon','public.hub_next_completeness_review_v1(uuid,integer,text)','execute')a")).rows[0].a,false);
+await assert.rejects(db.query('select public.hub_next_completeness_review_v1($1,0,$2)',[completeTenant,'invented']),/Invalid NEXT review selection/);
+const approvedCost=(await db.query('select * from public.kpi_import_rows where id in(select row_id from private.hub_next_completeness_items where tenant_id=$1)limit 1',[completeTenant])).rows[0];
+assert.equal((await db.query('select private.hub_next_approved_cost_in_scope_v1($1,$2,$3,$4)a',[approvedCost.id,approvedCost.occurred_on,approvedCost.amount,'[]'])).rows[0].a,true);
+assert.equal((await db.query('select private.hub_next_approved_cost_in_scope_v1($1,$2,$3,$4)a',[approvedCost.id,approvedCost.occurred_on,Number(approvedCost.amount)+1,'[]'])).rows[0].a,false);
+await db.query("update public.kpi_import_batches set status='failed',provenance='{"+'"withdrawal":{}'+"}'where id=$1",[completeA]);
+assert.equal((await db.query('select private.hub_next_approved_cost_in_scope_v1($1,$2,$3,$4)a',[approvedCost.id,approvedCost.occurred_on,approvedCost.amount,'[]'])).rows[0].a,false);
+assert.equal((await db.query('select public.hub_next_completeness_review_v1($1,0,$2)r',[completeTenant,'included_unallocated'])).rows[0].r.selectedRows,0);
+console.log('PASS: completion review protects access, exposes active vs pending status, and honors later withdrawals and changed economic values');
 await db.close();
