@@ -41,6 +41,7 @@ export default async function Reconciliation({ searchParams }: { searchParams: P
   return <KpiDetailShell query={query.toString()} title="Avstämning & regler" breadcrumb="Humla Dashboard / Avstämning">
     <div className="content">
       <section className="panel"><h2>KPI-underlag</h2>
+        <p><Link href="/kpi/verksamhetsavstamning" prefetch={false}>Avstämning för Transport, Sortergården och Verkstad →</Link></p>
         {status.error || !status.data ? <p>Rapportstatus kunde inte hämtas.</p> : <>
           <p>{status.data.status === 'ready' ? 'Dashboardens aktuella underlag är uppdaterat.' : status.data.generation ? 'Dashboarden visar senast publicerade underlag. En ny uppdatering är ännu inte klar.' : 'Inget publicerat KPI-underlag finns.'}</p>
           {status.data.synced_at && <p>Senast uppdaterat: {new Date(status.data.synced_at).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' })}.</p>}
