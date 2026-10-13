@@ -1,5 +1,16 @@
 # Humla KPI – Transportledare: personlig uppföljning
 
+## Primär navigering: kostnadsenheter (beslut 2026-10-13)
+- **Kostnadsenheten är startsidans och transportledarens primära objekt**, inte projektlistan.
+- Default: Mina kostnadsenheter. Sekundärt filter: Mitt område. Projekt från NEXT används för koppling, filtrering och drilldown.
+- En kostnadsenhet är den intäktsbringande ekonomiska enheten (t.ex. DFC86A), med kopplade släp, förare och delkostnader enligt Hub-regler.
+- Huvudtabell per enhet: omsättning, kostnader, resultat, marginal %, målmarginal %, avvikelse procentenheter och SEK; kostnader per kategori samt transport/material/tippavgift separat.
+- Enhetsdetalj: månadstrend, intäkt/timme, kostnad/mil, beläggning, debiteringsgrad, avvikelser, ordrar och källunderlag.
+- Osäkra eller ofördelade belopp ska redovisas separat och avstämmas, aldrig tyst försvinna.
+- Historiska ansvarstilldelningar gäller vid periodurval. Ingen dubbelsummering mellan perspektiven.
+- Projektregistret (kostnadsställe 30 = Transport) är sekundär klassificeringskälla, inte ekonomisk källa.
+- Implementation måste använda kanoniska Hub-enheter och Hub-aggregat. Saknas verifierad per-enhet-fördelning ska gränssnittet visa att underlag saknas, inte skapa egna fördelningar.
+
 ## Två separata ekonomiska perspektiv
 - **Mitt område:** Alla arbetsorder tilldelade transportledarens område, oavsett utförande fordon.
 - **Mina fordon:** Samtliga arbetsorder utförda av tilldelade ekonomiska enheter, oavsett orderns område.
