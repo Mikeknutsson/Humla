@@ -3,6 +3,8 @@
  * Posting requires a stable document+line identity supplied by the source.
  */
 export type NextCostCandidate = {
+  tenantId?: string;
+  sourceSystem?: string;
   id: string;
   batchId: string;
   batchStatus?: string | null;
@@ -19,43 +21,40 @@ export type NextCostCandidate = {
 };
 export type Reconciliation = {
   rowId: string;
-  state: "unique_verified" | "duplicate_verified" | "review_required";
+  state: "unique_verified" | "duplicate_verified" | "review_required" | "invalid";
   canonicalRowId?: string;
   reason: string;
 };
 const norm = (s: string) => s.trim().toUpperCase();
 export function reconcileNextCosts(rows: NextCostCandidate[]): Reconciliation[] {
-  const bySource = new Map<string, string>();
-  const seenVoucherLines = new Map<string, { id: string; batchId: string }>();
+  const bySource = new Map<string, NextCostCandidate[]>();
   const bySignature = new Map<string, NextCostCandidate[]>();
+  const sourceKey = (row: NextCostCandidate) => row.sourceDocumentId?.trim() && row.sourceDocumentLineId?.trim()
+    ? JSON.stringify([row.tenantId ?? "", row.sourceSystem ?? "next", row.sourceDocumentId.trim(), row.sourceDocumentLineId.trim()]) : null;
+  const signature = (row: NextCostCandidate) => JSON.stringify([row.tenantId ?? "", row.sourceSystem ?? "next", norm(row.projectReference), row.occurredOn, row.amount]);
   for (const row of rows) {
-    const sig = [norm(row.projectReference), row.occurredOn, row.amount].join("|");
+    const key = sourceKey(row);
+    if (key) bySource.set(key, [...(bySource.get(key) ?? []), row]);
+    const sig = signature(row);
     bySignature.set(sig, [...(bySignature.get(sig) ?? []), row]);
   }
   return rows.map(row => {
+    if (!row.amount.trim() || !Number.isFinite(Number(row.amount)) || !/^\d{4}-\d{2}-\d{2}$/.test(row.occurredOn))
+      return { rowId: row.id, state: "invalid" as const, reason: "invalid_economic_data" };
     if (row.batchStatus !== "completed")
       return { rowId: row.id, state: "review_required" as const, reason: "import_batch_not_completed" };
-    const sourceKey = row.sourceDocumentId?.trim() && row.sourceDocumentLineId?.trim()
-      ? [norm(row.sourceDocumentId), norm(row.sourceDocumentLineId)].join("|")
-      : null;
-    const voucherKey = row.sourceDocumentId?.trim() && !row.sourceDocumentLineId?.trim() && row.sourceAccount?.trim()
-      ? [norm(row.projectReference), norm(row.sourceDocumentId), row.occurredOn, norm(row.sourceAccount), row.amount, norm(row.sourceDescription ?? ""), norm(row.sourceSupplier ?? "")].join("|")
-      : null;
-    if (voucherKey) {
-      const previous = seenVoucherLines.get(voucherKey);
-      if (previous && previous.batchId !== row.batchId)
-        return { rowId: row.id, state: "duplicate_verified" as const, canonicalRowId: previous.id, reason: "same_voucher_line_across_batches" };
-      if (!previous) seenVoucherLines.set(voucherKey, { id: row.id, batchId: row.batchId });
-      return { rowId: row.id, state: "review_required" as const, reason: "voucher_without_unique_line_id" };
-    }
-    if (sourceKey) {
-      const existing = bySource.get(sourceKey);
-      if (existing && existing !== row.id)
-        return { rowId: row.id, state: "duplicate_verified" as const, canonicalRowId: existing, reason: "same_source_document_line" };
-      bySource.set(sourceKey, row.id);
+    const key = sourceKey(row);
+    if (key) {
+      const peers = bySource.get(key)!;
+      // A changed amount/content under the same ID is a correction/conflict, not a duplicate.
+      if (!row.sourceContentHash || peers.some(p => p.sourceContentHash !== row.sourceContentHash || signature(p) !== signature(row)))
+        return { rowId: row.id, state: "review_required" as const, reason: "conflicting_source_document_line" };
+      const canonical = peers.filter(p => p.batchStatus === "completed").sort((a,b) => a.id.localeCompare(b.id))[0];
+      if (canonical.id !== row.id)
+        return { rowId: row.id, state: "duplicate_verified" as const, canonicalRowId: canonical.id, reason: "same_source_document_line" };
       return { rowId: row.id, state: "unique_verified" as const, reason: "source_document_line_identity" };
     }
-    const sig = [norm(row.projectReference), row.occurredOn, row.amount].join("|");
+    const sig = signature(row);
     const peers = bySignature.get(sig) ?? [];
     return {
       rowId: row.id,

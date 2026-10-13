@@ -1,39 +1,49 @@
-import { createClient } from "@/lib/supabase/server";
-export const dynamic = "force-dynamic";
-
-export default async function CostReviewPage() {
-  const supabase = await createClient();
-  const { data: batches, error: batchError } = await supabase
-    .from("kpi_import_batches")
-    .select("id,status,source_type,file_name")
-    .in("status", ["completed", "failed", "needs_review"])
-    .limit(500);
-  const relevant = (batches ?? []).filter(b => b.source_type === "manual_excel");
-  const ids = relevant.map(b => b.id);
-  const { data: rows, error: rowError } = ids.length
-    ? await supabase.from("kpi_import_rows")
-        .select("id,batch_id,project_reference,occurred_on,amount,source_data")
-        .in("batch_id", ids)
-        .in("project_reference", ["227", "243", "9900"])
-        .limit(2000)
-    : { data: [], error: null };
-  const status = new Map(relevant.map(b => [b.id, b.status]));
-  const totals = new Map<string, { rows: number; amount: number }>();
-  for (const r of rows ?? []) {
-    const s = status.get(r.batch_id) ?? "unknown";
-    const t = totals.get(s) ?? { rows: 0, amount: 0 };
-    t.rows += 1;
-    t.amount += Number(r.amount ?? 0);
-    totals.set(s, t);
-  }
-  const fmt = (n: number) => new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK" }).format(n);
-  return <><header className="topbar"><div><span className="eyebrow">HUMLA HUB · READ ONLY</span><h1>Kostnadskontroll</h1><p>Kontroll av Next-importer för projekt 227, 243 och 9900. Ingen kostnad fördelas eller bokförs från denna vy.</p></div></header>
-    {batchError || rowError ? <section className="card"><h2>Data kunde inte hämtas</h2><p>{batchError?.message ?? rowError?.message}</p></section> : <>
-      <section className="stats">{["completed", "failed", "needs_review"].map(s => <article className="card" key={s}><b>{totals.get(s)?.rows ?? 0}</b><strong>{s}</strong><small>{fmt(totals.get(s)?.amount ?? 0)}</small></article>)}</section>
-      <section className="section"><h2>Importunderlag för granskning</h2><p>Identiska belopp eller verifikationsnummer är inte ensamma bevis för dubbelimport. Granska ursprungsrader innan aktivering.</p>
-      <table><thead><tr><th>Projekt</th><th>Datum</th><th>Verifikation</th><th>Importstatus</th><th>Belopp</th></tr></thead><tbody>
-      {(rows ?? []).slice(0,150).map(r => { const source = r.source_data as Record<string, unknown> | null; return <tr key={r.id}><td>{r.project_reference}</td><td>{r.occurred_on}</td><td>{String(source?.["Verifikation nr"] ?? "Saknas")}</td><td>{status.get(r.batch_id) ?? "unknown"}</td><td>{fmt(Number(r.amount ?? 0))}</td></tr>; })}
-      </tbody></table></section>
-    </>}
+import Link from 'next/link';
+import { reviewAccess, reviewPage } from '@/lib/hub/review-access';
+export const dynamic = 'force-dynamic';
+type CostReview = {
+  totalRows: number; verifiedUniqueRows: number; verifiedDuplicateRows: number; possibleDuplicateRows: number;
+  reviewRows: number; invalidRows: number; activeRules: number; inactiveRules: number;
+  batchTotals: { currency: string; batch_status: string; rows: number; amount: string }[];
+  items: { row_id: string; batch_id: string; row_number: number; occurred_on: string; project: string;
+    amount: string; currency: string; batch_status: string; reason: string; candidate_row_id: string | null;
+    file_name: string; source_data: Record<string, unknown>; validation_errors: unknown }[];
+};
+const reasons: Record<string,string> = {
+  possible_duplicate_without_source_line_id: 'Möjlig dubblett – källrad-ID saknas',
+  batch_and_source_identity_need_review: 'Import och radidentitet behöver granskas',
+  missing_verified_source_line_id: 'Verifierad radidentitet saknas', invalid_economic_data: 'Ogiltigt belopp eller datum'
+};
+export default async function CostReviewPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const access = await reviewAccess();
+  if (!access) return <section className="card"><h1>Åtkomst saknas</h1><p>En entydig aktiv arbetsyta med KPI-läsbehörighet krävs.</p></section>;
+  const page = reviewPage((await searchParams).page);
+  const { data, error } = await access.db.rpc('hub_cost_review_v1', { p_tenant_id: access.tenantId, p_page: page });
+  if (error || !data) return <section className="card"><h1>Kostnadskontroll</h1><p>Avstämningen kunde inte hämtas. Inga ekonomiska data har ändrats.</p></section>;
+  const report = data as CostReview;
+  const money = (amount: string, currency: string) => `${new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(amount))} ${currency}`;
+  return <>
+    <header className="topbar"><div><span className="eyebrow">HUMLA HUB · GRANSKNING</span><h1>Kostnadskontroll</h1>
+      <p>Samtliga kostnadsrader i arbetsytans importhistorik. Summorna är råa importbelopp och kan innehålla dubbletter.</p></div></header>
+    <section className="stats">
+      <article className="card"><b>{report.totalRows}</b><strong>Ursprungsrader</strong></article>
+      <article className="card"><b>{report.verifiedUniqueRows}</b><strong>Verifierade unika</strong></article>
+      <article className="card"><b>{report.verifiedDuplicateRows}</b><strong>Verifierade dubbletter</strong></article>
+      <article className="card"><b>{report.reviewRows}</b><strong>Behöver granskas</strong><small>Varav {report.possibleDuplicateRows} möjliga dubbletter</small></article>
+    </section>
+    <section className="card"><h2>Avstämning före aktivering</h2>
+      <p>{report.activeRules} aktiva och {report.inactiveRules} inaktiva fördelningsregler. {report.invalidRows} rader har ogiltigt belopp eller datum.</p>
+      <p>Ekonomisk avstämningsdifferens: ännu inte fastställd. Inget belopp tas bort eller fördelas från denna vy. Ett verifikationsnummer och identiskt innehåll bevisar inte ensamma att två rader är samma transaktion.</p>
+      <table><thead><tr><th>Importstatus</th><th>Rader</th><th>Råbelopp</th></tr></thead><tbody>{report.batchTotals.map(t => <tr key={t.batch_status+t.currency}><td>{t.batch_status}</td><td>{t.rows}</td><td>{money(t.amount,t.currency)}</td></tr>)}</tbody></table>
+    </section>
+    <section className="section"><h2>Radgranskning</h2><p>Sida {page+1}. 100 rader per sida; totalsummorna omfattar hela historiken.</p>
+      <table><thead><tr><th>Projekt / datum</th><th>Källa</th><th>Belopp</th><th>Kontroll</th></tr></thead><tbody>
+        {report.items.map(r => <tr key={r.row_id}><td>{r.project}<br/>{r.occurred_on}</td><td>{r.file_name}<br/>Rad {r.row_number} · {r.batch_status}</td><td>{money(r.amount,r.currency)}</td><td>{reasons[r.reason] ?? r.reason}
+          <details><summary>Original och spårbarhet</summary><p>Rad: {r.row_id}<br/>Import: {r.batch_id}</p>{r.candidate_row_id && <p>Möjlig motsvarande rad: {r.candidate_row_id}</p>}<pre>{JSON.stringify(r.source_data,null,2)}</pre><p>Importkontroller: {JSON.stringify(r.validation_errors)}</p></details>
+        </td></tr>)}
+      </tbody></table>
+      <nav aria-label="Sidor">{page>0 && <Link href={`?page=${page-1}`}>Föregående sida</Link>} {' '}{(page+1)*100<report.totalRows && <Link href={`?page=${page+1}`}>Nästa sida</Link>}</nav>
+      <p><Link href="/fordonshistorik">Granska daterat fordonsunderlag</Link></p>
+    </section>
   </>;
 }
