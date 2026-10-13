@@ -5,6 +5,7 @@
 export type NextCostCandidate = {
   id: string;
   batchId: string;
+  batchStatus?: string | null;
   rowNumber: number;
   projectReference: string;
   occurredOn: string;
@@ -32,6 +33,8 @@ export function reconcileNextCosts(rows: NextCostCandidate[]): Reconciliation[] 
     bySignature.set(sig, [...(bySignature.get(sig) ?? []), row]);
   }
   return rows.map(row => {
+    if (row.batchStatus !== "completed")
+      return { rowId: row.id, state: "review_required" as const, reason: "import_batch_not_completed" };
     const sourceKey = row.sourceDocumentId?.trim() && row.sourceDocumentLineId?.trim()
       ? [norm(row.sourceDocumentId), norm(row.sourceDocumentLineId)].join("|")
       : null;
