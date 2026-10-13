@@ -85,13 +85,16 @@ export default async function TransportManagerKpi({
           <td align="right">{cost===null?"—":money(cost)}</td>
           <td align="right">{result===null?"—":money(result)}</td>
           <td align="right">{margin===null?"—":`${margin.toFixed(1)} %`}</td>
-          <td align="right">{goal===null?"—":`${goal} %`}</td>\n          <td align="right">{goal===null || margin===null ? "—" : `${(margin-goal).toFixed(1)} pp`}</td>\n          <td align="right">{goal===null || revenue===null || result===null ? "—" : money(result-revenue*goal/100)}</td>
+          <td align="right">{goal===null?"—":`${goal} %`}</td>
+          <td align="right">{goal===null || margin===null ? "—" : `${(margin-goal).toFixed(1)} pp`}</td>
+          <td align="right">{goal===null || revenue===null || result===null ? "—" : money(result-revenue*goal/100)}</td>
           <td>{key?<Link href={`/kpi?view=overview&vehicle=${encodeURIComponent(key)}&from=${from}&to=${to}`}>Visa arbetsunderlag →</Link>:null}</td>
         </tr>;
       })}</tbody>
     </table></div>
     {!rows.length && <p>Inga fordon i rapporten för vald period.</p>}
-    <details><summary>Projektkopplingar från NEXT (sekundär uppföljning)</summary>\n    <h2>Projekt från NEXT</h2>
+    <details><summary>Projektkopplingar från NEXT (sekundär uppföljning)</summary>
+    <h2>Projekt från NEXT</h2>
     <p>Aktiva projekt–fordonskopplingar inom vald period: {mappingError ? "kunde inte hämtas" : linkedMappings.length}. Kopplingarna visar ansvar och tillhörighet, inte summerad ekonomi.</p>
     {projectError ? <p role="alert">Projektregistret kunde inte läsas.</p> :
       <details><summary>Visa projekt och kopplade fordon ({transportProjects?.length ?? 0})</summary>
@@ -103,6 +106,7 @@ export default async function TransportManagerKpi({
           <td>{linkedMappings.filter(m=>m.project_reference===project.project_number).map(m=>m.vehicle_registration).filter(Boolean).join(", ") || "Ej kopplat"}</td>
         </tr>)}</tbody>
       </table></div></details>}
-    </details>\n    <p>Enhetsmål som ändras under perioden visas tills vidare som ”—” i stället för att beräknas felaktigt.</p>
+    </details>
+    <p>Enhetsmål som ändras under perioden visas tills vidare som ”—” i stället för att beräknas felaktigt.</p>
   </main>;
 }
