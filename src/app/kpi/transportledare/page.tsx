@@ -63,25 +63,14 @@ export default async function TransportManagerKpi({
   const goals:TargetRow[] = (targets ?? []) as TargetRow[];
   return <main className="content" style={{maxWidth:1200,margin:"0 auto",padding:24}}>
     <p><Link href="/kpi">← KPI-översikt</Link></p>
-    <h1>Transportledare – fordonsuppföljning</h1>
+    <h1>Mina kostnadsenheter</h1>
     <p>Period: {from} – {to}. Transport, material och tippavgifter redovisas separat i ekonomins originalunderlag.</p>
     {targetError && <p role="alert">Målregistret är inte tillgängligt. Mål visas inte.</p>}
-    <p>Projekt i importerat transportregister: {projectError ? "kunde inte hämtas" : (transportProjects ?? []).length}. Kostnadsställe 30 och Transport ingår i samma projekturval.</p>\n    <p>Denna vy visar transportens enheter. Personlig områdes- och fordonstilldelning kopplas på separat innan vyn ges till arbetsledare.</p>
-    <h2>Projekt från NEXT</h2>
-    <p>Aktiva projekt–fordonskopplingar inom vald period: {mappingError ? "kunde inte hämtas" : linkedMappings.length}. Kopplingarna visar ansvar och tillhörighet, inte summerad ekonomi.</p>
-    {projectError ? <p role="alert">Projektregistret kunde inte läsas.</p> :
-      <details><summary>Visa projekt och kopplade fordon ({transportProjects?.length ?? 0})</summary>
-      <div style={{overflowX:"auto"}}><table style={{width:"100%"}}>
-        <thead><tr><th align="left">Projekt</th><th align="left">Namn</th><th align="left">Projektledare</th><th align="left">Kopplade fordon</th></tr></thead>
-        <tbody>{(transportProjects ?? []).map(project=><tr key={project.project_number}>
-          <td>{project.project_number}</td><td>{project.project_name}</td>
-          <td>{project.project_manager || "Ej angiven"}</td>
-          <td>{linkedMappings.filter(m=>m.project_reference===project.project_number).map(m=>m.vehicle_registration).filter(Boolean).join(", ") || "Ej kopplat"}</td>
-        </tr>)}</tbody>
-      </table></div></details>}
-    <h2>Ekonomiska enheter</h2>
+    <p>Projekt i importerat transportregister: {projectError ? "kunde inte hämtas" : (transportProjects ?? []).length}. Kostnadsställe 30 och Transport ingår i samma projekturval.</p>
+    <p>Denna vy visar transportens enheter. Personlig områdes- och fordonstilldelning kopplas på separat innan vyn ges till arbetsledare.</p>
+    <h2>Ekonomisk uppföljning per enhet</h2>
     <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-      <thead><tr><th align="left">Enhet</th><th align="right">Intäkt</th><th align="right">Kostnad</th><th align="right">Resultat</th><th align="right">Marginal</th><th align="right">Mål</th><th align="left">Detaljer</th></tr></thead>
+      <thead><tr><th align="left">Enhet</th><th align="right">Intäkt</th><th align="right">Kostnad</th><th align="right">Resultat</th><th align="right">Marginal</th><th align="right">Mål</th><th align="right">Avvikelse</th><th align="right">Avvikelse kr</th><th align="left">Detaljer</th></tr></thead>
       <tbody>{rows.map((row,index)=>{
         const key=String(row.registration ?? row.registration_number ?? row.unit_name ?? row.name ?? row.vehicle_registration ?? "");
         const revenue=num(row.revenue ?? row.income);
@@ -96,12 +85,24 @@ export default async function TransportManagerKpi({
           <td align="right">{cost===null?"—":money(cost)}</td>
           <td align="right">{result===null?"—":money(result)}</td>
           <td align="right">{margin===null?"—":`${margin.toFixed(1)} %`}</td>
-          <td align="right">{goal===null?"—":`${goal} %`}</td>
+          <td align="right">{goal===null?"—":`${goal} %`}</td>\n          <td align="right">{goal===null || margin===null ? "—" : `${(margin-goal).toFixed(1)} pp`}</td>\n          <td align="right">{goal===null || revenue===null || result===null ? "—" : money(result-revenue*goal/100)}</td>
           <td>{key?<Link href={`/kpi?view=overview&vehicle=${encodeURIComponent(key)}&from=${from}&to=${to}`}>Visa arbetsunderlag →</Link>:null}</td>
         </tr>;
       })}</tbody>
-    </table>
+    </table></div>
     {!rows.length && <p>Inga fordon i rapporten för vald period.</p>}
-    <p>Enhetsmål som ändras under perioden visas tills vidare som ”—” i stället för att beräknas felaktigt.</p>
+    <details><summary>Projektkopplingar från NEXT (sekundär uppföljning)</summary>\n    <h2>Projekt från NEXT</h2>
+    <p>Aktiva projekt–fordonskopplingar inom vald period: {mappingError ? "kunde inte hämtas" : linkedMappings.length}. Kopplingarna visar ansvar och tillhörighet, inte summerad ekonomi.</p>
+    {projectError ? <p role="alert">Projektregistret kunde inte läsas.</p> :
+      <details><summary>Visa projekt och kopplade fordon ({transportProjects?.length ?? 0})</summary>
+      <div style={{overflowX:"auto"}}><table style={{width:"100%"}}>
+        <thead><tr><th align="left">Projekt</th><th align="left">Namn</th><th align="left">Projektledare</th><th align="left">Kopplade fordon</th></tr></thead>
+        <tbody>{(transportProjects ?? []).map(project=><tr key={project.project_number}>
+          <td>{project.project_number}</td><td>{project.project_name}</td>
+          <td>{project.project_manager || "Ej angiven"}</td>
+          <td>{linkedMappings.filter(m=>m.project_reference===project.project_number).map(m=>m.vehicle_registration).filter(Boolean).join(", ") || "Ej kopplat"}</td>
+        </tr>)}</tbody>
+      </table></div></details>}
+    </details>\n    <p>Enhetsmål som ändras under perioden visas tills vidare som ”—” i stället för att beräknas felaktigt.</p>
   </main>;
 }
