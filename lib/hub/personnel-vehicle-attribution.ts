@@ -15,6 +15,7 @@ export type CostLine = {
   personnelProject?: string | null;
   registration?: string | null;
   transpaRegistration?: string | null;
+  historicalTranspaRegistrations?: string[] | null;
   workifyRegistration?: string | null;
 };
 export type Attribution = {
@@ -32,6 +33,9 @@ export function attributeCostLine(line: CostLine, mappings: PersonnelVehicleMapp
     return { key, vehicle: null, method: "review", reason: "missing_source_line_identity" };
   const direct = normalized(line.registration);
   if (direct) return { key, vehicle: direct, method: "source_registration" };
+  const historical = [...new Set((line.historicalTranspaRegistrations ?? []).map(normalized).filter(Boolean))];
+  if (historical.length > 1) return { key, vehicle: null, method: "review", reason: "multiple_historical_transpa_vehicles" };
+  if (historical.length === 1) return { key, vehicle: historical[0], method: "transpa" };
   const transpa = normalized(line.transpaRegistration);
   if (transpa) return { key, vehicle: transpa, method: "transpa" };
   const workify = normalized(line.workifyRegistration);
