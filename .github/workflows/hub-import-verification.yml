@@ -23,3 +23,5 @@ jobs:
         run: node --test tests/import-reuse-contract.test.mjs
       - name: TypeScript integration check
         run: npx tsc --noEmit
+      - name: Production build smoke test
+        run: npm run build
