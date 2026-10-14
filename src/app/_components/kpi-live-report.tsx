@@ -34,7 +34,7 @@ export function KpiLiveReport(props:KpiAppProps) {
      void fetch('/api/kpi/selection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:nextQuery}),signal:controller.signal}).catch(()=>{});
     }
     else{
-     const response=await fetch('/api/kpi/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:nextQuery}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(60000)])});
+     const response=await fetch('/api/kpi/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:nextQuery}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(35000)])});
      if(!response.ok)throw new Error('KPI report unavailable');
      data=await response.json();
      if(id!==version.current)return;

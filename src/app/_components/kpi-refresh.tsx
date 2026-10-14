@@ -30,7 +30,7 @@ export function KpiRefresh() {
     const started=Date.now();
     async function check(){
       try{
-        const response=await fetch('/api/kpi/sync',{cache:'no-store',signal:controller.signal});
+        const response=await fetch('/api/kpi/sync',{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
         if(!response.ok)throw new Error('Status unavailable');
         const next:ReportSyncStatus=await response.json();
         if(controller.signal.aborted)return;
@@ -67,7 +67,7 @@ export function KpiRefresh() {
     <button type="button" title="Ladda om vyn från det förberedda underlaget, utan att starta en Hub-synkning." disabled={refreshing} onClick={async () => {
       setRefreshing(true);
       // Reload client-side queues as well as server data, preserving the current URL.
-      try { await refreshKpiReport(); } finally { window.location.reload(); }
+      try { await Promise.race([refreshKpiReport(),new Promise(resolve=>setTimeout(resolve,15000))]); } finally { window.location.reload(); }
     }}><RefreshCw size={16} className={refreshing ? "refresh-spinning" : ""}/>{refreshing ? "Uppdaterar…" : "Uppdatera"}</button>
     <button type="button" title="Återställ alla filter till hela aktuella verksamhetsåret och alla kostnadsställen, grupper och enheter." onClick={()=>{
       const reset=defaultSelection();
