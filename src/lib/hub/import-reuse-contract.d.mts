@@ -18,3 +18,17 @@ export function reconcileImportedLines<T extends {
   review: Array<{ record: T; reason: string; transactionKey?: string }>;
   duplicates: number;
 };
+
+export function reconcileOrderSnapshots(input: {
+  previous?: Array<{ orderNumber: string; amount: number; isValid: boolean }>;
+  latest?: Array<{ orderNumber: string; amount: number; isValid: boolean }>;
+}): {
+  previousTotal: number;
+  latestTotal: number;
+  latestUnreviewedAmount: number;
+  orderCount: number;
+  newOrders: string[];
+  changedOrders: string[];
+  removedOrders: string[];
+  status: "comparable" | "needs_review";
+};
