@@ -50,6 +50,7 @@ export default async function Reconciliation({ searchParams }: { searchParams: P
         <Link href={`/kpi?${query}`} prefetch={false}>Visa översikten med samma urval →</Link>
       </section>
       <section className="panel"><h2>Workify-intäkter</h2>
+        <p><Link href="/kpi/workify-avstamning" prefetch={false}>Jämför perioden och orderbeloppen med senaste Workify-export →</Link></p>
         {!report ? <p>Avstämningen kunde inte hämtas.</p> : <>
           <p>{report.mode === 'active' ? 'Den godkända avstämningen är aktiv i KPI.' : report.approved ? 'Avstämningen är godkänd och väntar på verifierad publicering.' : 'Avstämningen är ett förslag och är ännu inte aktiv i KPI.'}</p>
           <p>Reported, ReadyForInvoicing och Invoiced ingår. Samma orderrad räknas en gång när orderstatusen ändras.</p>
