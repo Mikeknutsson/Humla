@@ -15,20 +15,21 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
  const money=(v:number|null|undefined,unit='kr')=>monthlyValue(v,unit);
  const row=(label:string,m:string,ytd:string)=>{room(29);text(label,left,y,10);text(m,320,y,10,true);text(ytd,448,y,9);y-=26;};
  const fmt=(m:MonthlyMetric|undefined)=>m?money(m.value,m.unit):'Saknas';
+ const reconciliation=(d:Department)=>{const r=d.report.reconciliation;if(r?.status!=='needs_review')return;room(91);text('PRELIMINÄR INTÄKT OCH RESULTAT - AVSTÄMNING ÅTERSTÅR',left,y,9,true);y-=17;text('Workify i KPI: '+money(r.workify_in_kpi),left,y,9);y-=15;text('Uppgivet Workify-belopp: '+money(r.reported_workify)+' | Differens: '+money(r.difference),left,y,9);y-=15;text('Ändrade orderversioner granskas. Beloppen är inte slutligt avstämda.',left,y,9,false,muted);y-=27;};
  const metrics=(d:Department)=>{const m=d.report.month.metrics,ym=d.report.ytd.metrics;for(let i=0;i<m.length;i++){row(m[i].label,fmt(m[i]),fmt(ym.find(x=>x.key===m[i].key)));}};
  const period=departments[0]?.report.period;
  page.drawRectangle({x:0,y:814,width:595,height:28,color:yellow});
- text('HUMLA  /  MANADSRAPPORT',left,824,11,true);
- text(variant==='ledning'?'Ledningsgrupp - avdelningsoversikt':'Utforlig avdelningsrapport',left,y,22,true);y-=33;
+ text('HUMLA  /  MÅNADSRAPPORT',left,824,11,true);
+ text(variant==='ledning'?'Ledningsgrupp – avdelningsöversikt':'Utförlig avdelningsrapport',left,y,22,true);y-=33;
  text(period?`Manad: ${period.from} - ${period.to}  |  Verksamhetsar: ${period.fiscal_year}/${period.fiscal_year+1}`:'',left,y,10,false,muted);y-=28;
  text('KST 20 Sortergarden och KST 30 Transport - separata avdelningsresultat',left,y,10);y-=33;
  if(variant==='ledning'){
   heading('Sammanfattning per avdelning');
   text('Nyckeltal',left,y,9,true,muted);text('Manad',320,y,9,true,muted);text('YTD',448,y,9,true,muted);y-=23;
-  for(const d of departments){heading(`KST ${d.code} - ${d.name}`);metrics(d);}
+  for(const d of departments){heading(`KST ${d.code} - ${d.name}`);reconciliation(d);metrics(d);}
  }else{
   for(const d of departments){
-   heading(`KST ${d.code} - ${d.name}`);
+   heading(`KST ${d.code} - ${d.name}`);reconciliation(d);
    text('Nyckeltal',left,y,9,true,muted);text('Manad',320,y,9,true,muted);text('YTD',448,y,9,true,muted);y-=23;
    metrics(d);
    heading('Ekonomisk sammanstallning');
@@ -44,7 +45,7 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
  }
  room(55);line(y);y-=16;
  text('Rapporten visar avdelningarnas samlade KPI - ingen fordonsuppdelning.',left,y,9,false,muted);y-=16;
- text('Underlag: Humla Hub. Saknade varden ersatts inte med noll.',left,y,9,false,muted);
+ text('Underlag: Humla Hub. Resultat och tidsindikatorer är preliminära.',left,y,9,false,muted);
  const pages=doc.getPages();for(let i=0;i<pages.length;i++){pages[i].drawText(safe(`Humla Dashboard  |  ${period?.from??''}  |  ${i+1}/${pages.length}`),{x:left,y:22,font:regular,size:8,color:muted});}
  return doc.save();
 }

@@ -1,0 +1,1 @@
+create index if not exists hub_kpi_prepared_display_generation_fact_idx on private.hub_kpi_prepared_display_facts(generation_id,fact_id);

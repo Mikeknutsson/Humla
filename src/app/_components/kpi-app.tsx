@@ -340,7 +340,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
         <Link prefetch={false} href="/kpi/fordon" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Fordon &amp; TCO</Link>
         <Link prefetch={false} href="/kpi/projekt" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Projektuppföljning</Link>
         <Link prefetch={false} className={view === "internal" ? "active" : ""} href={kpiHref("internal")} onClick={() => setMobileMenu(false)}><Truck size={18}/>Interna körningar</Link>
-        <Link prefetch={false} className={view === "monthly" ? "active" : ""} href={kpiHref("monthly")} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Månadsrapport</Link>
+        <Link prefetch={false} className={view === "monthly" ? "active" : ""} href={"/kpi/manadsrapport?"+new URLSearchParams(periodQuery)} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Månadsrapport</Link>
         {canManage&&<Link prefetch={false} href="/kpi/betalningsprognos" onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Betalningsprognos</Link>}
         <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
         <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>

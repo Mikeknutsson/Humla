@@ -12,7 +12,7 @@ export async function cachedKpiReport<T>(userId:string,tenantId:string,scope:unk
    const result=await load();
    if(result.error||!result.data)throw Object.assign(new Error(result.error?.message??'Hub report unavailable'),{code:result.error?.code??'HUB_REPORT_UNAVAILABLE'});
    return result.data;
-  },['kpi-report-prepared-v8',userId,tenantId,status.data.generation,JSON.stringify(scope)],{revalidate:86400,tags:[`kpi-report:${userId}`]})();
+  },['kpi-report-prepared-v9',userId,tenantId,status.data.generation,String(status.data.correction_revision??0),JSON.stringify(scope)],{revalidate:86400,tags:[`kpi-report:${userId}`]})();
   return {data,error:null};
  }catch(error){return {data:null,error:{message:error instanceof Error?error.message:'Hub report unavailable',code:error instanceof Error&&'code' in error&&typeof error.code==='string'?error.code:'REPORT_LOAD_FAILURE'}};}
 }

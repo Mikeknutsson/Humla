@@ -4,6 +4,7 @@ import {createClient} from '@/lib/supabase/server';
 
 export type ReportSyncStatus = {
  generation:string|null;
+ correction_revision?:number;
  synced_at:string|null;
  status:'queued'|'ready'|'failed'|'unavailable';
  requested_at?:string;
