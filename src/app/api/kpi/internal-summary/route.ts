@@ -12,6 +12,6 @@ export async function GET(request:Request){
  const p=new URL(request.url).searchParams;
  let period;try{period=parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined);}catch{return Response.json({error:'Ogiltig period.'},{status:400});}
  const filters=Object.fromEntries(filterKeys.filter(k=>p.get(k)).map(k=>[k,p.get(k)!]));
- const result=await cachedKpiReport(userId,member.tenant_id,{report:'internal-summary-v3',year:period.fiscalYear,months:period.months,filters},async()=>db.rpc('hub_kpi_internal_summary_v1',{p_tenant:member.tenant_id,p_year:period.fiscalYear,p_months:period.months,p_filters:filters}));
+ const result=await cachedKpiReport(userId,member.tenant_id,{report:'internal-summary-v4',year:period.fiscalYear,months:period.months,filters},async()=>db.rpc('hub_kpi_internal_summary_v1',{p_tenant:member.tenant_id,p_year:period.fiscalYear,p_months:period.months,p_filters:filters}));
  return result.error?Response.json({error:'Internt underlag kunde inte hämtas. Ekonomirapporten är fortfarande tillgänglig.'},{status:503}):Response.json(result.data,{headers:{'Cache-Control':'private, no-store'}});
 }

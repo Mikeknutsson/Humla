@@ -1,13 +1,17 @@
 # Internmaterial: internpris minus inköp
 
-Overview displays the difference between billed internal material revenue and purchase evidence for the same published material rows, scoped to the report filters and active generation. All calculations live in Hub.
+All published invoiced internal material rows in the selected report scope are included. Calculations live in Hub; Overview consumes the summary and expandable per-row evidence.
 
-The comparison uses the purchase evidence saved in `_humla_material_separation.purchase`, preserving the published report basis. It does not substitute all Grus project costs, use a total-revenue remainder, or assume that missing purchase evidence means zero cost. Both credit amounts retain their sign; conflicting purchase/sale signs are review items. Source rows are deduplicated before aggregation.
+Use the purchase evidence saved in `_humla_material_separation.purchase` where available. When the published evidence has no amount, use the existing approved `hub_kpi_internal_purchase_costs_v1` overview-estimate rule, in batches of up to 1000 source row IDs. This first uses an available price for the material fraction, then an average for the same unit across available standard quarry materials. The original unresolved evidence is retained in the published facts. Raw imports and financial totals are unchanged.
 
-Material bundled with transport is excluded and counted separately. Its published material revenue is allocated at purchase cost; subtracting that cost again would create a misleading zero material margin. A separate selling price is required for a pure material comparison.
+Source rows are deduplicated before aggregation. Both credit amounts retain their sign. Conflicting sale/purchase signs remain visible as unresolved cost. All selling prices remain included; if any costs cannot be calculated, the total purchase cost and margin are null rather than silently treating unknown cost as zero.
 
-Price-list and average-cost evidence is explicitly preliminary, not a claim of matched supplier invoice costs. The panel shows compared selling price, purchase cost, difference, margin percent, estimated row count and missing coverage.
+Bundled material/transport rows use their original full billed price once. They remain included and explicitly indicate that their difference also contains transport. The ordinary KPI material component remains unchanged. No bundled rows exist in the September KST30 selection.
 
-September 2026, KST30: 82 compared rows, selling 429506.16, purchase 337420.14, difference 92086.02, margin 21.44%. 80 rows have estimated/preliminary prices; 22 rows selling 79329.52 are excluded for missing usable evidence. Compared selling plus excluded selling reconciles to the 508835.68 material revenue card. No bundled rows in this selection.
+The expandable table shows date, order, article, billed price, calculated purchase cost, difference, estimate flag, price source, rate, quantity and evidence notes.
 
-Validation: production RPC completed within the authenticated 8-second statement timeout; rollback integration checks cover reconciliation, cost-only scope, signed credits, conflicting signs and bundled transport exclusions. Next.js webpack production build passed.
+September 2026, KST30: all 104 rows, billed 508835.68, purchase 394985.05, difference 113850.63, margin 22.37%. 102 rows use estimated/preliminary prices. Of these, 22 rows billed 79329.52 use supplementary estimates costing 57564.91; none are excluded.
+
+Supplementary evidence gaps: 9 rows 0-150/200 (ambiguous fraction), 5 rows 16-22/32 (ambiguous fraction or unresolved evidence), 2 Stenmjöl, 1 32-63, 1 8-16 (supplier/price not sufficiently resolved), 4 Annan (material type missing). Rates remain explicitly estimates, not verified supplier invoice costs.
+
+Validation: production summary RPC completed within the authenticated 8-second statement timeout. Rollback integration tests cover coverage reconciliation, scope, signed credits, conflicting signs, full inclusion and bundled-price handling. Next.js webpack production build passed.
