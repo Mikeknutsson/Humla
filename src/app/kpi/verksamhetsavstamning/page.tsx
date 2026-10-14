@@ -4,6 +4,7 @@ import { reviewAccess } from '@/lib/hub/review-access';
 export const dynamic = 'force-dynamic';
 type Source = { kind: string; source_label: string; rows: number; amount: string; allocation_review_rows: number };
 type Center = { code: string; name: string; revenue: string; cost: string; revenue_rows: number; cost_rows: number; sources: Source[] };
+type ProjectReview = { available: boolean; rows: number; cost: number; revenue: number; projects: { source: string; kind: string; project: string | null; rows: number; amount: number; matches: number; project_name: string | null; cost_center: string | null; effective_date: string | null; reason: string }[] };
 type Report = { available: boolean; from: string; to: string; synced_at: string; centers: Center[]; active_allocation_rules: number; identity_correction: { status: string; result: { rows: number; amountDifference: number } } | null; fuel_correction?: { status: string; periodRows: number; periodAmount: number } | null; transpa_coverage?: { reports: number; employees: number; hours: number; cost_codes: { code: string; reports: number }[] } };
 const money = (value: string | number) => `${new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} kr`;
 function validDate(value?: string) {
@@ -20,6 +21,8 @@ export default async function CenterReconciliation({ searchParams }: { searchPar
   const invalid = to < from || (Date.parse(to) - Date.parse(from)) / 86400000 > 366;
   const response = invalid ? null : await access.db.rpc('hub_kpi_center_reconciliation_v1', { p_tenant_id: access.tenantId, p_from: from, p_to: to });
   const report = response && !response.error ? response.data as Report | null : null;
+  const projectResponse = invalid ? null : await access.db.rpc('hub_kpi_unclassified_projects_v1', { p_tenant_id: access.tenantId, p_from: from, p_to: to });
+  const projectReview = projectResponse && !projectResponse.error ? projectResponse.data as ProjectReview | null : null;
   return <KpiDetailShell query="" title="Transport, Sortergården & Verkstad" breadcrumb="Humla Dashboard / Verksamhetsavstämning" extraNavigation={<Link href="/kpi/avstamning" prefetch={false}>Avstämning & regler</Link>}>
     <div className="content">
       <section className="panel"><h2>Avstämning per verksamhet</h2>
@@ -50,6 +53,13 @@ export default async function CenterReconciliation({ searchParams }: { searchPar
           {c.code !== 'unclassified' && <p><Link href={`/kpi?cost_center=${c.code}&from=${from}&to=${to}`} prefetch={false}>Öppna verksamhetens KPI →</Link></p>}
         </section>)}
         <section className="panel"><h2>Kvar att avstämma</h2>
+          <h3>Oklassificerade poster per projekt</h3>
+          {!projectReview?.available ? <p>Projektgranskningen kunde inte hämtas.</p> : <>
+            <p>{projectReview.rows} publicerade rader. Intäkter {money(projectReview.revenue)} och kostnader {money(projectReview.cost)}. Projektregistrets nuvarande koppling visas som underlag för granskning. Den ändrar inte den historiska klassificeringen.</p>
+            <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Projekt</th><th>Källa</th><th>Typ</th><th>Rader</th><th>Belopp</th><th>Nuvarande kostnadsställe</th><th>Registret gäller från</th><th>Behöver granskas</th></tr></thead><tbody>{projectReview.projects.map(p => <tr key={`${p.source}:${p.kind}:${p.project ?? 'missing'}`}>
+              <td>{p.project ?? 'Projektreferens saknas'}{p.matches === 1 && p.project_name && ` · ${p.project_name}`}</td><td>{p.source}</td><td>{p.kind === 'cost' ? 'Kostnad' : 'Intäkt'}</td><td>{p.rows}</td><td>{money(p.amount)}</td><td>{p.matches === 1 ? p.cost_center ?? 'Saknas' : 'Inte entydigt'}</td><td>{p.matches === 1 ? p.effective_date ?? 'Saknas' : '—'}</td><td>{p.reason === 'historical_date_review' ? 'Historisk giltighet' : p.reason === 'ambiguous_project_identity' ? 'Flera Humla-projekt' : p.reason === 'classification_review' ? 'Klassificeringen' : p.reason === 'missing_effective_date' ? 'Giltighetsdatum saknas' : p.reason === 'missing_cost_center' ? 'Kostnadsställe saknas' : 'Projektunderlag saknas'}</td>
+            </tr>)}</tbody></table></div>
+          </>}
           <p>Kostnader som inväntar kontoregel eller beslut om rapportpolicy ingår inte i dessa tabeller. Tankinköp ska stämmas av mot Piusi-förbrukning och personalkostnader mot TransPA innan nya belopp tas med.</p>
           <p><Link href="/kpi/next-avstamning" prefetch={false}>Kostnadsrader som behöver beslut →</Link> · <Link href="/intaktskontroll" prefetch={false}>Workify-order och originalrader →</Link></p>
         </section>
