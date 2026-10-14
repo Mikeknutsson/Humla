@@ -153,7 +153,7 @@ export async function POST(request: Request) {
       period_start: dates.at(0) ?? null,
       period_end: dates.at(-1) ?? null,
       column_mapping: mapping,
-      provenance: { channel: "manual_upload", original_preserved: true, parser: "humla-kpi/1.0" },
+      provenance: { channel: "manual_upload", original_preserved: true, parser: "humla-kpi/1.0", hub_import_contract: "core-001/v1", hub_ingestion: kind === "cost" ? "hub_kpi_ingest_cost_file_v1" : (kind === "revenue" && isWorkify(table)) ? "hub_kpi_ingest_workify_file_v1" : "legacy_import", canonical_mapping: "hub_identity_keys", source_file_sha256: fileHash },
       created_by: user.id,
     });
     if (batchError?.code === "23505") {
