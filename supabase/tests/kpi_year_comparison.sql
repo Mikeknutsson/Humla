@@ -1,0 +1,32 @@
+begin;
+select set_config('request.jwt.claim.sub','5a6fa4c4-5427-47fa-9835-d997fe81c7d5',true);
+do $$
+declare r jsonb;c jsonb;p jsonb;v jsonb;
+begin
+ r:=private.hub_kpi_yoy_value_v1(125,100,'kr',true);
+ assert (r->>'difference')::numeric=25 and (r->>'change_pct')::numeric=25;
+ r:=private.hub_kpi_yoy_value_v1(15,10,'%',true);
+ assert (r->>'difference')::numeric=5 and r->>'change_pct' is null;
+ r:=private.hub_kpi_yoy_value_v1(100,0,'kr',true);
+ assert r->>'status'='zero_base' and r->>'change_pct' is null;
+ r:=private.hub_kpi_yoy_value_v1(-50,-100,'kr',true);
+ assert (r->>'change_pct')::numeric=50;
+ assert private.hub_kpi_yoy_value_v1(1,null,'kr',true)->>'status'='missing';
+ assert private.hub_kpi_yoy_value_v1(100,80,'kr',false)->>'difference' is null;
+ c:='{"coverage":{"revenue_months":[9],"cost_months":[9]},"metrics":{"revenue":125},"economic_units":[{"key":"canonical-a","label":"A","revenue":100}],"monthly":[{"month":9,"revenue":125}]}'::jsonb;
+ p:='{"coverage":{"revenue_months":[9],"cost_months":[9]},"metrics":{"revenue":100},"economic_units":[{"key":"canonical-b","label":"A","revenue":80}],"monthly":[{"month":9,"revenue":100}]}'::jsonb;
+ r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9],'overview',c,p);
+ select value into v from jsonb_array_elements(r->'rows') where value->>'id'='Ekonomi:metrics.revenue';
+ assert (v->>'difference')::numeric=25;
+ assert not exists(select 1 from jsonb_array_elements(r->'rows')e where e->>'section'='Ekonomiska enheter' and e->>'status'<>'missing');
+ r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9,10],'overview',c,p);
+ select value into v from jsonb_array_elements(r->'rows') where value->>'id'='Ekonomi:metrics.revenue';
+ assert v->>'status'='partial' and v->>'difference' is null;
+ select value into v from jsonb_array_elements(r->'rows') where value->>'id'='month_no:9:revenue';
+ assert (v->>'difference')::numeric=25;
+ r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9],'overview',c,null);
+ assert not exists(select 1 from jsonb_array_elements(r->'rows')e where e->>'difference' is not null);
+ r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9],'workshop','{"available":false,"work_hours":0}','{"available":false,"work_hours":0}');
+ assert not exists(select 1 from jsonb_array_elements(r->'rows')e where e->>'current' is not null);
+end $$;
+rollback;

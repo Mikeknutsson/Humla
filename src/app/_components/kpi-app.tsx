@@ -2,6 +2,7 @@
 import {useKpiInternalSummary} from './use-kpi-internal-summary';
 import {KpiOverhead} from './kpi-overhead';
 import {KpiBillingBalance} from './kpi-billing-balance';
+import {KpiYearComparison} from './kpi-year-comparison';
 import type {OverheadKpi} from '@/lib/kpi/overhead';
 import {KpiCostCenterFilter} from './kpi-cost-center-filter';
 import {WorkshopTimeKpi} from './workshop-time-kpi';
@@ -373,6 +374,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
 
       {(view === "overview" || view === "kpi") && pendingBatches.length>0 && <div className="content"><section className="panel"><h2>Underlag som ännu inte är klart</h2><p>Rapporten visar de rader som finns i Hubben. Följande importer är inte färdigställda:</p><ul>{pendingBatches.map(b=><li key={b.id}><Link prefetch={false} href={kpiHref("import")}>{b.file_name ?? "API-leverans"}</Link> · {statusLabel(b.status)} · {number.format(b.valid_row_count)} av {number.format(b.row_count)} giltiga rader</li>)}</ul></section></div>}
       {view === "review" && <div className="content"><WorkifyNameRules canManage={canManage}/><KpiReviewQueue key={`${from}-${to}`} from={from} to={to} canManage={canManage}/><HubReview initial={hubReviews as never[]}/></div>}
+      {(view==='overview'||view==='kpi')&&<div className="content"><KpiYearComparison key={periodQuery} query={periodQuery}/></div>}
       {view === "overview" && <div className="content">
         <section className="overview-hero"><div><span className="section-kicker">Verksamhetsår {overviewPeriod.label}</span><h2>Valda månader · {overviewPeriod.label}</h2><p>Jämförelsen använder motsvarande månader föregående verksamhetsår.</p></div><span className="asof">Vald rapportperiod</span></section>
         <KpiBillingBalance key={periodQuery} query={periodQuery}/>
