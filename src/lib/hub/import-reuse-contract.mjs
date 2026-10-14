@@ -9,7 +9,7 @@
  */
 
 const SOURCES = new Set(["workify", "next", "transpa", "fordonskontrollen", "bsmart", "ps_olja", "other"]);
-const ID_RE = /^(?=.{1,200}$)(?!\\s*$)[^\\x00-\\x1f\\x7f]+$/u;
+const ID_RE = /^[^\u0000-\u001f\u007f]{1,200}$/u;
 
 export function normalizeSource(source) {
   const value = String(source ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
