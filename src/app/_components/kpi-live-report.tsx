@@ -44,7 +44,7 @@ export function KpiLiveReport(props:KpiAppProps) {
     if(id!==version.current)return;
     startReportTransition(()=>{setReport(previous=>id===version.current?{base:props,value:{...(previous.base===props?previous.value:props),...data}}:previous);
     const next=new URLSearchParams(nextQuery),view=new URLSearchParams(window.location.search).get('view');
-    if(view==='kpi')next.set('view',view);else next.delete('view');
+    if(view==='overview')next.set('view',view);else next.set('view','kpi');
     window.history.replaceState(null,'','/kpi?'+next);});
     setPending(false);
    }catch{

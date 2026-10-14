@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import vm from 'node:vm';
+const context={exports:{},Map,Number,Math,String};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/hub/material-reconciliation.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,context);
+const {materialReconciliation}=context.exports;
+const sale=(date,quantity,amount,material_key='S0-32')=>({material_key,material_name:'Bärlager',quantity,unit:'ton',sale_amount:amount,occurred_on:date});
+const prices=[{material_key:'S0-32',purchase_price_per_unit:10,unit:'ton',valid_from:'2026-09-01',valid_to:'2026-09-15'},{material_key:'S0-32',purchase_price_per_unit:20,unit:'ton',valid_from:'2026-09-16',valid_to:null}];
+const sales=[sale('2026-09-03',10,200),sale('2026-09-20',10,300),sale('2026-10-01',100,50000),sale('2026-09-21',-2,-60),sale('2026-09-01',100,99999,'T0-32')];
+const september=materialReconciliation(sales,prices,[9]);
+assert.equal(september.length,1);assert.equal(september[0].sale_amount,440);assert.equal(september[0].sold_quantity,18);assert.equal(september[0].estimated_purchase_cost,260);assert.equal(september[0].gross_result,180);
+const october=materialReconciliation(sales,prices,[10]);assert.equal(october[0].sale_amount,50000);assert.equal(october[0].estimated_purchase_cost,2000);
+assert.equal(materialReconciliation([...sales,sale('2026-09-22',1,30,'SUNKNOWN')],prices,[9]).find(r=>r.material_key==='SUNKNOWN').margin_pct,null);
+const incomplete=materialReconciliation([...sales,sale('2026-09-22',null,30)],prices,[9])[0];assert.equal(incomplete.estimated_purchase_cost,null);assert.equal(incomplete.margin_pct,null);assert.equal(incomplete.missing_price_rows,1);
+console.log('PASS: September excludes October; dated price changes and credit quantities reconcile; bundled transport excluded; missing price/quantity never produces a complete margin');
