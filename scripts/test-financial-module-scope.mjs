@@ -1,0 +1,77 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const {PGlite}=await import(process.env.PGLITE_MODULE ?? '@electric-sql/pglite');
+const db=new PGlite();
+await db.exec(`create schema private;create schema auth;create role anon;create role authenticated;create role service_role;
+create function auth.uid()returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
+create function public.hub_has_permission(uuid,text)returns boolean language sql as $$select $1='20000000-0000-0000-0000-000000000001'::uuid$$;
+create table public.hub_tenant_members(tenant_id uuid,user_id uuid,status text);
+create table public.kpi_import_rows(tenant_id uuid,id uuid,occurred_on date,data_kind text,is_valid boolean,amount numeric,source_data jsonb);
+create table private.hub_kpi_report_state(tenant_id uuid,active_generation uuid,synced_at timestamptz);
+create table private.hub_kpi_prepared_kpi_units(tenant_id uuid,generation_id uuid,id uuid);
+create table private.hub_kpi_prepared_facts(tenant_id uuid,generation_id uuid,fact_id text,occurred_on date,kind text,amount numeric,category text,project text,vehicle text,unit_id uuid,unit_name text,business_group text,source text,description text,account text,file_name text,row_number integer,original jsonb,cost_center text);
+create function private.hub_ps_own_tank_source_v1(jsonb,text)returns boolean language sql as $$select coalesce($2='5360' and $1->>'Verifikationstext'='PS Olje AB',false)$$;
+create function private.hub_kpi_workify_date_v1(text)returns date language sql as $$select nullif($1,'')::date$$;
+create view public.hub_workify_material_sales_v1 as select tenant_id,id transaction_id,occurred_on,nullif(source_data->>'Ordernummer','')order_number,
+nullif(source_data->>'Artikelnummer','')material_key,amount sale_amount,source_data from kpi_import_rows r
+WHERE data_kind = 'revenue'::text AND is_valid IS NOT FALSE AND NULLIF(source_data ->> 'Artikelnummer'::text, ''::text) IS NOT NULL;`);
+await db.exec(await readFile(new URL('../supabase/migrations/20261013190327_hub_payment_forecast_verified_row_scope.sql',import.meta.url),'utf8'));
+const tenant='20000000-0000-0000-0000-000000000001',other='20000000-0000-0000-0000-000000000002',actor='10000000-0000-0000-0000-000000000001',gen='60000000-0000-0000-0000-000000000001',stale='60000000-0000-0000-0000-000000000002',a='70000000-0000-0000-0000-000000000001',b='70000000-0000-0000-0000-000000000002';
+await db.query('insert into private.hub_kpi_report_state values($1,$2,now()),($3,$2,now())',[tenant,gen,other]);
+await db.query("insert into public.hub_tenant_members values($1,$2,'active')",[tenant,actor]);
+await db.query('insert into private.hub_kpi_prepared_kpi_units values($1,$2,$3),($1,$2,$4)',[tenant,gen,a,b]);
+const saleId='80000000-0000-0000-0000-000000000001',sale={Ordernummer:'O1',Artikelnummer:'S1',Artikelnamn:'Material',Kvantitet:'10',Enhet:'ton',Kundnamn:'External customer'};
+async function fact(id,kind,amount,category,source,unit,center,account,original,generation=gen,t=tenant){await db.query(`insert into private.hub_kpi_prepared_facts(tenant_id,generation_id,fact_id,occurred_on,kind,amount,category,source,unit_id,cost_center,account,original,file_name,row_number)values($1,$2,$3,'2026-09-03',$4,$5,$6,$7,$8,$9,$10,$11,'fixture.xlsx',1)`,[t,generation,id,kind,amount,category,source,unit,center,account,JSON.stringify(original)]);}
+await fact(saleId,'revenue',150,'transport','Workify',a,'30',null,{...sale,_humla_material_separation:{component:'transport'}});
+await fact(saleId+':material','revenue',50,'material','Workify',b,'20',null,{...sale,_humla_material_separation:{component:'material'}});
+const invoice={'Verifikationstext':'Levfakt External supplier (123)','Verifikation nr':'16D1',Leverantör:'External supplier',_humla_distribution:{original_amount:100}};
+await fact('invoice:share:a','cost',60,'service_repair','NEXT',a,'30','5656',invoice);
+await fact('invoice:share:b','cost',40,'service_repair','NEXT',b,'20','5656',invoice);
+await fact('own-tank','cost',0,'fuel','NEXT',a,'30','5360',{'Verifikationstext':'PS Olje AB',_humla_fuel_reconciliation:{booked_amount:30}});
+await fact('piusi:fuel','cost',30,'fuel','Piusi',a,'30',null,{});
+await fact('external-fuel','cost',25,'fuel','NEXT',a,'30','5360',{'Verifikationstext':'Levfakt PS Olje AB (124)',Leverantör:'PS Olje AB'});
+await fact('salary','cost',1000,'other','NEXT',a,'30','7010',{'Verifikation nr':'ARB.2026-09'});
+await fact('internal','cost',80,'service_repair','NEXT',a,'30','5510',{'Verifikation nr':'AO.123'});
+await fact('credit','cost',-10,'service_repair','NEXT',a,'30','5656',{'Verifikationstext':'Levfakt External supplier (125)',Leverantör:'External supplier'});
+await fact('depreciation','cost',10,'depreciation','Avskrivningsregister',a,'30',null,{});
+await fact('stale-cost','cost',999999,'other','NEXT',a,'30','5656',{},stale);
+await fact('other-tenant','cost',999999,'other','NEXT',a,'30','5656',{},gen,other);
+// Historical reimports and changed live rows cannot leak into these consumers.
+await db.query("insert into public.kpi_import_rows values($1,$2,'2026-09-03','revenue',true,200,$3),($1,'80000000-0000-0000-0000-000000000002','2026-09-03','revenue',true,200,$3),($1,'80000000-0000-0000-0000-000000000003','2026-09-03','cost',true,999999,'{}')",[tenant,saleId,JSON.stringify(sale)]);
+await assert.rejects(db.query("select private.hub_payment_outcome_source_v1($1,'2026-10-13')",[tenant]),/Not authorized/);
+await db.exec(`set test.actor='${actor}'`);
+await assert.rejects(db.query("select public.kpi_unit_detail($1,$2,'2026-09-01','2026-09-30')",[other,a]),/Behörighet saknas/);
+const outcome=(await db.query("select private.hub_payment_outcome_source_v1($1,'2026-10-13')r",[tenant])).rows[0].r;
+assert.equal(outcome.controls.supplierRows,4);assert.equal(outcome.controls.supplierAmount,115);
+assert.equal(outcome.rows.filter(r=>r.kind==='in').reduce((s,r)=>s+r.amount,0),200);
+assert.equal(outcome.controls.excludedNonPayments.find(r=>r.reason==='own_tank_consumption').amount,30);
+assert.equal(outcome.controls.excludedNonPayments.find(r=>r.reason==='payroll_separate').amount,1000);
+const unit=(await db.query("select public.kpi_unit_detail($1,$2,'2026-09-01','2026-09-30','year',0)r",[tenant,a])).rows[0].r;
+assert.equal(unit.totals.revenue,150);assert.equal(unit.totals.cost,1140);assert.equal(unit.totals.fuel,55);assert.equal(unit.totals.result,-1045);
+assert.equal(unit.periods[0].range_start,'2026-09-01');assert.equal(unit.periods[0].range_end,'2026-09-30');
+assert.equal(unit.rows.find(r=>r.id==='invoice:share:a').amount,100);
+assert.equal(unit.held_rows,null);
+const material=(await db.query('select * from public.hub_workify_material_sales_v1')).rows;
+assert.equal(material.length,1);assert.equal(Number(material[0].sale_amount),200);assert.equal(material[0].transaction_id,saleId);
+await db.query('update public.kpi_import_rows set amount=123456');
+assert.equal((await db.query("select private.hub_payment_outcome_source_v1($1,'2026-10-13')r",[tenant])).rows[0].r.controls.supplierAmount,115);
+assert.equal((await db.query("select has_function_privilege('anon','public.kpi_unit_detail(uuid,uuid,date,date,text,integer)','execute')a")).rows[0].a,false);
+console.log('PASS: forecast and unit detail ignore raw reimports/stale generations; supplier credits and allocated pieces reconcile; own-tank and payroll are separate; material components collapse to one source row; tenant/auth checks pass');
+await db.exec(`alter table public.kpi_import_rows add column batch_id uuid,add column account text;
+create table public.kpi_import_batches(id uuid,tenant_id uuid,status text,provenance jsonb);
+create table public.hub_fordonskontrollen_cost_outbox(id uuid,tenant_id uuid,source_row_id uuid,amount numeric,occurred_on date,account text);`);
+await db.exec(await readFile(new URL('../supabase/migrations/20261014025416_hub_repair_views_verified_source_scope.sql',import.meta.url),'utf8'));
+for(let i=1;i<=3;i++){
+ const id=`90000000-0000-0000-0000-00000000000${i}`;
+ await db.query("insert into public.kpi_import_batches values($1,$2,'completed',$3)",[id,tenant,JSON.stringify(i===2?{withdrawal:{}}:{})]);
+ await db.query("insert into public.kpi_import_rows(tenant_id,id,occurred_on,data_kind,is_valid,amount,source_data,batch_id,account)values($1,$2,'2026-09-03','cost',true,100,'{}',$2,'5656')",[tenant,id]);
+ await db.query("insert into public.hub_fordonskontrollen_cost_outbox values($1,$2,$1,100,'2026-09-03','5656')",[id,tenant]);
+ await fact(id+':share:a','cost',60,'service_repair','NEXT',a,'30','5656',{});
+ await fact(id+':share:b','cost',i===3?30:40,'service_repair','NEXT',b,'20','5656',{});
+}
+const repairIds=[1,2,3].map(i=>`90000000-0000-0000-0000-00000000000${i}`);
+const repair=(await db.query('select public.hub_repair_financial_scope_v1($1,$2)r',[tenant,repairIds])).rows[0].r;
+assert.deepEqual(repair.map(r=>r.reason),['active','withdrawn_import','changed_source']);
+await assert.rejects(db.query('select public.hub_repair_financial_scope_v1($1,$2)',[other,repairIds]),/Behörighet saknas/);
+console.log('PASS: repair scope reconciles allocated pieces and blocks withdrawn/changed sources and unauthorized tenants');
+await db.close();

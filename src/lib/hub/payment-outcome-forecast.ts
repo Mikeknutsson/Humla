@@ -1,7 +1,7 @@
 import {dateValue,departments,costOnly,emptyIncoming,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
 import {payrollForecast,type PayrollSource} from './payment-payroll-forecast';
 export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean};
-export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number};
+export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number;generation?:string;controls?:{scope:string;from:string;to:string;supplierRows:number;supplierAmount:number;excludedNonPayments:{reason:string;rows:number;amount:number}[]}};
 const day=86400000,iso=(n:number)=>new Date(n).toISOString().slice(0,10),round=(n:number)=>Math.round(n*100)/100;
 const name=(s:string)=>s.toLocaleLowerCase('sv-SE').normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 /** Source customer names are adapted to payment policies only; no persistent identity guesses. */
@@ -20,13 +20,14 @@ export function expectedPaymentDate(row:Outcome,supplierDays=30){
  const anchor=row.kind==='in'&&row.invoiceDate?dateValue(row.invoiceDate):delivery;
  return iso(anchor+(row.kind==='in'?term.days:supplierDays)*day);
 }
-export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;payroll?:ReturnType<typeof payrollForecast>}};
+export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;controls?:OutcomeSource['controls'];payroll?:ReturnType<typeof payrollForecast>}};
 export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0,payrollSource?:PayrollSource):AutomaticForecast{
  const now=dateValue(asOf);if(!Number.isInteger(supplierDays)||supplierDays<0||supplierDays>180)throw Error('Leverantörstid måste vara 0–180 dagar');
  const monthStart=Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),1),trendEnd=monthStart-day;
  const endDate=new Date(trendEnd),fyYear=endDate.getUTCMonth()>=8?endDate.getUTCFullYear():endDate.getUTCFullYear()-1;
  const trendStart=Date.UTC(fyYear,8,1),previous=(n:number)=>{const d=new Date(n);return Date.UTC(d.getUTCFullYear()-1,d.getUTCMonth(),d.getUTCDate())};
  const warnings=['Beloppen är enligt Workify/NeXT-underlaget, exklusive moms. Ingen verifierad reskontra eller faktisk betalningsstatus.','NeXT-kostnader flyttas med antagen betalningstid; detta är inte verifierade leverantörsförfallodatum.'];
+ if(source.controls){warnings.push('Raderna följer det publicerade KPI-underlagets dubblettskydd. Egentanksförbrukning, registrerad lön på konto 7010 och intern tid/fördelning används inte som antagna leverantörsbetalningar. Importer som väntar på ekonomisk avstämning ingår inte.');}
  const rows=source.rows.map((r,i)=>({...r,id:'outcome:'+i,dateValue:dateValue(r.date),paymentDate:expectedPaymentDate(r,supplierDays)}));
  const external=rows.filter(r=>!r.internal);
  const toPayment=(r:typeof rows[number]):Payment=>({id:r.id,center:r.center,kind:r.kind,date:r.paymentDate,amount:Number(r.amount),internal:r.internal});
@@ -76,5 +77,5 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}
  if(source.review_rows)warnings.push(`${source.review_rows} importrader för granskning ingår inte; belopp ${round(source.review_amount)} kr.`);
  if(payroll){warnings.push(...payroll.warnings);result.method+=' Löner: föregående månads TransPA-bruttolöneschablon betalas den 25:e; egen historik/trend eller tydligt märkt senaste-månad-reserv. Löneprognosen särredovisas och ingår inte i kostnader eller netto. PO-pålägg ingår inte i löneutbetalningen.';}
- return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,payroll}};
+ return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,controls:source.controls,payroll}};
 }
