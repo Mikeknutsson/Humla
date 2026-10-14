@@ -5,6 +5,7 @@ import {cachedKpiReport} from '@/lib/kpi/report-cache';
 import {analysisQuery} from '@/lib/kpi/analysis';
 import {EconomicUnitDetail,type EconomicUnit} from '@/app/_components/kpi-economic-units';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
+import type {EconomicUnitCatalog} from '@/lib/hub/economic-units';
 export const dynamic='force-dynamic';
 export default async function UnitPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
  const raw=await searchParams,p=new URLSearchParams(Object.entries(raw).filter((v):v is [string,string]=>typeof v[1]==='string'));
@@ -19,6 +20,8 @@ export default async function UnitPage({searchParams}:{searchParams:Promise<Reco
  const rpcArgs=monthly?{p_tenant_id:member.tenant_id,p_fiscal_year:args.p_filters.fiscal_year,p_selected_months:args.p_filters.selected_months,p_cost_center:p.get('cost_center'),p_filters:args.p_filters}:{p_tenant_id:member.tenant_id,p_from:args.p_from,p_to:args.p_to,p_cost_center:p.get('cost_center')};
  const {data,error}=await cachedKpiReport<{economic_units?:EconomicUnit[]}>(user.id,member.tenant_id,{report:'unit-detail',rpc,...rpcArgs},async()=>db.rpc(rpc,rpcArgs));
  const unit=data?.economic_units?.find(u=>u.key===selected);
+ const {data:catalogData}=await db.rpc('hub_economic_units_catalog_v1',{p_tenant:member.tenant_id,p_date:args.p_from});
+ const mapped=(catalogData as EconomicUnitCatalog|null)?.units.find(u=>u.id===selected);
  const back=new URLSearchParams(p);back.delete('unit');back.set('view','kpi');
- return <KpiDetailShell query={back.toString()}><div className="content" style={{maxWidth:1200,margin:'auto'}}><nav className="dashboard-report-actions"><Link prefetch={false} href={'/kpi?'+back}>← Alla kostnadsbärare</Link></nav><p>{p.get('months')?'Valda månader: '+p.get('months')+' · ':''}{args.p_from} – {args.p_to}</p>{error?<section role="alert"><h2>Underlaget kunde inte hämtas</h2><Link href={'/kpi/enhet?'+p}>Försök igen</Link></section>:unit?<EconomicUnitDetail unit={unit} query={p.toString()}/>:<section><h2>Kostnadsbäraren saknar underlag i detta urval</h2><Link href={'/kpi?'+back}>Till kostnadsbärare</Link></section>}</div></KpiDetailShell>;
+ return <KpiDetailShell query={back.toString()}><div className="content" style={{maxWidth:1200,margin:'auto'}}><nav className="dashboard-report-actions"><Link prefetch={false} href={'/kpi?'+back}>← Alla kostnadsbärare</Link><Link href="/kpi/ekonomiska-enheter">Alla mappade ekonomiska enheter →</Link></nav><p>{p.get('months')?'Valda månader: '+p.get('months')+' · ':''}{args.p_from} – {args.p_to}</p>{mapped&&<section className="panel"><h2>{mapped.name} – gemensam Humla-enhet</h2><p>{mapped.periods.length} kopplingsperioder · {mapped.components.length} fördelade komponenter</p><Link href={'/kpi/ekonomiska-enheter?'+new URLSearchParams({unit:mapped.id,date:args.p_from})}>Visa ingående objekt och historik →</Link></section>}{error?<section role="alert"><h2>Underlaget kunde inte hämtas</h2><Link href={'/kpi/enhet?'+p}>Försök igen</Link></section>:unit?<EconomicUnitDetail unit={unit} query={p.toString()}/>:<section><h2>Kostnadsbäraren saknar underlag i detta urval</h2><Link href={'/kpi?'+back}>Till kostnadsbärare</Link></section>}</div></KpiDetailShell>;
 }
