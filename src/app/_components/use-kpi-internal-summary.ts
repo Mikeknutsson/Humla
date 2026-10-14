@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-type Summary={status?:string;remaining?:number|null;remaining_percent?:number|null;total_percent:number|null;material_percent:number|null;tipp_deponi_percent:number|null;revenue_basis:number|null;total:number|null;material:number|null;tipp_deponi:number|null;transport:number|null;rows:number;review_rows:number;review_amount:number;review_included?:boolean;pending_rows?:number;pending_amount?:number;basis:string};
+type Summary={status?:string;material_margin?:{billed:number|null;purchase_cost:number|null;difference:number|null;margin_percent:number|null;matched_rows:number;estimated_rows:number;missing_rows:number;missing_billed:number;bundled_rows:number;bundled_material_component:number;basis:string};remaining?:number|null;remaining_percent?:number|null;total_percent:number|null;material_percent:number|null;tipp_deponi_percent:number|null;revenue_basis:number|null;total:number|null;material:number|null;tipp_deponi:number|null;transport:number|null;rows:number;review_rows:number;review_amount:number;review_included?:boolean;pending_rows?:number;pending_amount?:number;basis:string};
 export function useKpiInternalSummary(initial:Summary|undefined,query:string,enabled:boolean){
  const [loaded,setLoaded]=useState<{query:string;data:Summary}|null>(null);
  useEffect(()=>{if(!enabled||initial?.status!=='deferred')return;const controller=new AbortController();let active=true;
