@@ -16,8 +16,13 @@ export function KpiYearComparison({query}:{query:string}){
  const current=reports.query===query?reports.parts:{};
  const data=current[part];
  useEffect(()=>{if(data)return;const controller=new AbortController();let active=true;
-  fetch('/api/kpi/year-comparison?'+query+'&part='+part,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(55000)])})
-   .then(async r=>{if(!r.ok)throw Error();const result:Report=await r.json();if(active){setReports(old=>({query,parts:{...(old.query===query?old.parts:{}),[part]:result}}));setError(null);}})
+  const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(55000)]);
+  async function load(){
+   let r=await fetch('/api/kpi/year-comparison?'+query+'&part='+part,{signal});
+   if([503,504].includes(r.status))r=await fetch('/api/kpi/year-comparison?'+query+'&part='+part,{signal});
+   if(!r.ok)throw Error();return await r.json() as Report;
+  }
+  load().then(result=>{if(active){setReports(old=>({query,parts:{...(old.query===query?old.parts:{}),[part]:result}}));setError(null);}})
    .catch(()=>{if(active)setError({query,part});});
   return()=>{active=false;controller.abort();};
  },[query,part,data,attempt]);

@@ -30,7 +30,7 @@ export async function GET(request:Request){
     return db.rpc('hub_kpi_overview_months_v1',{p_tenant_id:member!.tenant_id,p_fiscal_year:year,p_selected_months:period.months,p_cost_center:cost_center||null,p_filters:rest});
    });
    // Outside prepared history is missing data; other errors remain retryable.
-   if(result.error&&result.error.code!=='55000')throw Error('Jämförelseunderlaget kunde inte hämtas.');
+   if(result.error&&result.error.code!=='55000'){console.error('KPI year source failed',{part:sourcePart,code:result.error.code});throw Error('Jämförelseunderlaget kunde inte hämtas.');}
    if(sourcePart!=='overview'&&result.data){
     const coverage=await source(year,scope,'overview');
     return {...result.data,coverage:coverage?.coverage??null};
@@ -39,7 +39,7 @@ export async function GET(request:Request){
   }
   const [current,previous]=await Promise.all([source(period.fiscalYear,filters),source(period.fiscalYear-1,before)]);
   const {data,error}=await db.rpc('hub_kpi_compare_snapshots_v1',{p_tenant:member.tenant_id,p_months:period.months,p_part:part,p_current:current,p_previous:previous});
-  if(error||!data)throw Error('Jämförelsen kunde inte beräknas.');
+  if(error||!data){console.error('KPI year comparison failed',{code:error?.code});throw Error('Jämförelsen kunde inte beräknas.');}
   return Response.json({...data,year:period.fiscalYear,previous_year:period.fiscalYear-1,months:period.months},{headers:{'Cache-Control':'private, no-store'}});
  }catch{return Response.json({error:'Årsjämförelsen kunde inte hämtas. Övriga KPI visas fortfarande.'},{status:503});}
 }
