@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const {PGlite}=await import(process.env.PGLITE_MODULE??'@electric-sql/pglite');
+const db=new PGlite();
+await db.exec(`create schema private;create schema auth;create role anon;create role authenticated;
+create function auth.uid()returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
+create function public.hub_has_permission(uuid,text)returns boolean language sql as $$select $1='20000000-0000-0000-0000-000000000001'::uuid$$;
+create table public.kpi_units(id uuid,tenant_id uuid,projects text[],name text,enabled boolean,unit_type text);
+create table public.kpi_project_classification_periods(tenant_id uuid,cost_center text,cost_center_name text);
+create table private.hub_kpi_material_separation_settings(tenant_id uuid,material_unit_id uuid,valid_from date,enabled boolean);
+create table private.hub_kpi_report_generations(id uuid,tenant_id uuid);
+create table private.hub_kpi_prepared_facts(tenant_id uuid,generation_id uuid,fact_id text,occurred_on date,amount numeric,project text,source text,kind text,unit_id uuid,unit_name text,cost_center text,cost_center_name text,business_group text,vehicle text,classification_source jsonb,original jsonb);`);
+const migration=await readFile(new URL('../supabase/migrations/20261014033213_hub_material_project_cost_scope.sql',import.meta.url),'utf8');
+await db.exec(migration.replace(/do \$migration\$[\s\S]*?end \$migration\$;/,''));
+const tenant='20000000-0000-0000-0000-000000000001',other='20000000-0000-0000-0000-000000000002',gen='60000000-0000-0000-0000-000000000001',unit='70000000-0000-0000-0000-000000000001';
+await db.query("insert into public.kpi_units values($1,$2,array['MATERIAL'],'Material',true,'project')",[unit,tenant]);
+await db.query("insert into private.hub_kpi_report_generations values($1,$2)",[gen,tenant]);
+await db.query("insert into private.hub_kpi_material_separation_settings(tenant_id,material_unit_id,valid_from,enabled)values($1,$2,'2025-09-01',true)",[tenant,unit]);
+for(const [id,date,project,source,kind,amount,t]of [['eligible','2026-09-01','MATERIAL','NEXT','cost',100,tenant],['credit','2026-09-01','MATERIAL','NEXT','cost',-25,tenant],['older','2025-08-31','MATERIAL','NEXT','cost',80,tenant],['other-project','2026-09-01','SITE','NEXT','cost',90,tenant],['revenue','2026-09-01','MATERIAL','Workify','revenue',200,tenant],['other-tenant','2026-09-01','MATERIAL','NEXT','cost',999,other]]){
+ await db.query("insert into private.hub_kpi_prepared_facts(tenant_id,generation_id,fact_id,occurred_on,amount,project,source,kind,cost_center,original)values($1,$2,$3,$4,$5,$6,$7,$8,'20','{\"original\":true}')",[t,gen,id,date,amount,project,source,kind]);
+}
+await assert.rejects(db.query('select private.hub_material_project_cost_scope_v1($1,$2)',[tenant,gen]),/management required/);
+await db.exec("set test.actor='10000000-0000-0000-0000-000000000001'");
+await db.query('select private.hub_material_project_cost_scope_v1($1,$2)',[tenant,gen]);
+assert.equal((await db.query("select count(*) n from private.hub_kpi_prepared_facts where cost_center<>'20'")).rows[0].n,0);
+await db.query("update private.hub_kpi_material_separation_settings set project_cost_center='30',project_cost_scope_reference='Synthetic approved scope'");
+const before=(await db.query('select fact_id,occurred_on,amount,kind,source,project from private.hub_kpi_prepared_facts order by fact_id')).rows;
+await db.query('select private.hub_material_project_cost_scope_v1($1,$2)',[tenant,gen]);
+assert.deepEqual((await db.query('select fact_id,occurred_on,amount,kind,source,project from private.hub_kpi_prepared_facts order by fact_id')).rows,before);
+assert.deepEqual((await db.query("select fact_id,cost_center from private.hub_kpi_prepared_facts where cost_center='30' order by fact_id")).rows,[{fact_id:'credit',cost_center:'30'},{fact_id:'eligible',cost_center:'30'}]);
+assert.equal((await db.query('select count(*) n from private.hub_material_project_scope_audit')).rows[0].n,2);
+await db.query('select private.hub_material_project_cost_scope_v1($1,$2)',[tenant,gen]);
+assert.equal((await db.query('select count(*) n from private.hub_material_project_scope_audit')).rows[0].n,2);
+await assert.rejects(db.query('select private.hub_material_project_cost_scope_v1($1,$2)',[other,gen]),/management required/);
+console.log('PASS: disabled without approval; only dated NEXT costs on exact project move once; credits, other tenants/projects, revenue and all amounts preserved');
+await db.close();
