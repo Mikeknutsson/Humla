@@ -1,4 +1,5 @@
 import { allocateWorkify, isWorkify } from "@/lib/kpi/workify";
+import { canonicalExternalIdentity, resolveHubMapping } from "@/lib/hub/import-reuse-contract.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { parseImportFile, normalizeRows, mimeForFile } from "@/lib/kpi/parser";
 import { DATA_KINDS, type DataKind } from "@/lib/kpi/schema";
@@ -62,18 +63,25 @@ export async function POST(request: Request) {
           .eq('object_type', 'Vehicle').eq('identity_type', 'workify_vehicle_label')
           .eq('confidence', 1).in('identity_value', labels);
         if (aliasError) throw new Error('Hubbens bekräftade fordonsbenämningar kunde inte läsas.');
-        const candidates = new Map<string, Set<string>>();
+        const candidates = new Map<string, Array<{ id: string; humlaObjectId: string; confirmed: boolean; validFrom: string }>>();
         for (const alias of aliases ?? []) {
           const label = alias.identity_value.trim().toUpperCase();
-          const ids = candidates.get(label) ?? new Set<string>();
-          ids.add(alias.object_id); candidates.set(label, ids);
+          // External labels are scoped by tenant and adapter; they are never a Humla ID.
+          canonicalExternalIdentity({ tenantId: member.tenant_id, source: "workify", entityType: "vehicle", externalId: label });
+          const rules = candidates.get(label) ?? [];
+          rules.push({ id: label, humlaObjectId: alias.object_id, confirmed: true, validFrom: "0001-01-01" });
+          candidates.set(label, rules);
         }
         normalized = normalized.map(row => {
           const label = labelFor(row);
-          const ids = candidates.get(label);
-          if (ids?.size !== 1) return row;
+          // Historical validity isn't available in hub_identity_keys yet. The
+          // fallback start date preserves existing confirmed-label behaviour;
+          // the full effective-dated allocation engine runs in Hub's RPC.
+          if (!label || !row.occurred_on) return row;
+          const match = resolveHubMapping({ candidates: candidates.get(label) ?? [], effectiveDate: row.occurred_on });
+          if (match.status !== "resolved") return row;
           const errors = row.validation_errors.filter(error => error !== 'Fordonsbeteckning saknar verifierad regnummerkoppling');
-          return { ...row, vehicle_object_id: [...ids][0], vehicle_registration: label,
+          return { ...row, vehicle_object_id: match.humlaObjectId, vehicle_registration: label,
             validation_errors: errors, is_valid: errors.length === 0 };
         });
       }
@@ -145,7 +153,7 @@ export async function POST(request: Request) {
       period_start: dates.at(0) ?? null,
       period_end: dates.at(-1) ?? null,
       column_mapping: mapping,
-      provenance: { channel: "manual_upload", original_preserved: true, parser: "humla-kpi/1.0" },
+      provenance: { channel: "manual_upload", original_preserved: true, parser: "humla-kpi/1.0", hub_import_contract: "core-001/v1", hub_ingestion: kind === "cost" ? "hub_kpi_ingest_cost_file_v1" : (kind === "revenue" && isWorkify(table)) ? "hub_kpi_ingest_workify_file_v1" : "legacy_import", canonical_mapping: "hub_identity_keys", source_file_sha256: fileHash },
       created_by: user.id,
     });
     if (batchError?.code === "23505") {
@@ -221,16 +229,6 @@ export async function POST(request: Request) {
       error_summary: normalized.filter((row) => !row.is_valid).slice(0, 50).map((row) => ({ row: row.row_number, errors: row.validation_errors })),
     }).eq("id", batchId);
     if (updateError) throw updateError;
-
-    // Hub reuses confirmed, dated project/allocation rules for each new file.
-    // Unknown recipients and invalid evidence stay in review.
-    if (kind === "cost" || (kind === "revenue" && isWorkify(table))) {
-      const { data: resolved, error: resolveError } = await supabase.rpc(kind === "cost" ? "hub_kpi_resolve_import_allocations_v1" : "hub_kpi_resolve_workify_import_v1", {
-        p_tenant_id: member.tenant_id, p_batch_id: batchId,
-      });
-      if (resolveError) throw resolveError;
-      return Response.json({ batchId, rows: normalized.length, ...resolved }, { status: 201 });
-    }
 
     return Response.json({ batchId, status, rows: normalized.length, validRows: validRows.length, invalidRows: normalized.length - validRows.length }, { status: 201 });
   } catch (error) {
