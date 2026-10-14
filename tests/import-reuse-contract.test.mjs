@@ -5,6 +5,7 @@ import {
   transactionIdentity,
   resolveHubMapping,
   reconcileImportedLines,
+  reconcileOrderSnapshots,
 } from "../src/lib/hub/import-reuse-contract.mjs";
 
 const base = {
@@ -86,4 +87,20 @@ test("external Workify labels with spaces can be scoped to canonical Hub identit
     tenantId: base.tenantId, source: "workify", entityType: "vehicle", externalId: "Scania R540",
   });
   assert.equal(result.externalId, "Scania R540");
+});
+
+test("cumulative Workify snapshots replace previous order values rather than add them", () => {
+  const previous = [{ orderNumber: "44155", amount: 100, isValid: true }];
+  const latest = [{ orderNumber: "44155", amount: 120, isValid: true }, { orderNumber: "44756", amount: 40, isValid: false }];
+  const result = reconcileOrderSnapshots({ previous, latest });
+  assert.equal(result.previousTotal, 100);
+  assert.equal(result.latestTotal, 160);
+  assert.equal(result.latestUnreviewedAmount, 40);
+  assert.deepEqual(result.changedOrders, ["44155"]);
+  assert.deepEqual(result.newOrders, ["44756"]);
+});
+test("removed Workify snapshot orders require review rather than silent deletion", () => {
+  const result = reconcileOrderSnapshots({ previous: [{orderNumber:"1",amount:10,isValid:true}], latest: [] });
+  assert.equal(result.status, "needs_review");
+  assert.deepEqual(result.removedOrders, ["1"]);
 });
