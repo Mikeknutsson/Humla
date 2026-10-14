@@ -80,3 +80,10 @@ test("source-specific IDs remain in adapter layer, never replace Humla IDs", () 
     tenantId: base.tenantId, source: "Next", entityType: "project", externalId: "9009",
   }), { tenantId: base.tenantId, source: "next", entityType: "project", externalId: "9009" });
 });
+
+test("external Workify labels with spaces can be scoped to canonical Hub identity", () => {
+  const result = canonicalExternalIdentity({
+    tenantId: base.tenantId, source: "workify", entityType: "vehicle", externalId: "Scania R540",
+  });
+  assert.equal(result.externalId, "Scania R540");
+});
