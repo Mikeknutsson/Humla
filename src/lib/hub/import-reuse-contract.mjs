@@ -115,3 +115,52 @@ export function reconcileImportedLines(records) {
   }
   return { accepted, review, duplicates };
 }
+
+/**
+ * Read-only comparison for cumulative snapshots, such as Workify order exports.
+ * Never sum different snapshots as additional turnover. Every later snapshot
+ * replaces the earlier value of the same source order in this control view.
+ * A zero-value or invalid amount stays visible in the review bucket.
+ *
+ * This is a reconciliation helper, NOT an instruction to persist accounting
+ * corrections without verifying source dates and the accounting ledger.
+ */
+export function reconcileOrderSnapshots({ previous = [], latest = [] }) {
+  function index(rows) {
+    const orders = new Map();
+    for (const row of rows) {
+      const key = String(row.orderNumber ?? "").trim();
+      const amount = Number(row.amount);
+      if (!key || !Number.isFinite(amount)) {
+        throw new Error("Snapshot rows require orderNumber and finite amount");
+      }
+      const existing = orders.get(key) ?? { amount: 0, invalidAmount: 0, rows: 0 };
+      existing.amount += amount;
+      if (row.isValid !== true) existing.invalidAmount += amount;
+      existing.rows++;
+      orders.set(key, existing);
+    }
+    return orders;
+  }
+  const before = index(previous), after = index(latest);
+  const keys = new Set([...before.keys(), ...after.keys()]);
+  const changedOrders = [], newOrders = [], removedOrders = [];
+  for (const key of keys) {
+    const prior = before.get(key), current = after.get(key);
+    if (!prior) newOrders.push(key);
+    else if (!current) removedOrders.push(key);
+    else if (Math.round((prior.amount-current.amount)*100) !== 0 || prior.rows !== current.rows) changedOrders.push(key);
+  }
+  const sum = (orders, field) => [...orders.values()].reduce((total, row) => total+row[field], 0);
+  return {
+    previousTotal: sum(before, "amount"),
+    latestTotal: sum(after, "amount"),
+    latestUnreviewedAmount: sum(after, "invalidAmount"),
+    orderCount: after.size,
+    newOrders,
+    changedOrders,
+    removedOrders,
+    // A vanished order must be reviewed, not silently written off.
+    status: removedOrders.length > 0 ? "needs_review" : "comparable",
+  };
+}
