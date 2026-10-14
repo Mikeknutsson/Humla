@@ -77,9 +77,9 @@ export default async function Reconciliation({ searchParams }: { searchParams: P
           <table><thead><tr><th>Regel / källa</th><th>Mottagare</th><th>Giltighet</th><th>Status</th></tr></thead><tbody>{rules.data.map(r => <tr key={r.id}>
             <td><strong>{r.name}</strong><br/>{list(r.source_scope.project_references) || list(r.source_scope.project_reference) || list(r.source_scope.source_unit_names)}</td>
             <td>{list(r.target_scope.recipient_unit_names) || list(r.target_scope.business_group) || (r.allocation_method === 'manual' ? 'Bekräftas på varje kostnadsrad' : 'Behöriga aktiva enheter')}<br/>{r.include_in_vehicle_result ? 'Fordonsresultat' : 'Övergripande resultat'}</td>
-            <td>{r.valid_from ?? 'Start saknas'} – {r.valid_to ?? 'tills vidare'}</td><td>{r.enabled ? 'Aktiv' : 'Inväntar avstämning'}</td>
+            <td>{r.valid_from ?? 'Start saknas'} – {r.valid_to ?? 'tills vidare'}</td><td>{r.enabled ? 'Aktiv' : 'Inväntar avstämning'}{r.effect&&<><br/>{r.effect.allocated_rows} fördelade rader · {money(String(r.effect.allocated_amount),'SEK')}{r.effect.review_rows>0&&<><br/>{r.effect.review_rows} rader kvar att granska · {money(String(r.effect.review_amount),'SEK')}</>}{r.effect.source_rows===0&&<><br/>Inga matchande kostnader i publicerat underlag</>}</>}</td>
           </tr>)}</tbody></table>
-          <p>Inaktiva regler påverkar ännu inte fordonsresultatet. Mottagarnas giltighetsperioder kontrolleras på kostnadsradens datum.</p>
+          <p>Beloppen visar hela det publicerade underlaget, inte enbart vald månad. Fördelade kostnader ingår i mottagarnas ekonomiska enheter. Rader utan entydig mottagare ligger kvar för granskning. Inaktiva regler påverkar inte fordonsresultatet. Mottagarnas giltighetsperioder kontrolleras på kostnadsradens datum.</p>
         </>}
         <p><Link href="/kostnadskontroll" prefetch={false}>Visa kostnadsrader och regelunderlag →</Link></p>
         <p><Link href={`/kpi/kontrollpanel?${query}&section=allocation`} prefetch={false}>Öppna fördelning i Kontrollpanelen →</Link> · <Link href="/fordonshistorik" prefetch={false}>Historiskt fordonsunderlag</Link></p>

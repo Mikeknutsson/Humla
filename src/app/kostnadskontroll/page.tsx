@@ -43,12 +43,12 @@ export default async function CostReviewPage({ searchParams }: { searchParams: P
     </section>
     <section className="section"><h2>Inlagda fördelningsregler</h2>
       {ruleResult.error?<p>Fördelningsreglerna kunde inte hämtas.</p>:<>
-        <p>{ruleResult.rules.length} regler i arbetsytan. Aktivering och ekonomisk effekt granskas separat från de äldre projekt- och kontomappningarna.</p>
+        <p>{ruleResult.rules.length} regler i arbetsytan. Ekonomisk effekt avser hela det publicerade KPI-underlaget. Fördelningen följer era mappade ekonomiska enheter.</p>
         <table><thead><tr><th>Regel</th><th>Källa</th><th>Mottagare</th><th>Giltighet / status</th></tr></thead><tbody>{ruleResult.rules.map(rule=>{
           const list=(value:unknown)=>Array.isArray(value)?value.map(String).join(', '):typeof value==='string'?value:'';
           const source=list(rule.source_scope.project_references)||list(rule.source_scope.project_reference)||list(rule.source_scope.source_unit_names)||'Se regelns underlag';
           const targets=list(rule.target_scope.recipient_unit_names)||list(rule.target_scope.business_group)||(rule.allocation_method==='manual'?'Radvis bekräftelse krävs':'Alla behöriga aktiva enheter');
-          return <tr key={rule.id}><td>{rule.name}<br/>{rule.allocation_method}</td><td>{source}</td><td>{targets}<br/>{rule.include_in_vehicle_result?'Ingår i fordonsresultat':'Endast övergripande resultat'}</td><td>{rule.valid_from??'Start saknas'} – {rule.valid_to??'tills vidare'}<br/>{rule.enabled?'Aktiv':'Inaktiv'}<details><summary>Regelunderlag</summary><pre>{JSON.stringify({source:rule.source_scope,targets:rule.target_scope,selection:rule.target_selection_mode,selectedUnits:rule.selected_object_ids},null,2)}</pre></details></td></tr>;
+          return <tr key={rule.id}><td>{rule.name}<br/>{rule.allocation_method}</td><td>{source}</td><td>{targets}<br/>{rule.include_in_vehicle_result?'Ingår i fordonsresultat':'Endast övergripande resultat'}</td><td>{rule.valid_from??'Start saknas'} – {rule.valid_to??'tills vidare'}<br/>{rule.enabled?'Aktiv':'Inaktiv'}{rule.effect&&<><br/>{rule.effect.allocated_rows} fördelade rader · {money(String(rule.effect.allocated_amount),'SEK')}{rule.effect.review_rows>0&&<><br/>{rule.effect.review_rows} rader att granska · {money(String(rule.effect.review_amount),'SEK')}</>}{rule.effect.source_rows===0&&<><br/>Inga matchande kostnader i publicerat underlag</>}</>}<details><summary>Regelunderlag</summary><pre>{JSON.stringify({source:rule.source_scope,targets:rule.target_scope,selection:rule.target_selection_mode,selectedUnits:rule.selected_object_ids},null,2)}</pre></details></td></tr>;
         })}</tbody></table>
         <p>Mottagarnas egna giltighetsperioder måste också stämma på transaktionsdatumet. En vald enhet är inte automatiskt mottagare för hela verksamhetsåret.</p>
       </>}
