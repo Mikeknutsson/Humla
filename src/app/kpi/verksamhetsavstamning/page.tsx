@@ -5,6 +5,8 @@ export const dynamic = 'force-dynamic';
 type Source = { kind: string; source_label: string; rows: number; amount: string; allocation_review_rows: number };
 type Center = { code: string; name: string; revenue: string; cost: string; revenue_rows: number; cost_rows: number; sources: Source[] };
 type ProjectReview = { available: boolean; rows: number; cost: number; revenue: number; projects: { source: string; kind: string; project: string | null; rows: number; amount: number; matches: number; project_name: string | null; cost_center: string | null; effective_date: string | null; reason: string }[] };
+type PersonnelCoverage = { available: boolean; salary_resources: number; registered_transpa_people: number; centers: { code: string; name: string; sources: { source: string; category: string; basis: string; rows: number; amount: number }[] }[]; registered_personnel_projects: { object_id: string; name: string; project: string; current_center: string; effective_date: string | null }[] };
+const personnelBasis: Record<string, string> = { actual_payroll_flag: 'Markerat som faktisk lön', estimated_payroll: 'Schablon från arbetstid', payroll_basis_missing: 'Lönegrund saknas', next_work_time_reference: 'NEXT-arbetstidspost – lön ej verifierad', mapped_personnel_expense: 'Kontomappad personalutgift – kan vara arbetskläder eller utbildning' };
 type Report = { available: boolean; from: string; to: string; synced_at: string; centers: Center[]; active_allocation_rules: number; identity_correction: { status: string; result: { rows: number; amountDifference: number } } | null; fuel_correction?: { status: string; periodRows: number; periodAmount: number } | null; transpa_coverage?: { reports: number; employees: number; hours: number; cost_codes: { code: string; reports: number }[] } };
 const money = (value: string | number) => `${new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} kr`;
 function validDate(value?: string) {
@@ -23,6 +25,8 @@ export default async function CenterReconciliation({ searchParams }: { searchPar
   const report = response && !response.error ? response.data as Report | null : null;
   const projectResponse = invalid ? null : await access.db.rpc('hub_kpi_unclassified_projects_v1', { p_tenant_id: access.tenantId, p_from: from, p_to: to });
   const projectReview = projectResponse && !projectResponse.error ? projectResponse.data as ProjectReview | null : null;
+  const personnelResponse = invalid ? null : await access.db.rpc('hub_kpi_personnel_coverage_v1', { p_tenant_id: access.tenantId, p_from: from, p_to: to });
+  const personnel = personnelResponse && !personnelResponse.error ? personnelResponse.data as PersonnelCoverage | null : null;
   return <KpiDetailShell query="" title="Transport, Sortergården & Verkstad" breadcrumb="Humla Dashboard / Verksamhetsavstämning" extraNavigation={<Link href="/kpi/avstamning" prefetch={false}>Avstämning & regler</Link>}>
     <div className="content">
       <section className="panel"><h2>Avstämning per verksamhet</h2>
@@ -45,6 +49,17 @@ export default async function CenterReconciliation({ searchParams }: { searchPar
           <table><thead><tr><th>Kostnadskod i TransPA</th><th>Tidsrapporter</th></tr></thead><tbody>{report.transpa_coverage.cost_codes.map(c => <tr key={c.code}><td>{c.code}</td><td>{c.reports}</td></tr>)}</tbody></table>
           {['20', '40'].filter(code => !report.transpa_coverage!.cost_codes.some(c => c.code === code)).map(code => <p key={code}><strong>{code === '20' ? 'Sortergården' : 'Verkstad'}:</strong> Inga importerade TransPA-tidsrapporter är märkta med kostnadskod {code} i perioden. Det betyder inte att verksamheten saknar personalkostnad. Tidsunderlag och kopplingar behöver kontrolleras.</p>)}
         </section>}
+        <section className="panel"><h2>Personalkostnader – kontroll av underlag</h2>
+          {!personnel?.available ? <p>Personalkontrollen kunde inte hämtas.</p> : <>
+            <p>{personnel.registered_transpa_people} personer finns i TransPA-registret. {personnel.salary_resources} löneexportunderlag överlappar perioden. Ett löneexportunderlag kan avse en större period och är inte i sig en avstämd lönekostnad.</p>
+            <p>Schablon från arbetstid, NEXT-arbetstidsposter och övriga personalutgifter visas separat. Saknat löneunderlag ska inte tolkas som noll personalkostnad.</p>
+            <table><thead><tr><th>Verksamhet</th><th>Källa</th><th>Underlagets betydelse</th><th>Rader</th><th>Belopp i KPI</th></tr></thead><tbody>{personnel.centers.flatMap(c => c.sources.length ? c.sources.map(s => <tr key={`${c.code}:${s.source}:${s.basis}:${s.category}`}><td>{c.name}</td><td>{s.source}</td><td>{personnelBasis[s.basis] ?? 'Behöver granskas'}</td><td>{s.rows}</td><td>{money(s.amount)}</td></tr>) : [<tr key={c.code}><td>{c.name}</td><td colSpan={4}>Inget publicerat personalunderlag i denna kontroll</td></tr>])}</tbody></table>
+            {['20', '40'].map(code => <p key={code}><strong>{code === '20' ? 'Sortergården' : 'Verkstad'}:</strong> {personnel.centers.find(c => c.code === code)?.sources.some(s => s.source === 'TransPA') ? 'TransPA-kostnader finns i KPI; lönegrund och täckning behöver stämmas av.' : 'TransPA-kostnader saknas i KPI. Komplettera med tids- eller löneunderlag för rätt personal och period.'}</p>)}
+            <h3>Projekt markerade som Personal i aktuellt projektregister</h3>
+            <p>Listan är registerunderlag, inte verifierade anställningar eller en historisk personalfördelning. Personkoppling och giltighet behöver styrkas separat.</p>
+            <table><thead><tr><th>Projekt</th><th>Namn i registret</th><th>Nuvarande kostnadsställe</th><th>Gäller från</th></tr></thead><tbody>{personnel.registered_personnel_projects.map(p => <tr key={p.object_id}><td>{p.project}</td><td>{p.name}</td><td>{p.current_center}</td><td>{p.effective_date ?? 'Saknas'}</td></tr>)}</tbody></table>
+          </>}
+        </section>
         {['30', '20', '40', 'unclassified'].map(code => report.centers.find(c => c.code === code)).filter((c): c is Center => Boolean(c)).map(c => <section className="panel" key={c.code}>
           <h2>{c.name}{c.code !== 'unclassified' && ` · ${c.code}`}</h2>
           {c.code === 'unclassified' && <p>De här beloppen tillhör hela verksamheten. De är inte fördelade mellan de tre områdena och ska inte läggas på ett område utan verifierat underlag.</p>}
