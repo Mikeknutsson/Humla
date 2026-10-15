@@ -1,0 +1,13 @@
+# Monthly NEXT time and internal revenue
+
+The Hub enriches both month and fiscal YTD report periods. Prior-year periods use the same pipeline. NEXT source time is read from the published generation, completed imports and approved valid rows. Absence and OB supplements are excluded from worked hours. Physical repetitions within one export survive, while equivalent copies from another export collapse. Project-to-unit resolution uses canonical Hub identities and dated unit membership/collection relations; uncertain mappings are grouped under the existing canonical Övrigt collection, with an explicit unresolved-hour count rather than a guessed equipment identity.
+
+NEXT project work and workshop repair work are separate rows. They are never added to TransPA driver time or driving utilization. The source definitions state this explicitly. This prevents double counting people present in both systems and prevents repair work inflating chauffeur productivity. Units receive separate NEXT project/workshop hour fields where canonical membership is unique.
+
+Workshop debits already posted in NEXT (4630, internal AO/workshop evidence) remain Service & repair, once, within existing costs. A separate cost subtotal and project-level evidence link the imported hours with those debits. No labor cost is invented from zero-priced time rows. Missing project/month debit evidence is flagged, including three hours in Transport in September 2026. The debit can cover more than labor; no hourly price is inferred by dividing it by hours.
+
+Internal billing is a **part of** the reported revenue, not an addition. It is placed directly below the revenue metric in web/PDF/Excel. It uses the same all-registered-revenue rule as the report total, including internal rows whose original invoice status is not Invoiced. The original status split is retained in the Hub payload. Therefore it can differ from the Overview's explicitly Invoiced-only internal card. Revenue, cost and result remain unchanged.
+
+Validation: source/OB/absence separation, prior-year missing evidence, canonical unit and project filtering, repeated export versus repeated physical row, unchanged prepared monetary facts, private-helper permissions, report financial invariance, PDF rendering and Excel round-trip.
+
+The separately uploaded historical 2025 workbook is not part of the three previously completed NEXT imports. Its approved historical payroll replacement requires a separate import/calculation operation; this report change does not silently add those payroll costs.

@@ -22,7 +22,7 @@ export async function GET(request:Request){
  const filters=Object.fromEntries(['group','unit','vehicle','project'].filter(k=>params.get(k)).map(k=>[k,params.get(k)!]));
  if(JSON.stringify(filters).length>2000)return Response.json({error:'För stort urval.'},{status:400});
  const loadComparable=async(code:string,selectedFilters:Record<string,string>)=>{
-  const load=(fiscalYear:number)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v6',year:fiscalYear,month,costCenter:code,filters:selectedFilters},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:fiscalYear,p_month:month,p_cost_center:code,p_filters:selectedFilters}));
+  const load=(fiscalYear:number)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v7',year:fiscalYear,month,costCenter:code,filters:selectedFilters},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:fiscalYear,p_month:month,p_cost_center:code,p_filters:selectedFilters}));
   const [current,previous]=await Promise.all([load(year),load(year-1)]);
   return current.data?{...current,data:{...current.data,previous:previous.data?{period:previous.data.period,month:previous.data.month,ytd:previous.data.ytd}:null,previous_available:!!previous.data}}:current;
  };

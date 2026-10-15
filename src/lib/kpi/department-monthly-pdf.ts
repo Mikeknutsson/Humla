@@ -15,7 +15,7 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
  function rows(title:string,items:MonthlyComparisonRow[]){
   room(105);heading(title);headers();
   for(const row of items){
-   const label=safe(row.label.replace(' – TransPA-indikator','').replace(' – TransPA','').replace('NEXT egen tank, avstämning utanför summan','NEXT egen tank (avstämning)'));
+   const label=safe(row.label.replace(' – TransPA-indikator','').replace('Beläggningsgrad fordon – TransPA','Beläggningsgrad fordon').replace('NEXT egen tank, avstämning utanför summan','NEXT egen tank (avstämning)'));
    const labels:string[]=[];let current='';
    for(const word of label.split(' ')){const candidate=current?current+' '+word:word;if(current&&regular.widthOfTextAtSize(candidate,8.5)>220){labels.push(current);current=word;}else current=candidate;}if(current)labels.push(current);
    const height=Math.max(24,labels.length*11+10);
@@ -37,12 +37,14 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
   text('Samma månad och YTD föregående år. Saknat underlag visas som Saknas.',left,y,9,false,muted);y-=25;
   if(d.report.reconciliation?.status==='needs_review'){room(28);text('Preliminär intäkt och resultat – Workify-avstämning återstår.',left,y,9,true);y-=25;}
   if(!d.report.previous_available){room(28);text('Jämförelseåret kunde inte hämtas.',left,y,9,false,muted);y-=25;}
+  if(d.report.month.next_time?.workshop_hours_without_cost_reference){room(28);text(monthlyValue(d.report.month.next_time.workshop_hours_without_cost_reference,'h')+' verkstadstid saknar NEXT-debitering i vald månad.',left,y,9,false,muted);y-=25;}
   for(const section of monthlyComparisonSections(d.report)){
-   if(variant==='ledning'&&section.key!=='metrics')continue;
-   rows(section.title,section.rows);
+   if(variant==='ledning'&&!['metrics','time'].includes(section.key))continue;
+   const selected=variant==='ledning'&&section.key==='time'?section.rows.filter(r=>['Arbetad tid – TransPA','Arbetad projekttid – NEXT','Verkstadstid – NEXT (Rep)'].includes(r.label)):section.rows;
+   rows(section.title,selected);
   }
  }
- room(52);line(y);y-=16;text('Underlag: Humla Hub. Schablonkostnader och tidsindikatorer är preliminära.',left,y,8.5,false,muted);
+ room(96);text('NEXT-projekttid och verkstadstid visas separat från TransPA.',left,y,8.5,false,muted);y-=20;text('Intern debitering är en varav-post och ingår redan i fakturerade intäkter.',left,y,8.5,false,muted);y-=20;line(y);y-=16;text('Underlag: Humla Hub. Schablonkostnader och tidsindikatorer är preliminära.',left,y,8.5,false,muted);
  const pages=doc.getPages();for(let i=0;i<pages.length;i++)pages[i].drawText(safe(`Humla Dashboard | ${period?.from??''} | ${i+1}/${pages.length}`),{x:left,y:22,font:regular,size:8,color:muted});
  return doc.save();
 }
