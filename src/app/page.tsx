@@ -35,7 +35,7 @@ export default async function PortalHome(){
    <div className={styles.sectionTitle}><h2 id="portal-modules">Verksamhetsmoduler</h2><p>Aktiva moduler går att öppna · övriga byggs stegvis</p></div>
    <div className={styles.modules}>{modules.map(m=>{
     const Icon=m.icon;
-    const body=<><div className={styles.moduleHeader}><span className={styles.iconBox}><Icon size={24} aria-hidden="true"/></span><span className={m.enabled?styles.state:styles.state+" "+styles.disabledState}>{m.enabled?"Öppna":"Förbereds"}</span></div><h3 className={styles.moduleName}>{m.name}</h3><p className={styles.description}>{m.description}</p>{m.enabled&&<span className={styles.go}>Gå till arbetsyta →</span>}</>;
+    const body=<><div className={styles.moduleHeader}><span className={styles.iconBox}><Icon size={24} aria-hidden="true"/></span><span className={m.enabled?styles.state:styles.state+" "+styles.disabledState}>{m.enabled?"Öppna":m.href?"Saknar behörighet":"Förbereds"}</span></div><h3 className={styles.moduleName}>{m.name}</h3><p className={styles.description}>{m.description}</p>{m.enabled&&<span className={styles.go}>Gå till arbetsyta →</span>}</>;
     return m.href&&m.enabled ? <Link href={m.href} className={styles.moduleLink} key={m.name}>{body}</Link> :
       <article className={styles.moduleDisabled} key={m.name} aria-label={m.name+": inte tillgänglig ännu"}>{body}</article>;
    })}</div>
