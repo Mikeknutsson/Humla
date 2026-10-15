@@ -37,7 +37,7 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
   text('Samma månad och YTD föregående år. Saknat underlag visas som Saknas.',left,y,9,false,muted);y-=25;
   if(d.report.reconciliation?.status==='needs_review'){room(28);text('Preliminär intäkt och resultat – Workify-avstämning återstår.',left,y,9,true);y-=25;}
   if(!d.report.previous_available){room(28);text('Jämförelseåret kunde inte hämtas.',left,y,9,false,muted);y-=25;}
-  if(d.report.month.next_time?.workshop_hours_without_cost_reference){room(28);text(monthlyValue(d.report.month.next_time.workshop_hours_without_cost_reference,'h')+' verkstadstid saknar NEXT-debitering i vald månad.',left,y,9,false,muted);y-=25;}
+  if(d.report.month.next_time?.workshop_hours_without_cost_reference){room(28);text(monthlyValue(d.report.month.next_time.workshop_hours_without_cost_reference,'h')+' verkstadstid saknar NEXT-debitering. Preliminär Rep: '+monthlyValue(d.report.month.next_time.workshop_estimated_repair_cost,'kr')+'.',left,y,9,false,muted);y-=25;}
   for(const section of monthlyComparisonSections(d.report)){
    if(variant==='ledning'&&!['metrics','time'].includes(section.key))continue;
    const selected=variant==='ledning'&&section.key==='time'?section.rows.filter(r=>['Arbetad tid – TransPA','Arbetad projekttid – NEXT','Verkstadstid – NEXT (Rep)'].includes(r.label)):section.rows;
