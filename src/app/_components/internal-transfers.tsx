@@ -3,6 +3,7 @@ import {useEffect,useState} from 'react';
 import dynamic from 'next/dynamic';
 import type {InternalCenterSummary,InternalSummaryRow} from '@/lib/kpi/internal-center-summary';
 import type {InternalRow} from '@/lib/kpi/internal-transfers';
+import {InternalMaterialRefunds} from './internal-material-refunds';
 const PurchaseEvidence=dynamic(()=>import('./internal-purchase-evidence').then(m=>m.InternalPurchaseEvidence),{loading:()=> <p>Laddar inköpsunderlag…</p>});
 const money=new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK'});
 const statusLabel={new:'Nytt underlag',review:'Behöver granskas',changed:'Ändrat efter export',exported:'Exporterat',posted:'Omfört'};
@@ -53,6 +54,7 @@ export function InternalTransfers({query}:{query:string;canManage:boolean}){
    </section>
    <div className="actions"><button className="secondary" disabled={busy} onClick={()=>void download()}>{busy?'Exporterar…':'Exportera hela avstämningen till CSV (Excel)'}</button><small>Alla delar och granskningsrader följer med. Exporten ändrar ingen status.</small></div>
   </>}
+  <InternalMaterialRefunds query={reportQuery}/>
   <details onToggle={e=>setPurchaseOpen(e.currentTarget.open)}><summary>Inköpspriser – fortsatt arbete med kvitton och prislistor</summary>{purchaseOpen&&<PurchaseEvidence query={reportQuery}/>}</details>
  </section>;
 }
