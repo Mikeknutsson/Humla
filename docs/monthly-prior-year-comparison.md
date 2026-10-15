@@ -7,3 +7,5 @@ The web report, department PDFs and Excel comparison sheets display Month, YTD, 
 The old introductory controls and large KPI cards were removed as requested. Current report filters determine the displayed period. Department PDFs continue to show KST 20 and KST 30 separately; Excel follows the selected scope. Source transaction details remain evidence for the selected period.
 
 Validation: production Hub values for September 2026 and 2025 for both departments; keyed metric alignment, canonical unit identity and absent prior data; TypeScript/build; rendered leadership and detailed PDFs. Historical time coverage remains incomplete until the separately approved time import is completed. Workify reconciliation and missing overhead evidence remain explicitly identified.
+
+On 2026-10-15 the user removed the Overhead and management section from the monthly report and its PDF/Excel exports, including the billable-hours row in that section and corresponding metric definitions. This is a report presentation change; Hub calculations and other views remain available.

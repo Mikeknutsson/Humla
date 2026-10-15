@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import {parseMonthPeriod,stockholmToday} from '@/lib/kpi/period';
-import {monthlyValue,monthlyComparisonSections,monthlyUnitComparisons,type MonthlyComparisonRow,type MonthlyTransportReport} from '@/lib/kpi/monthly-report';
+import {monthlyValue,monthlyReportMetrics,monthlyComparisonSections,monthlyUnitComparisons,type MonthlyComparisonRow,type MonthlyTransportReport} from '@/lib/kpi/monthly-report';
 import styles from './kpi-monthly-report.module.css';
 export function KpiMonthlyReport({query}:{query:string}){
  const initial=new URLSearchParams(query),period=parseMonthPeriod(initial.get('fiscal_year')??undefined,initial.get('months')??undefined);
@@ -34,7 +34,7 @@ export function KpiMonthlyReport({query}:{query:string}){
  {!report.previous_available&&<p>Underlag för jämförelseåret kunde inte hämtas. Saknade värden visas som underlag saknas.</p>}
  {report.reconciliation?.status==='needs_review'&&<p role="status">Intäkt och resultat är preliminära. <Link prefetch={false} href={'/kpi/workify-avstamning?'+new URLSearchParams({from:report.period.from,to:report.period.to,cost_center:center})}>Visa Workify-avstämning →</Link></p>}
  {monthlyComparisonSections(report).map(section=><section className="panel" key={section.key}><h2>{section.title}</h2>{table(section.title,section.rows)}</section>)}
- <details className="panel"><summary>Definitioner och källunderlag</summary><p>Varje kolumn använder samma kostnadsställe och övriga filter. YTD går från verksamhetsårets start till vald månad; jämförelsekolumnerna använder motsvarande period föregående år.</p>{report.month.metrics.map(m=><p key={m.key}><strong>{m.label}:</strong> {m.basis}</p>)}<p>{report.month.overhead?.basis}</p><p>{report.month.fuel_sources?.basis}</p><p>{report.indicators.definition}</p></details>
+ <details className="panel"><summary>Definitioner och källunderlag</summary><p>Varje kolumn använder samma kostnadsställe och övriga filter. YTD går från verksamhetsårets start till vald månad; jämförelsekolumnerna använder motsvarande period föregående år.</p>{monthlyReportMetrics(report).map(m=><p key={m.key}><strong>{m.label}:</strong> {m.basis}</p>)}<p>{report.month.fuel_sources?.basis}</p><p>{report.indicators.definition}</p></details>
  <details className="panel"><summary>Bränsleunderlag – vald månad</summary><div className={styles.table}><table><thead><tr><th>Datum</th><th>Källa</th><th>Fordon</th><th>Produkt / konto</th><th>Liter</th><th>Kostnad</th></tr></thead><tbody>{report.month.fuel_sources?.transactions.map(t=><tr key={t.source+':'+t.id}><td>{t.dt}</td><td>{t.source}</td><td>{t.vehicle??'Ej kopplat'}</td><td>{t.product}</td><td>{monthlyValue(t.liters,'l')}</td><td>{monthlyValue(t.amount,'kr')}</td></tr>)}</tbody></table></div></details>
  <section className="panel"><h2>Ekonomiska enheter</h2><p>Samma enheter och urval som i Enhetsuppföljningen. Öppna en enhet för jämförelsen.</p>{monthlyUnitComparisons(report).map(u=><details key={u.key}><summary>{u.label}</summary>{table(u.label,u.rows)}<Link prefetch={false} href={'/kpi/analys?'+new URLSearchParams({from:report.period.from,to:report.period.to,fiscal_year:String(year),months:String(month),cost_center:center,unit:u.key,level:'transaction'})}>Visa underlag för vald månad →</Link></details>)}</section>
  </>}

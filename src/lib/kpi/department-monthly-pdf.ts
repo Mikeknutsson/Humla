@@ -38,9 +38,8 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
   if(d.report.reconciliation?.status==='needs_review'){room(28);text('Preliminär intäkt och resultat – Workify-avstämning återstår.',left,y,9,true);y-=25;}
   if(!d.report.previous_available){room(28);text('Jämförelseåret kunde inte hämtas.',left,y,9,false,muted);y-=25;}
   for(const section of monthlyComparisonSections(d.report)){
-   if(variant==='ledning'&&!['metrics','overhead'].includes(section.key))continue;
-   const selected=variant==='ledning'&&section.key==='overhead'?section.rows.filter(r=>['Overhead totalt','Arbetsledning','Overhead / omsättning','Overhead / debiterbar timme'].includes(r.label)):section.rows;
-   rows(section.title,selected);
+   if(variant==='ledning'&&section.key!=='metrics')continue;
+   rows(section.title,section.rows);
   }
  }
  room(52);line(y);y-=16;text('Underlag: Humla Hub. Schablonkostnader och tidsindikatorer är preliminära.',left,y,8.5,false,muted);
