@@ -9,7 +9,7 @@ export async function cachedKpiReport<T>(userId:string,tenantId:string,scope:unk
  try {
   const status=await getKpiReportStatus(tenantId);
   if(status.error||!status.data?.generation)throw Object.assign(new Error(status.error?.message??'Prepared Hub report unavailable'),{code:status.error?.code??'HUB_GENERATION_UNAVAILABLE'});
-  const cacheKey=['kpi-report-prepared-v11',userId,tenantId,status.data.generation,String(status.data.correction_revision??0),JSON.stringify(scope)];
+  const cacheKey=['kpi-report-prepared-v12',userId,tenantId,status.data.generation,String(status.data.correction_revision??0),JSON.stringify(scope)];
   const requestKey=JSON.stringify(cacheKey);
   const run=()=>unstable_cache(async()=>{
    const result=await load();

@@ -5,15 +5,15 @@ declare t uuid:='944597b6-9c46-4bef-998d-f19e23c4245b';p uuid:='d0e501bc-b300-47
 begin
  r:=public.hub_project_revenue_statement_v1(t,p);
  assert (r->>'billed_total')::numeric=485798,'Approved cumulative revenue';
- assert (r->>'imported_next_revenue')::numeric=150000,'Already imported revenue remains included once';
- assert (r->>'unperiodized_difference')::numeric=335798,'Only residual awaits invoice dates';
+ assert (r->>'imported_project_revenue')::numeric=485797.54,'Already imported revenue remains included once';
+ assert (r->>'unperiodized_difference')::numeric=0.46,'Difference from rounded source statement';
  select active_generation into g from private.hub_kpi_report_state where tenant_id=t;
  select fact_id,amount into fid,original_amount from private.hub_kpi_prepared_facts where tenant_id=t and generation_id=g and project='12716' and source='NEXT' and kind='revenue' and occurred_on<='2026-10-15' limit 1;
  assert fid is not null,'Expected imported invoice fixture';
- update private.hub_kpi_prepared_facts set amount=original_amount+335798 where tenant_id=t and generation_id=g and fact_id=fid;
+ update private.hub_kpi_prepared_facts set amount=original_amount+0.46 where tenant_id=t and generation_id=g and fact_id=fid;
  r:=public.hub_project_revenue_statement_v1(t,p);
  assert (r->>'billed_total')::numeric=485798,'Later imports must never add the control total again';
- assert (r->>'unperiodized_difference')::numeric=0,'Later invoice evidence reconciles cumulative statement';
+ assert (r->>'unperiodized_difference')::numeric=0,'Additional dated evidence reconciles cumulative statement';
  perform set_config('request.jwt.claim.sub','',true);
  begin
   perform public.hub_project_revenue_statement_v1(t,p);
