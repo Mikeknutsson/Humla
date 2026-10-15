@@ -1,0 +1,31 @@
+name: Humla Portal verification
+
+on:
+  pull_request:
+    paths:
+      - 'src/app/page.tsx'
+      - 'src/app/api/kpi/import/route.ts'
+      - 'src/app/portal.module.css'
+      - 'src/app/layout.tsx'
+      - 'src/app/hub/page.tsx'
+      - 'src/app/_components/app-frame.tsx'
+      - 'src/app/kpi/login/**'
+      - '.github/workflows/portal-verification.yml'
+  workflow_dispatch:
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Validate portal files with ESLint
+        run: npx eslint src/app/page.tsx src/app/layout.tsx src/app/hub/page.tsx src/app/_components/app-frame.tsx src/app/kpi/login/page.tsx src/app/kpi/login/login-submit.tsx
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
