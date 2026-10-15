@@ -5,6 +5,8 @@ declare t uuid:='944597b6-9c46-4bef-998d-f19e23c4245b';r jsonb;s jsonb;p jsonb;d
 begin
  select count(*)into ledger_before from public.kpi_internal_transfer_ledger where tenant_id=t;
  r:=public.hub_kpi_internal_material_project_refunds_v1(t,'2026-09-01','2026-09-30',array[9]);
+ s:=public.hub_kpi_internal_material_project_refunds_v1(t,'2026-09-01','2026-09-30',null);
+ assert s->'totals'=r->'totals','Date-only UI selection must match month selection';
  assert (r#>>'{totals,billed}')::numeric+(r->>'unresolved_billed')::numeric+(r->>'other_center_billed')::numeric=(r->>'all_material_billed')::numeric,'All published material revenue must reconcile';
  assert (select sum((x->>'refund')::numeric)from jsonb_array_elements(r->'projects')x)=(r#>>'{totals,refund}')::numeric,'Project refunds reconcile';
  assert (select sum((x->>'rows')::int)from jsonb_array_elements(r->'projects')x)=(r#>>'{totals,rows}')::int,'Rows counted once';

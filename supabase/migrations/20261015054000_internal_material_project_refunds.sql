@@ -2,28 +2,51 @@
 create or replace function public.hub_kpi_internal_material_project_refunds_v1(
  p_tenant_id uuid,p_from date,p_to date,p_months integer[] default null)
 returns jsonb language plpgsql stable security definer set search_path='' set jit='off' set plan_cache_mode='force_custom_plan' as $$
-declare transfers jsonb;transfer_map jsonb;items jsonb:='[]';yr integer;first_year integer;last_year integer;result jsonb;
+declare items jsonb:='[]';yr integer;first_year integer;last_year integer;result jsonb;generation uuid;
 begin
  if auth.uid() is null or not public.hub_has_permission(p_tenant_id,'kpi.read') then
   raise exception 'KPI access required' using errcode='42501';end if;
- -- Reuse the existing Hub adapter for canonical, dated receiving-project identity.
- transfers:=public.hub_kpi_internal_transfers_v1(p_tenant_id,p_from,p_to,p_months);
- select coalesce(jsonb_object_agg(r->>'row_id',r),'{}') into transfer_map from jsonb_array_elements(transfers->'rows')r;
+ if p_from is null or p_to is null or p_to<p_from or p_to-p_from>366 then raise exception 'Invalid period';end if;
+ if p_months is not null and (cardinality(p_months)=0 or exists(select 1 from unnest(p_months)m where m is null or m<1 or m>12)) then raise exception 'Invalid months';end if;
+ select active_generation into generation from private.hub_kpi_report_state where tenant_id=p_tenant_id;
  first_year:=extract(year from p_from)::int-case when extract(month from p_from)<9 then 1 else 0 end;
  last_year:=extract(year from p_to)::int-case when extract(month from p_to)<9 then 1 else 0 end;
  for yr in first_year..last_year loop
-  items:=items||coalesce(private.hub_kpi_internal_material_margin_v1(p_tenant_id,yr,p_months,
+  items:=items||coalesce(private.hub_kpi_internal_material_margin_v1(p_tenant_id,yr,coalesce(p_months,array[9,10,11,12,1,2,3,4,5,6,7,8]),
    jsonb_build_object('date_from',p_from,'date_to',p_to))->'details','[]');
  end loop;
- with linked as materialized(
+ -- Resolve only the published source IDs, through canonical identity keys and
+ -- the same dated classification / approved-cost-scope knowledge as transfers.
+ with project_keys as materialized(
+  select k.identity_value,count(distinct k.object_id) n,(array_agg(distinct k.object_id))[1] id
+  from public.hub_identity_keys k join public.hub_objects o on o.id=k.object_id and o.tenant_id=k.tenant_id
+  where k.tenant_id=p_tenant_id and k.identity_type='next_project_number' and k.confidence=1 and lower(o.object_type)='project'
+  group by k.identity_value
+ ), cost_scopes as materialized(select * from private.hub_material_approved_cost_scopes_v1(p_tenant_id)),
+ source_rows as materialized(
+  select d,x.source_data,
+   (regexp_match(trim(coalesce(nullif(x.source_data->>'Littranummer',''),x.source_data->>'Projekt')),'^(?:AO)?([^[:space:]]+)','i'))[1] reference
+  from jsonb_array_elements(items)d
+  left join public.kpi_import_rows x on x.tenant_id=p_tenant_id and x.id=(d->>'source_row')::uuid
+ ), receivers as materialized(
+  select d,jsonb_build_object('project',s.reference,'receiver_id',case when k.n=1 then k.id end,
+   'receiver_center',coalesce(cs.project_cost_center,case when c.n=1 then c.code else '10' end),
+   'receiver_rule',case when cs.project_cost_center is null and c.n<>1 then 'Standardregel: 10 Entreprenad vid utebliven entydig KST-matchning' end,
+   'littra',s.source_data->>'Littranummer','source_center',f.cost_center) r
+  from source_rows s left join project_keys k on k.identity_value=s.reference
+  left join lateral(select v.cost_center project_cost_center from cost_scopes v where v.project=s.reference and v.valid_from<=(d->>'date')::date order by v.valid_from desc limit 1)cs on true
+  left join lateral(select count(distinct p.cost_center)n,min(p.cost_center)code from public.kpi_project_classification_periods p
+   where p.tenant_id=p_tenant_id and p.project_reference=s.reference and p.valid_from<=(d->>'date')::date and (p.valid_to is null or p.valid_to>=(d->>'date')::date))c on true
+  left join lateral(select p.cost_center from private.hub_kpi_prepared_facts p where p.tenant_id=p_tenant_id and p.generation_id=generation
+   and p.fact_id in(d->>'source_row',(d->>'source_row')||':material') and p.category='material' and p.kind='revenue' limit 1)f on true
+ ), linked as materialized(
   select d, t.r,
    t.r->>'receiver_center' receiver_center,
    case when t.r->>'receiver_center'='10' then nullif(t.r->>'receiver_id','') end project_id,
    coalesce(o.data->>'display_name',t.r->>'receiver_name') project_name,
    (d->>'billed')::numeric billed,(d->>'purchase_cost')::numeric purchase,
    case when (d->>'bundled')::boolean is not true then (d->>'difference')::numeric end refund
-  from jsonb_array_elements(items)d
-  cross join lateral(select transfer_map->(d->>'source_row') r)t
+  from receivers t
   left join public.hub_objects o on o.tenant_id=p_tenant_id and o.id=(t.r->>'receiver_id')::uuid
  ), classified as materialized(
   select *,case when receiver_center='10' and nullif(r->>'project','') is not null then 'project'
