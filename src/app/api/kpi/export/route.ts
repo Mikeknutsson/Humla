@@ -5,6 +5,7 @@ export const runtime='nodejs';export const maxDuration=60;
 export async function GET(req:Request){
  const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return Response.json({error:'Inloggning krävs'},{status:401});
  const {data:m}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();if(!m)return Response.json({error:'Arbetsyta saknas'},{status:403});
+ const {data:canRead}=await db.rpc('hub_has_permission',{p_tenant_id:m.tenant_id,p_permission:'kpi.read'});if(!canRead)return Response.json({error:'KPI-behörighet saknas'},{status:403});
  try{const params=new URL(req.url).searchParams;const args=analysisQuery(params);const format=params.get('format');if(!['xlsx','pdf'].includes(format??''))return Response.json({error:'Välj Excel eller PDF'},{status:400});
  const {data,error}=await db.rpc(args.p_filters.selected_months?'hub_kpi_analysis_months_v1':'hub_kpi_analysis_v2',{p_tenant_id:m.tenant_id,...args,p_export:true});if(error)return Response.json({error:'Exportunderlaget kunde inte läsas.'},{status:403});const report=data as Analysis;
  if(report.export_limit_exceeded)return Response.json({error:'Välj ett mindre intervall. Exporten omfattar högst 50 000 transaktioner och inga rader kapas tyst.'},{status:413});
