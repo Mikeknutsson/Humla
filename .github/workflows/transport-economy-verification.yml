@@ -1,0 +1,27 @@
+name: Transport and Economy verification
+on:
+  pull_request:
+    paths:
+      - 'src/app/ekonomi/**'
+      - 'src/app/transport-styrning/**'
+      - 'src/app/api/kpi/export/route.ts'
+      - 'supabase/migrations/*transport_leader*'
+      - 'supabase/migrations/*economy_kpi*'
+      - '.github/workflows/transport-economy-verification.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: ESLint changed workspaces
+        run: npx eslint src/app/ekonomi src/app/transport-styrning src/app/api/kpi/export/route.ts
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
