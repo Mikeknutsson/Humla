@@ -18,7 +18,7 @@ export default async function TransportSteering(){
  return <div>
   <header className="topbar"><div><span className="eyebrow">HUMLA TRANSPORT</span>
    <h1>Mitt styrkort</h1><p>{member.display_name??"Arbetsledare"} · Enbart tilldelade ekonomiska enheter</p></div>
-   <Link className="navitem" href="/kpi">KPI & Ekonomi →</Link></header>
+   <div><Link className="navitem" href="/kpi">KPI & Ekonomi →</Link>{member.role==="owner"&&<Link className="navitem" href="/transport-styrning/admin">Hantera ansvar →</Link>}</div></header>
   {error?<section className="section" role="alert"><h2>Styrkortet kunde inte läsas</h2>
    <p>Behörighetskopplingen är ännu inte aktiverad eller kunde inte verifieras. Ingen data visas.</p></section>:
   visible.length===0?<section className="section"><h2>Inga enheter tilldelade</h2>
