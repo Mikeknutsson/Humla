@@ -38,7 +38,7 @@ export default async function EconomyHome({searchParams}:{searchParams:Promise<{
   </header>
   <nav className={styles.shortcuts} aria-label="Ekonomiska rapporter">
    <Link href="/kpi">KPI-dashboard</Link><Link href="/kpi/projekt">Projektuppföljning</Link>
-   <Link href="/kpi/analys?from=2026-09-01&to=2027-08-31&level=group">Detaljanalys</Link>
+   <Link href={`/kpi/analys?from=${from}&to=${to}&level=group`}>Detaljanalys</Link>
   </nav>
   <form method="get" className={styles.filters}>
    <label>Verksamhetsår<select name="fiscal_year" defaultValue={period.fiscalYear}>
