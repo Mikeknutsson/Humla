@@ -84,15 +84,14 @@ only the ambiguous order is held, not unrelated new transactions in the file.
 
 ## Deployment checkpoint, 2026-10-18
 
-Migrations through `20261018001000` are live. The report worker successfully
+Migrations through `20261018002000` are live. The report worker successfully
 published a new generation and evaluated 100 facts: 4 strong matches, 9
 provisional matches and 87 retained fallbacks, with financial inclusion unchanged.
-Both regression suites passed before the additional status-preservation assertion.
+Both regression suites passed. Following activation of the status fix, the
+full-year suite passed again, including the resolver-status assertion.
 
-`20261018002000` is prepared but **not applied**: the migration approval request
-expired twice. It preserves `needs_review` through Workify's downstream mapping
-resolver. Until applied, source revisions are retained safely in provenance and
-observations, but the batch status can incorrectly return to `completed` after
-mapping its independent accepted rows. Apply this migration and rerun the full-year
-test, including its new resolver-status assertion, before calling that status issue
-fixed. No financial amount is overwritten by this status issue.
+`20261018002000` preserves `needs_review` through Workify's downstream mapping
+resolver whenever source revisions remain. The incoming changes stay in
+observations and provenance; resolving the independent accepted rows cannot
+silently mark the complete delivery as finished. Anonymous execution remains
+revoked on both affected RPCs. The active report remains ready without errors.
