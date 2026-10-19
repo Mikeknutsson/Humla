@@ -1,7 +1,8 @@
 /** Hub domain calculation. KPI filters and vehicle identities deliberately do not apply. */
-export const departments = {'30':'Transport','20':'Sortergården','40':'Verkstad'} as const;
-/** Workshop is included as a cost department only. */
-export const costOnly = (center:string) => center==='40';
+export const payrollDepartments = {'30':'Transport','20':'Sortergården','40':'Verkstad'} as const;
+export const departments = {...payrollDepartments,'50':'Fastigheter','90':'Övrigt'} as const;
+/** Workshop, properties and other overhead are included as cost departments only. */
+export const costOnly = (center:string) => ['40','50','90'].includes(center);
 export const emptyIncoming = () => ({known:0,forecast:0,total:0,baseline:0,factor:1});
 export type Payment = {id:string; center:string; kind:'in'|'out'; date:string; amount:number; internal:boolean};
 export type ForecastInput = {asOf:string; periodOffset?:number; ledger:Payment[]; history:Payment[]; historyFrom:string; historyTo:string;basis?:'payment'|'booked';inDays?:number;outDays?:number};

@@ -1,5 +1,25 @@
 # Avdelningens betalningsprognos – första version
 
+## Kostnadsprognos för Fastigheter och Övrigt (2026-10-19)
+
+KST 50 Fastigheter och 90 Övrigt ingår nu som egna kostnadsavdelningar tillsammans
+med 40 Verkstad. Registrerade externa NEXT-kostnader och återstående prognos
+räknas med en gång i sammanlagda kostnader och netto. Varje KST använder sin egen
+historik och trend. Samma urval gäller automatisk beräkning, manuell CSV, tabeller
+och CSV-export. Intäkter på dessa tre kostnadsavdelningar ingår inte i
+kundinbetalningar; de redovisas i exportens undantagna underlag. Interna kostnader
+visas separat och påverkar inte externt netto.
+
+Käll-RPC:n levererar redan alla kostnadsställen; inga nya mappningar eller
+fördelningar behövs. TransPA-löneprognosen behåller sitt tidigare urval 20/30/40
+och särredovisas fortsatt utanför kostnader/netto. Ingen löneprognos antas för
+50/90. Saknad jämförelsehistorik ger ”Underlag saknas”, även i sammanlagd prognos,
+medan registrerade kostnader fortfarande visas på sin egen rad.
+
+Live-kontroll 2026-10-19: publicerat externt kostnadsunderlag för 50 börjar
+2025-11-21 och för 90 2025-09-03. Fullständig septembertrend kan därför inte
+bekräftas för dessa kostnadsställen med nuvarande tillgänglighetsregel.
+
 ## Payroll projection (2026-10-08)
 
 Since 2026-10-09, automatic mode discloses TransPA gross-pay projection separately; it does not add payroll to outgoing forecast/total or net. Previous work month is paid on calendar day 25 of the following month, with no unverified holiday adjustment. Existing allocated Hub TransPA facts are aggregated by month/KST; their default employer-cost load is removed using the settings that match the snapshot. No vehicle/person cost is allocated a second time, no new identity guesses, no PO/pension/social-cost cash uplift, no net-pay or withholding-tax inference. Salary settings changed after the prepared snapshot block the payroll calculation until Hub sync. Both source RPCs must return the same snapshot timestamp.

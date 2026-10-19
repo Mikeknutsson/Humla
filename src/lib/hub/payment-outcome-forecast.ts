@@ -61,7 +61,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
   }
   for(const k of ['incoming','outgoing'] as const)w.internal[k]=w.parts.some(p=>p.internal[k]===null)?null:round(w.parts.reduce((s,p)=>s+p.internal[k]!,0));
   if(payroll){const salaryWeek=payroll.weeks.find(s=>s.from===w.from)!;w.total.payroll=salaryWeek.total;
-   for(const p of w.parts){p.payroll=salaryWeek.parts.find(s=>s.center===p.center)!.amount;
+   for(const p of w.parts){p.payroll=salaryWeek.parts.find(s=>s.center===p.center)?.amount??null;
    }
   }
   for(const p of w.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
