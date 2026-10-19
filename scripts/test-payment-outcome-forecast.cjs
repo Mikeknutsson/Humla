@@ -55,3 +55,12 @@ const missingProperties=outcomeForecast({...source,rows:rows.filter(r=>r.center!
 assert.equal(missingProperties.weeks[0].parts.find(p=>p.center==='50').outgoing.total,null);
 assert.equal(missingProperties.weeks[0].total.outgoing.total,null);
 assert.equal(missingProperties.weeks[0].total.net,null);
+assert.equal(missingProperties.weeks[0].available.outgoing,4800);
+assert.equal(missingProperties.weeks[0].available.net,-2400);
+assert.equal(missingProperties.weeks[0].available.missingOutgoing.join(','),'50');
+const spacedTransactions=outcomeForecast({...source,rows:rows.map(r=>r.center==='90'&&r.date==='2025-01-01'?{...r,date:'2025-09-03'}:r.center==='90'&&r.date==='2026-09-30'?{...r,date:'2026-09-28'}:r)},'2026-10-08');
+assert.equal(spacedTransactions.weeks[0].parts.find(p=>p.center==='90').outgoing.factor,1.2);
+assert.equal(spacedTransactions.weeks[0].parts.find(p=>p.center==='90').outgoing.total,1200);
+const knownWithoutHistory=outcomeForecast({...source,rows:[...rows.filter(r=>r.center!=='50'),row('50','out','2026-10-05',250)]},'2026-10-08');
+assert.equal(knownWithoutHistory.weeks[0].parts.find(p=>p.center==='50').outgoing.total,null);
+assert.equal(knownWithoutHistory.weeks[0].available.outgoing,5050);
