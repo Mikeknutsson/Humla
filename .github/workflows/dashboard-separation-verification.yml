@@ -1,0 +1,30 @@
+name: Dashboard separation verification
+on:
+  pull_request:
+    paths:
+      - "src/app/layout.tsx"
+      - "src/app/_components/root-frame.tsx"
+      - "src/app/kpi/layout.tsx"
+      - "src/app/kpi/_components/**"
+      - "src/app/kpi/ekonomi/**"
+      - "src/app/kpi/transport-styrning/**"
+      - "src/app/ekonomi/**"
+      - "src/app/transport-styrning/**"
+      - ".github/workflows/dashboard-separation-verification.yml"
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Lint dashboard and compatibility redirects
+        run: npx eslint src/app/layout.tsx src/app/_components/root-frame.tsx src/app/kpi/layout.tsx src/app/kpi/_components/dashboard-navigation.tsx src/app/kpi/ekonomi src/app/kpi/transport-styrning src/app/ekonomi src/app/transport-styrning
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
