@@ -12,16 +12,20 @@ export async function internalEconomyPdf(report:InternalEconomyReport,center?:st
  const text=(v:unknown,x:number,yy:number,size=8,strong=false,color=black)=>page.drawText(clean(v),{x,y:yy,size,font:strong?bold:font,color});
  function wrap(v:unknown,w:number,size=7){const words=clean(v).split(/\s+/),lines:string[]=[];let part='';for(const word of words){if(font.widthOfTextAtSize(part?part+' '+word:word,size)>w&&part){lines.push(part);part='';}let rest=word;while(font.widthOfTextAtSize(rest,size)>w){let n=rest.length-1;while(n>1&&font.widthOfTextAtSize(rest.slice(0,n),size)>w)n--;if(part){lines.push(part);part='';}lines.push(rest.slice(0,n));rest=rest.slice(n);}part=part?part+' '+rest:rest;}if(part)lines.push(part);return lines.length?lines:[''];}
  function newPage(title:string){page=pdf.addPage([842,595]);pages.push(page);page.drawImage(logo,{x:left,y:537,width:173,height:47});text('Internöverföring - underlag till ekonomi',230,565,15,true);text(title,230,546,10,true);text(`${report.period.from} - ${report.period.to} | Belopp i SEK, exklusive moms`,230,530,8,false,muted);page.drawRectangle({x:left,y:516,width,height:3,color:yellow});y=499;}
- function paragraph(value:string){for(const l of wrap(value,width,8)){text(l,left,y,8,false,muted);y-=11;}y-=7;}
  const rows=report.rows.filter(r=>!center||r.to_center===center),centers=report.centers.filter(c=>!center||c.center===center),projects=report.projects.filter(p=>!center||p.center===center);
  const title=center?`Överföring till ${center} ${center==='30'?'Transport':'Sortergården'} från 10 Entreprenad`:'Överföring från 10 Entreprenad till Transport och Sortergården';
  newPage(title);
- for(const c of centers){const label=c.center==='30'?'30 Transport':'20 Sortergården';text(label,left,y,10,true);text(c.missing_rows?'Prissatt del':'Summa att överföra',285,y,9);text(number(c.total??c.priced_amount)+' kr',440,y,13,true);y-=22;}
- paragraph('Material redovisas till självkostnad utan materialpåslag. Transport och tipp/deponi: fullt debiteringspris. En gul markering vid raden anger uppskattat pris eller preliminär koppling.');
- paragraph(`Debiterat belopp före materialjustering: ${number(centers.reduce((s,c)=>s+c.debit_amount,0))} kr. Materialpåslaget ersätts med självkostnadspriset.`);
- const missing=rows.filter(r=>r.amount===null).length,estimated=rows.filter(r=>r.estimated).length;
- paragraph(`${rows.length} rapportrader. ${estimated} materialrader har uppskattat självkostnadspris. ${missing?`${missing} rader saknar pris eller uppdelning: totalsumman är ofullständig. Dessa står kvar i detaljlistan med SAKNAS.`:'Samtliga rapportrader har belopp.'}`);
- if(report.reconciliation.conflictCount||report.reconciliation.unassignedRows||report.reconciliation.otherRows||report.reconciliation.invalidAmountRows)paragraph(`Avstämning för hela periodens internunderlag: ${report.reconciliation.conflictCount} motstridiga källnycklar, ${report.reconciliation.unassignedRows} rader utan intäkts-KST, ${report.reconciliation.otherRows} rader på andra överföringar och ${report.reconciliation.invalidAmountRows} rader utan läsbart belopp. Dessa ingår inte i denna filens KST 10 -> 20/30-summa. Se avstämningen i Humla.`);
+ for(const c of centers){
+  text(c.center==='30'?'30 Transport':'20 Sortergården',left,y,10,true);
+  const summary:Array<[string,number|null,boolean]>=[
+   ['Summa att överföra',c.total,true],
+   ['Debiterbart belopp',c.debit_amount,false],
+   ['Mellanskillnad',c.total===null?null:Math.round((c.debit_amount-c.total)*100)/100,false],
+  ];
+  for(const[label,value,strong]of summary){text(label,285,y,9,strong);text(number(value)+' kr',440,y,strong?13:11,strong);y-=22;}
+  if(c.missing_rows){text(`Ofullständigt underlag: ${c.missing_rows} rader saknar pris. Prissatt del: ${number(c.priced_amount)} kr.`,left,y,8,false,muted);y-=18;}
+  y-=10;
+ }
  const projectHeader=()=>{page.drawRectangle({x:left,y:y-5,width,height:18,color:black});text('KST',left+4,y,8,true,rgb(1,1,1));text('Projekt / littra',left+40,y,8,true,rgb(1,1,1));text('Transport',480,y,8,true,rgb(1,1,1));text('Material - självkostnad',555,y,8,true,rgb(1,1,1));text('Tipp',685,y,8,true,rgb(1,1,1));text('Summa',750,y,8,true,rgb(1,1,1));y-=23;};
  text('Sammanställning per mottagande projekt',left,y,10,true);y-=22;projectHeader();
  for(const p of projects){const names=wrap(p.name||p.project||'Projekt saknas',420,7.5),h=Math.max(18,names.length*9+6);if(y-h<45){newPage(title+' - projektsammanställning');projectHeader();}text(p.center,left+4,y,7.5);names.forEach((l,i)=>text(l,left+40,y-i*9,7.5));[p.transport,p.material,p.tipp_deponi,p.total].forEach((v,i)=>{const x=[480,555,685,750][i],w=[70,125,60,64][i],s=clean(number(v));text(s,x+w-font.widthOfTextAtSize(s,7),y,7);});page.drawLine({start:{x:left,y:y-h+7},end:{x:left+width,y:y-h+7},thickness:.3,color:line});y-=h;}
@@ -37,10 +41,6 @@ export async function internalEconomyPdf(report:InternalEconomyReport,center?:st
    if(r.preliminary)page.drawRectangle({x:left-6,y:y-2,width:3,height:8,color:yellow});
    page.drawLine({start:{x:left,y:y-h+6},end:{x:left+width,y:y-h+6},thickness:.25,color:line});y-=h;
   }
- }
- const evidence=rows.filter(r=>r.category==='material'||r.amount===null);
- if(evidence.length){newPage('Prisunderlag - materialets självkostnad');paragraph('Stjärna (*) = uppskattat självkostnadspris enligt godkänd Hub-regel. Materialradernas pris är ett inköps-/självkostnadsunderlag, inte ett internt försäljningspris.');
-  for(const r of evidence){const notes=wrap(`${r.order} | ${r.occurred_on} | ${r.article} | ${r.littra||r.project} | ${number(r.rate)} kr/${r.unit} | ${r.estimated?'* Uppskattat pris':r.price_status} | ${r.price_basis||r.review_reason||'Pris/uppdelning saknas'}`,width-8,8),h=notes.length*11+12;if(y-h<45)newPage('Prisunderlag (forts.)');notes.forEach((l,i)=>text(l,left+4,y-i*11,8));y-=h;}
  }
  for(const[p,i]of pages.map((p,i)=>[p,i]as const)){page=p;text(`Elleholms Maskin AB | Skapad ${report.created_at.slice(0,10)} | Underlag - ingen automatisk bokföring`,left,22,7,false,muted);text(`Sida ${i+1} / ${pages.length}`,748,22,7,false,muted);}
  pdf.setTitle('Internöverföring - material till självkostnad');pdf.setAuthor('Elleholms Maskin AB');return pdf.save();

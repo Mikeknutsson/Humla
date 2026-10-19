@@ -2,7 +2,10 @@
 
 The export follows the supplied Elleholms landscape template with a project
 summary, detailed order rows, original debited amounts, price adjustments,
-transfer amounts and material price evidence. It is available separately for
+transfer amounts. Price evidence remains in Hub; the PDF omits the evidence
+appendix and introductory explanation. Its summary shows the transfer total,
+original debitable amount and their difference (debitable minus transfer).
+Missing prices leave the transfer total and difference incomplete. It is available separately for
 10 -> 30 Transport and 10 -> 20 Sortergården in Internal transfers.
 
 Final approved valuation:
