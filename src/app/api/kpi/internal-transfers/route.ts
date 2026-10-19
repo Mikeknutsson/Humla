@@ -2,6 +2,7 @@ import {createClient} from '@/lib/supabase/server';
 import {internalQuery,transferWorkbook,transferGroups,transferTotals,finishedRows,type InternalRow} from '@/lib/kpi/internal-transfers';
 import {internalCenterSummaryCsv,type InternalCenterSummary} from '@/lib/kpi/internal-center-summary';
 import {materialRefundCsv,type MaterialRefundReport} from '@/lib/kpi/internal-material-refunds';
+import {internalEconomyPdf,type InternalEconomyReport}from'@/lib/kpi/internal-economy-pdf';
 export const runtime='nodejs';export const maxDuration=60;
 async function context(){const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return null;const {data:m}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();return m?{db,tenant:m.tenant_id}:null;}
 const headers={'Cache-Control':'private, no-store'};
@@ -9,6 +10,16 @@ function download(rows:InternalRow[],id:string,report=false,includeReview=false)
 export async function GET(req:Request){
  const ctx=await context();if(!ctx)return Response.json({error:'Inloggning och arbetsyta krävs'},{status:401});
  try{const p=new URL(req.url).searchParams;
+  if(p.get('download')==='economy_pdf'){
+   const center=p.get('to_center')??undefined;
+   if(center&&!['20','30'].includes(center))throw Error('Invalid accounting center');
+   const{data,error}=await ctx.db.rpc('hub_kpi_internal_economy_export_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
+   if(error)return Response.json({error:error.code==='42501'?'Du saknar KPI-behörighet.':'Ekonomiunderlaget kunde inte hämtas. Försök igen eller välj en kortare period.'},{status:error.code==='42501'?403:503});
+   const report=data as InternalEconomyReport;
+   if(!report.rows.some(r=>!center||r.to_center===center))return Response.json({error:'Inga orderrader finns för denna överföring i vald period.'},{status:400});
+   const bytes=await internalEconomyPdf(report,center);
+   return new Response(new Uint8Array(bytes),{headers:{...headers,'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="humla-internoverforing-${center??'20-30'}-${p.get('from')}-${p.get('to')}.pdf"`}});
+  }
   if(p.get('view')==='material-refunds'){
    const {data,error}=await ctx.db.rpc('hub_kpi_internal_material_project_refunds_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
    if(error)return Response.json({error:error.code==='42501'?'Du saknar KPI-behörighet.':'Projektens återföringsunderlag kunde inte hämtas. Försök igen eller välj en kortare period.'},{status:error.code==='42501'?403:503});
