@@ -12,6 +12,7 @@ Final approved valuation:
 
 - Material: existing Hub purchase/self-cost evidence, including approved
   provisional estimates. No additional discount on this cost.
+- Matjord: 100% of debited line amount, an approved exception to material self cost.
 - Tipping/deposit fees: 100% of debited line amount.
 - Transport: 100% of debited line amount, including a published transport
   component split from a material-with-transport article.
@@ -25,9 +26,8 @@ source rows and unallocated centers stay in the reconciliation, not silently
 valued. Missing cost is null and explicitly incomplete rather than zero.
 
 The legacy R0-1 Matjord article is classified as transport. The accounting
-projection recognizes its material name and shows missing self cost; no soil
-production cost is inferred from a gravel price list or from its selling price.
-Supplying an approved soil self cost remains necessary for that part of KST 20.
+projection recognizes its material name and retains the full debited price
+under the approved Matjord exception, with explicit full-price evidence.
 
 Applied functions are additive to the existing transfer ledger. Tests cover
 full transport and tipping prices, negative credits, material self cost,

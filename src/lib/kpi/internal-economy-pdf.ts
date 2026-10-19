@@ -26,7 +26,7 @@ export async function internalEconomyPdf(report:InternalEconomyReport,center?:st
   if(c.missing_rows){text(`Ofullständigt underlag: ${c.missing_rows} rader saknar pris. Prissatt del: ${number(c.priced_amount)} kr.`,left,y,8,false,muted);y-=18;}
   y-=10;
  }
- const projectHeader=()=>{page.drawRectangle({x:left,y:y-5,width,height:18,color:black});text('KST',left+4,y,8,true,rgb(1,1,1));text('Projekt / littra',left+40,y,8,true,rgb(1,1,1));text('Transport',480,y,8,true,rgb(1,1,1));text('Material - självkostnad',555,y,8,true,rgb(1,1,1));text('Tipp',685,y,8,true,rgb(1,1,1));text('Summa',750,y,8,true,rgb(1,1,1));y-=23;};
+ const projectHeader=()=>{page.drawRectangle({x:left,y:y-5,width,height:18,color:black});text('KST',left+4,y,8,true,rgb(1,1,1));text('Projekt / littra',left+40,y,8,true,rgb(1,1,1));text('Transport',480,y,8,true,rgb(1,1,1));text('Material',555,y,8,true,rgb(1,1,1));text('Tipp',685,y,8,true,rgb(1,1,1));text('Summa',750,y,8,true,rgb(1,1,1));y-=23;};
  text('Sammanställning per mottagande projekt',left,y,10,true);y-=22;projectHeader();
  for(const p of projects){const names=wrap(p.name||p.project||'Projekt saknas',420,7.5),h=Math.max(18,names.length*9+6);if(y-h<45){newPage(title+' - projektsammanställning');projectHeader();}text(p.center,left+4,y,7.5);names.forEach((l,i)=>text(l,left+40,y-i*9,7.5));[p.transport,p.material,p.tipp_deponi,p.total].forEach((v,i)=>{const x=[480,555,685,750][i],w=[70,125,60,64][i],s=clean(number(v));text(s,x+w-font.widthOfTextAtSize(s,7),y,7);});page.drawLine({start:{x:left,y:y-h+7},end:{x:left+width,y:y-h+7},thickness:.3,color:line});y-=h;}
  const columns=[['Order',30],['Projekt / littra',120],['RegNr',44],['Förare',60],['Datum',48],['Artikel',35],['Artikelnamn',150],['Mängd',32],['Enhet',22],['Debiterat',62],['Prisgrund',54],['À-pris',54],['Överförs',68]]as const;
@@ -34,7 +34,7 @@ export async function internalEconomyPdf(report:InternalEconomyReport,center?:st
  for(const c of centers){newPage(`Till ${c.center} ${c.center==='30'?'Transport':'Sortergården'} från 10 Entreprenad - orderrader`);detailsHeader();
   for(const r of rows.filter(r=>r.to_center===c.center)){
    const status=({Invoiced:'Fakt.',ReadyForInvoicing:'Redo',Reported:'Rapp.'}as Record<string,string>)[r.order_status]??r.order_status;
-   const cells=[r.order+' '+status,r.littra||r.project,r.vehicle,r.driver,r.occurred_on,r.article,r.description,number(r.quantity),r.unit,number(r.debit_amount),r.category==='material'?'Självkost':'Fullt pris',number(r.rate),number(r.amount)];
+   const cells=[r.order+' '+status,r.littra||r.project,r.vehicle,r.driver,r.occurred_on,r.article,r.description,number(r.quantity),r.unit,number(r.debit_amount),r.category==='material'&&r.price_status!=='internal_price_full'?'Självkost':'Fullt pris',number(r.rate),number(r.amount)];
    const wrapped=cells.map((v,i)=>wrap(v,columns[i][1]-6,6.5)),h=Math.max(17,...wrapped.map(a=>a.length*8+6));
    if(y-h<45){newPage(`Till ${c.center} från 10 Entreprenad - orderrader (forts.)`);detailsHeader();}
    let x=left;wrapped.forEach((lines,i)=>{lines.forEach((v,j)=>{const right=i>=7&&i!==8;const xx=right?x+columns[i][1]-3-font.widthOfTextAtSize(v,6.5):x+3;text(v,xx,y-j*8,6.5,i===12);});x+=columns[i][1];});
@@ -43,5 +43,5 @@ export async function internalEconomyPdf(report:InternalEconomyReport,center?:st
   }
  }
  for(const[p,i]of pages.map((p,i)=>[p,i]as const)){page=p;text(`Elleholms Maskin AB | Skapad ${report.created_at.slice(0,10)} | Underlag - ingen automatisk bokföring`,left,22,7,false,muted);text(`Sida ${i+1} / ${pages.length}`,748,22,7,false,muted);}
- pdf.setTitle('Internöverföring - material till självkostnad');pdf.setAuthor('Elleholms Maskin AB');return pdf.save();
+ pdf.setTitle('Internöverföring - underlag till ekonomi');pdf.setAuthor('Elleholms Maskin AB');return pdf.save();
 }
