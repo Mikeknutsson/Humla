@@ -26,3 +26,13 @@ NEXT project hours with no registration; these do not invent a vehicle link.
 Monthly API cache key is v10 combined-time, and Hub correction revision changes
 invalidate prior overview calculations. Full fiscal-year import protection and
 permanent mappings are unchanged and remain active for new imports.
+
+Full-year performance correction: canonical person keys and repair facts are
+materialized once, native overlap scans the selected dates/months, and vehicle
+categories are aggregated once rather than scanning facts for each vehicle.
+The NEXT helper owns its planner settings instead of inheriting the snapshot's
+join configuration. Financial filters and time formulas are unchanged.
+Cold full-year requests have a 45-second RPC budget; completed reports remain
+cached per tenant, generation, revision and exact scope. The reported 2025/26
+whole-year selection was executed successfully as authenticated, with 42939.58
+worked hours and both reconciliation flags true, then committed to scope cache.
