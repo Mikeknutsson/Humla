@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {parseMonthPeriod,fiscalMonths,monthLabels} from '@/lib/kpi/period';
 type Week={week_start:string;selected_from:string;selected_to:string;week:string;invoiced:number;cost:number;balance:number;cumulative_balance:number;rows:number};
 type Balance={status:'ready'|'no_data';invoiced:number|null;cost:number|null;balance:number|null;gauge_position:number|null;latest_date:string|null;weeks:Week[];pending_invoice:{rows:number;amount:number};unknown_party:{rows:number;amount:number};basis:string};
 const money=new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0});
@@ -16,8 +17,14 @@ export function KpiBillingBalance({query}:{query:string}){
  },[query,attempt]);
  const tone=data?.balance==null||data.balance===0?'neutral':data.balance>0?'positive':'negative';
  const scale=Math.max(1,...(data?.weeks??[]).map(w=>Math.abs(w.balance)));
+ const params=new URLSearchParams(query);
+ const selected=parseMonthPeriod(params.get('fiscal_year')??undefined,params.get('months')??undefined,new Date(),params.get('period_mode')??undefined);
+ const periodLabel=selected.mode==='ytd'?`YTD till ${selected.to}`:selected.months.map(m=>`${monthLabels[fiscalMonths.indexOf(m)]} ${selected.fiscalYear+(m<9?1:0)}`).join(', ');
+ const dateFrom=params.get('date_from'),dateTo=params.get('date_to');
+ const scopeLabel=[params.get('cost_center')?`KST ${params.get('cost_center')}`:'Alla kostnadsställen',...['group','unit','vehicle','project'].filter(k=>params.get(k)).map(k=>`${({group:'Grupp',unit:'Enhet',vehicle:'Fordon',project:'Projekt'} as Record<string,string>)[k]}: ${params.get(k)}`)].join(' · ');
  return <section className={`panel billing-balance ${tone}`} aria-labelledby="billing-balance-title" aria-busy={!current}>
   <div className="panel-head"><div><span className="section-kicker">Vald period · externa affärer</span><h2 id="billing-balance-title">Faktureringsbalans</h2></div><span className="balance-badge">{data?.balance==null?'Underlag':data.balance>0?'Faktureringen ligger före':data.balance<0?'Kostnaderna ligger före':'I balans'}</span></div>
+  <p className="balance-caption"><strong>{periodLabel}</strong>{dateFrom||dateTo?` · Datumgräns ${dateFrom??'periodstart'} – ${dateTo??'periodslut'}`:''}<br/>{scopeLabel}</p>
   {current?.error?<p role="alert">{current.error} <button className="secondary" onClick={()=>{setLoaded(null);setAttempt(n=>n+1);}}>Försök igen</button></p>:!data?<p role="status">Hämtar faktureringsbalans…</p>:<>
    <strong className="balance-value">{data.balance==null?'Underlag saknas':signed(data.balance)}</strong>
    <div className="balance-scale" role="img" aria-label={data.balance==null?'Balans saknas':`Faktureringsbalans ${signed(data.balance)}. Minus till vänster, plus till höger.`}>

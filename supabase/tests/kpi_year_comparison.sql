@@ -28,5 +28,15 @@ begin
  assert not exists(select 1 from jsonb_array_elements(r->'rows')e where e->>'difference' is not null);
  r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9],'workshop','{"available":false,"work_hours":0}','{"available":false,"work_hours":0}');
  assert not exists(select 1 from jsonb_array_elements(r->'rows')e where e->>'current' is not null);
-end $$;
+ c:='{"scope":"published_generation","coverage":{"revenue_months":[9],"cost_months":[9]},"material_margin":{"billed":200,"purchase_cost":120,"difference":80,"margin_percent":40}}';
+ p:='{"scope":"published_generation","coverage":{"revenue_months":[9],"cost_months":[9]},"material_margin":{"billed":100,"purchase_cost":80,"difference":20,"margin_percent":20}}';
+ r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9],'internal',c,p);
+ select value into v from jsonb_array_elements(r->'rows') where value->>'id'='Interna intäkter:material_margin.difference';
+ assert (v->>'difference')::numeric=60 and (v->>'change_pct')::numeric=300;
+ select value into v from jsonb_array_elements(r->'rows') where value->>'id'='Interna intäkter:material_margin.margin_percent';
+ assert (v->>'difference')::numeric=20 and v->>'change_pct' is null;
+ r:=public.hub_kpi_compare_snapshots_v1('944597b6-9c46-4bef-998d-f19e23c4245b',array[9],'internal',c,p-'material_margin');
+ select value into v from jsonb_array_elements(r->'rows') where value->>'id'='Interna intäkter:material_margin.difference';
+ assert v->>'status'='missing' and v->>'difference' is null;
+ end $$;
 rollback;

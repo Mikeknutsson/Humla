@@ -7,9 +7,11 @@ const number=new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1});
 const money=new Intl.NumberFormat('sv-SE',{maximumFractionDigits:0});
 function format(v:number|null,unit:string){return v==null?'Underlag saknas':(unit==='kr'?money:number).format(v)+(unit?' '+unit:'');}
 function change(r:Row){if(r.difference==null)return r.reason??'Jämförelse saknas';const delta=(r.difference>0?'+':'')+format(r.difference,r.unit==='%'?'procentenheter':r.unit);return delta+(r.unit!=='%'&&r.change_pct!=null?` (${r.change_pct>0?'+':''}${number.format(r.change_pct)} %)`:'');}
-export function KpiYearComparison({query}:{query:string}){
+export function KpiYearComparison({query,sectionOnly}:{query:string;sectionOnly?:'Interna intäkter'}){
  const [search,setSearch]=useState('');
- const [section,setSection]=useState('Ekonomi'),[attempt,setAttempt]=useState(0);
+ const [selectedSection,setSection]=useState('Ekonomi'),[attempt,setAttempt]=useState(0);
+ const section=sectionOnly??selectedSection;
+ const titleId=sectionOnly?'internal-year-comparison-title':'year-comparison-title';
  const [reports,setReports]=useState<{query:string;parts:Record<string,Report>}>({query:'',parts:{}});
  const [error,setError]=useState<{query:string;part:string}|null>(null);
  const part=section==='Interna intäkter'?'internal':section==='Faktureringsbalans'?'billing':section==='Verkstad'?'workshop':'overview';
@@ -30,8 +32,8 @@ export function KpiYearComparison({query}:{query:string}){
  const label=period.mode==='ytd'?`YTD till ${period.to}`:period.months.map(m=>monthLabels[fiscalMonths.indexOf(m)]).join(', ');
  const sections=['Ekonomi','Kostnader','Drift & personal','Overhead','Ekonomiska enheter','Verksamhetsgrupper','Månader','Underlag','Interna intäkter','Faktureringsbalans',...(p.get('cost_center')==='40'&&!['group','unit','vehicle','project','category','kind','source'].some(k=>p.has(k))?['Verkstad']:[])];
  const rows=data?.rows.filter(r=>r.section===section&&r.label.toLocaleLowerCase('sv').includes(search.toLocaleLowerCase('sv')))??[];
- return <section className="panel year-comparison" aria-labelledby="year-comparison-title">
-  <div className="panel-head"><div><span className="section-kicker">{label} · samma datumgräns och filter</span><h2 id="year-comparison-title">Samma period föregående år</h2></div><label>Jämför <select value={section} onChange={e=>{setSection(e.target.value);setSearch('');}}>{sections.map(s=><option key={s}>{s}</option>)}</select></label></div>
+ return <section className="panel year-comparison" aria-labelledby={titleId}>
+  <div className="panel-head"><div><span className="section-kicker">{label} · samma datumgräns och filter</span><h2 id={titleId}>{sectionOnly?'Interna intäkter · samma period föregående år':'Samma period föregående år'}</h2></div>{!sectionOnly&&<label>Jämför <select value={section} onChange={e=>{setSection(e.target.value);setSearch('');}}>{sections.map(s=><option key={s}>{s}</option>)}</select></label>}</div>
   {section==='Ekonomiska enheter'&&<label>Sök enhet eller nyckeltal <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Till exempel Trading eller timmar"/></label>}
   <p>{period.mode==='ytd'?`${period.fiscalYear}-09-01 – ${period.to} jämförs med ${period.fiscalYear-1}-09-01 – ${previousYearDate(period.to!)}`:`${period.fiscalYear}/${period.fiscalYear+1} jämförs med ${period.fiscalYear-1}/${period.fiscalYear}`}. Belopp visas exklusive moms. Procenttal jämförs i procentenheter.</p>
   {!data?(error?.query===query&&error.part===part?<p role="alert">Jämförelsen kunde inte hämtas. <button className="secondary" onClick={()=>{setError(null);setAttempt(v=>v+1);}}>Försök igen</button></p>:<p role="status">Hämtar samma period föregående år…</p>):<div className="table-wrap"><table><thead><tr><th>Nyckeltal</th><th>Vald period</th><th>Föregående år</th><th>Förändring</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><th scope="row">{r.label}</th><td>{format(r.current,r.unit)}</td><td>{format(r.previous,r.unit)}</td><td>{change(r)}{r.status==='zero_base'&&<small>Procentuell förändring saknar bas när fjolåret är 0.</small>}</td></tr>)}{!rows.length&&<tr><td colSpan={4}>Inga jämförbara objekt i detta urval.</td></tr>}</tbody></table></div>}
