@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {parseMonthPeriod,fiscalMonths,monthLabels} from '@/lib/kpi/period';
+import {parseMonthPeriod,fiscalMonths,monthLabels,previousYearDate} from '@/lib/kpi/period';
 type Row={id:string;label:string;section:string;unit:string;current:number|null;previous:number|null;difference:number|null;change_pct:number|null;status:string;reason:string|null};
 type Report={rows:Row[];year:number;previous_year:number;months:number[]};
 const number=new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1});
@@ -26,14 +26,14 @@ export function KpiYearComparison({query}:{query:string}){
    .catch(()=>{if(active)setError({query,part});});
   return()=>{active=false;controller.abort();};
  },[query,part,data,attempt]);
- const p=new URLSearchParams(query),period=parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined);
- const label=period.months.map(m=>monthLabels[fiscalMonths.indexOf(m)]).join(', ');
- const sections=['Ekonomi','Kostnader','Drift & personal','Overhead','Ekonomiska enheter','Verksamhetsgrupper','Månader','Underlag','Interna intäkter','Faktureringsbalans',...(p.get('cost_center')==='40'&&!['group','unit','vehicle','project','category','kind','source','date_from','date_to'].some(k=>p.has(k))?['Verkstad']:[])];
+ const p=new URLSearchParams(query),period=parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined,new Date(),p.get('period_mode')??undefined);
+ const label=period.mode==='ytd'?`YTD till ${period.to}`:period.months.map(m=>monthLabels[fiscalMonths.indexOf(m)]).join(', ');
+ const sections=['Ekonomi','Kostnader','Drift & personal','Overhead','Ekonomiska enheter','Verksamhetsgrupper','Månader','Underlag','Interna intäkter','Faktureringsbalans',...(p.get('cost_center')==='40'&&!['group','unit','vehicle','project','category','kind','source'].some(k=>p.has(k))?['Verkstad']:[])];
  const rows=data?.rows.filter(r=>r.section===section&&r.label.toLocaleLowerCase('sv').includes(search.toLocaleLowerCase('sv')))??[];
  return <section className="panel year-comparison" aria-labelledby="year-comparison-title">
-  <div className="panel-head"><div><span className="section-kicker">{label} · samma månader och filter</span><h2 id="year-comparison-title">Samma period föregående år</h2></div><label>Jämför <select value={section} onChange={e=>{setSection(e.target.value);setSearch('');}}>{sections.map(s=><option key={s}>{s}</option>)}</select></label></div>
+  <div className="panel-head"><div><span className="section-kicker">{label} · samma datumgräns och filter</span><h2 id="year-comparison-title">Samma period föregående år</h2></div><label>Jämför <select value={section} onChange={e=>{setSection(e.target.value);setSearch('');}}>{sections.map(s=><option key={s}>{s}</option>)}</select></label></div>
   {section==='Ekonomiska enheter'&&<label>Sök enhet eller nyckeltal <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Till exempel Trading eller timmar"/></label>}
-  <p>{period.fiscalYear}/{period.fiscalYear+1} jämförs med {period.fiscalYear-1}/{period.fiscalYear}. Belopp visas exklusive moms. Procenttal jämförs i procentenheter.</p>
+  <p>{period.mode==='ytd'?`${period.fiscalYear}-09-01 – ${period.to} jämförs med ${period.fiscalYear-1}-09-01 – ${previousYearDate(period.to!)}`:`${period.fiscalYear}/${period.fiscalYear+1} jämförs med ${period.fiscalYear-1}/${period.fiscalYear}`}. Belopp visas exklusive moms. Procenttal jämförs i procentenheter.</p>
   {!data?(error?.query===query&&error.part===part?<p role="alert">Jämförelsen kunde inte hämtas. <button className="secondary" onClick={()=>{setError(null);setAttempt(v=>v+1);}}>Försök igen</button></p>:<p role="status">Hämtar samma period föregående år…</p>):<div className="table-wrap"><table><thead><tr><th>Nyckeltal</th><th>Vald period</th><th>Föregående år</th><th>Förändring</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><th scope="row">{r.label}</th><td>{format(r.current,r.unit)}</td><td>{format(r.previous,r.unit)}</td><td>{change(r)}{r.status==='zero_base'&&<small>Procentuell förändring saknar bas när fjolåret är 0.</small>}</td></tr>)}{!rows.length&&<tr><td colSpan={4}>Inga jämförbara objekt i detta urval.</td></tr>}</tbody></table></div>}
   {section==='Faktureringsbalans'&&<p>Faktureringsbalansen följer månader, kostnadsställe, grupp, ekonomisk enhet, fordon och projekt. Den visar registrerat faktureringsförsprång, inte betalningsdagar.</p>}
   <p className="muted-line">Saknad historik visas som ”Underlag saknas”. Ofullständiga månader eller tidsunderlag ger ingen säker förändringsprocent. Interna intäkter ingår redan i KPI-omsättningen.</p>

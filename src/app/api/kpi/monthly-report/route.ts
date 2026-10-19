@@ -1,6 +1,6 @@
 import {createClient} from '@/lib/supabase/server';
 import {cachedKpiReport} from '@/lib/kpi/report-cache';
-import {parseMonthPeriod} from '@/lib/kpi/period';
+import {parseMonthPeriod,stockholmToday} from '@/lib/kpi/period';
 import {monthlyExcel} from '@/lib/kpi/monthly-report-export';
 import {departmentMonthlyPdf} from '@/lib/kpi/department-monthly-pdf';
 import type {MonthlyTransportReport} from '@/lib/kpi/monthly-report';
@@ -20,13 +20,15 @@ export async function GET(request:Request){
  const variant=params.get('variant')==='ledning'?'ledning':'utforlig';
  if(costCenter.length>100)return Response.json({error:'Ogiltigt kostnadsställe.'},{status:400});
  const filters=Object.fromEntries(['group','unit','vehicle','project'].filter(k=>params.get(k)).map(k=>[k,params.get(k)!]));
+ const today=stockholmToday(),currentYear=today.month>=9?today.year:today.year-1;
+ if(params.get('period_mode')==='ytd'||year===currentYear&&month===today.month)filters.period_mode='ytd';
  if(JSON.stringify(filters).length>2000)return Response.json({error:'För stort urval.'},{status:400});
  const loadComparable=async(code:string,selectedFilters:Record<string,string>)=>{
-  const load=(fiscalYear:number)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v8',year:fiscalYear,month,costCenter:code,filters:selectedFilters},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:fiscalYear,p_month:month,p_cost_center:code,p_filters:selectedFilters}));
+  const load=(fiscalYear:number)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v9-daily',year:fiscalYear,month,costCenter:code,filters:selectedFilters,asOf:selectedFilters.period_mode==='ytd'?`${today.year}-${today.month}-${today.day}`:null},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:fiscalYear,p_month:month,p_cost_center:code,p_filters:selectedFilters}));
   const [current,previous]=await Promise.all([load(year),load(year-1)]);
   return current.data?{...current,data:{...current.data,previous:previous.data?{period:previous.data.period,month:previous.data.month,ytd:previous.data.ytd}:null,previous_available:!!previous.data}}:current;
  };
- const loadDepartment=(code:string)=>loadComparable(code,{});
+ const loadDepartment=(code:string)=>loadComparable(code,filters.period_mode?{period_mode:filters.period_mode}:{});
  if(format==='pdf'){
   const departments=[];
   for(const [code,name]of [['20','Sortergården'],['30','Transport']])departments.push({code,name,result:await loadDepartment(code)});

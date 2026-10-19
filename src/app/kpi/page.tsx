@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import {cachedKpiReport} from "@/lib/kpi/report-cache";
 import { createClient } from "@/lib/supabase/server";
-import { parseMonthPeriod, monthPeriodFromDates } from "@/lib/kpi/period";
+import { parseMonthPeriod, monthPeriodFromDates,periodFilters,previousYearDate } from "@/lib/kpi/period";
 import { filterKeys } from "@/lib/kpi/analysis";
 import { KpiLiveReport } from "../_components/kpi-live-report";
 import { previousInternalMonth } from "@/lib/kpi/internal-period";
@@ -17,7 +17,7 @@ function fiscalPeriod(month = 9, day = 1) {
   return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; view?: string; cost_center?: string; fiscal_year?: string; months?: string; group?:string; unit?:string; vehicle?:string; project?:string; category?:string; kind?:string; source?:string; date_from?:string; date_to?:string; auth_retry?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ period_mode?:string;from?: string; to?: string; view?: string; cost_center?: string; fiscal_year?: string; months?: string; group?:string; unit?:string; vehicle?:string; project?:string; category?:string; kind?:string; source?:string; date_from?:string; date_to?:string; auth_retry?: string }> }) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (!user) redirect("/kpi/login");
@@ -42,11 +42,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
   const legacyMonths = monthPeriodFromDates(query.from,query.to);
   const useMonths = initialView !== 'internal' && (initialView === "overview" || initialView === "monthly" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || (initialView === "kpi" && !query.from && !query.to));
   let monthPeriod;
-  try { monthPeriod = query.fiscal_year === undefined && query.months === undefined && legacyMonths ? legacyMonths : parseMonthPeriod(query.fiscal_year,query.months); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
-  const activeFilters = Object.fromEntries(filterKeys.filter(k=>query[k]).map(k=>[k,query[k]!]));
+  try { monthPeriod = query.fiscal_year === undefined && query.months === undefined && legacyMonths ? legacyMonths : parseMonthPeriod(query.fiscal_year,query.months,new Date(),query.period_mode); } catch { return <main className="content"><h1>Ogiltigt månadsurval</h1><a href="/kpi">Återställ till hela verksamhetsåret</a></main>; }
+  const activeFilters = periodFilters(monthPeriod,Object.fromEntries(filterKeys.filter(k=>query[k]&&!(monthPeriod.mode==='ytd'&&(k==='date_from'||k==='date_to'))).map(k=>[k,query[k]!])));
   const from = useMonths ? `${monthPeriod.fiscalYear}-09-01` : /^\d{4}-\d{2}-\d{2}$/.test(query.from ?? "") ? query.from! : fallback.from;
   const costCenter = query.cost_center?.trim() || null;
-  const to = useMonths ? `${monthPeriod.fiscalYear+1}-08-31` : /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
+  const to = useMonths ? monthPeriod.to??`${monthPeriod.fiscalYear+1}-08-31` : /^\d{4}-\d{2}-\d{2}$/.test(query.to ?? "") ? query.to! : fallback.to;
 
   const needsReport = initialView === "overview" || initialView === "kpi";
   const needsBatches = needsReport || initialView === "import";
@@ -79,7 +79,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ f
     overviewMonthly={(displayDashboard.monthly??[]) as never}
     activeFilters={activeFilters}
     overviewPrevious={(displayDashboard.previous ?? null) as never}
-    overviewPeriod={{current:{from,to},previous:{from:`${Number(from.slice(0,4))-1}${from.slice(4)}`,to:`${Number(to.slice(0,4))-1}${to.slice(4)}`},label:`${monthPeriod.fiscalYear}/${monthPeriod.fiscalYear+1}`}}
+    overviewPeriod={{current:{from,to},previous:{from:previousYearDate(from),to:previousYearDate(to)},label:`${monthPeriod.fiscalYear}/${monthPeriod.fiscalYear+1}`}}
     dashboard={displayDashboard}
     batches={(batches ?? []) as never[]}
     tenantName={tenant?.name ?? "Humla"}

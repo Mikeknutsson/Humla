@@ -11,6 +11,9 @@ function module(name){
 }
 const {parseProjectPeriod,projectPeriodParams,projectReportHref}=module('project-period');
 const now=new Date('2026-08-31T22:30:00Z');
+const ytd=parseProjectPeriod({fiscal_year:'2026',period_mode:'ytd'},new Date('2026-10-19T10:00:00Z'));
+assert.equal(ytd.to,'2026-10-19');
+assert.equal(projectPeriodParams(ytd).get('period_mode'),'ytd');
 let p=parseProjectPeriod({},now);
 assert.equal(p.from,'2026-09-01');assert.equal(p.to,'2027-08-31');
 p=parseProjectPeriod({fiscal_year:'2025',months:'1,9,9'},now);
