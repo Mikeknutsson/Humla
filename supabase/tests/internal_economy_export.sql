@@ -14,9 +14,10 @@ begin
  result:=private.hub_internal_economy_rows_v1(rows);
  if(select count(*)from jsonb_array_elements(result))<>9 then raise exception 'Bundle components missing or duplicated';end if;
  if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='t')<>100 then raise exception 'Transport must stay at full price';end if;
- if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='tip')<>90 then raise exception 'Tipping must be 90 percent';end if;
- if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='named_tip')<>90 then raise exception 'Explicit tipping name not classified';end if;
- if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='credit')<>-90 then raise exception 'Credit sign changed';end if;
+ if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='tip')<>100 then raise exception 'Tipping must stay at full price';end if;
+ if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='named_tip')<>100 then raise exception 'Explicit tipping name not classified';end if;
+ if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='credit')<>-100 then raise exception 'Credit sign changed';end if;
+ if exists(select 1 from jsonb_array_elements(result)r where (r->>'discount_rate')::numeric<>0 or (r->>'discount_amount')::numeric<>0)then raise exception 'No discount permitted';end if;
  if(select(r->>'amount')::numeric from jsonb_array_elements(result)r where r->>'source_key'='mat')<>60 then raise exception 'Material must use self cost without extra discount';end if;
  select sum((r->>'amount')::numeric)into total from jsonb_array_elements(result)r where r->>'source_key'='bundle';
  if total<>160 then raise exception 'Bundled transport lost or discounted';end if;
@@ -24,5 +25,5 @@ begin
  if exists(select 1 from jsonb_array_elements(result)r where r->>'source_key'='soil'and(r->>'amount'is not null or r->>'category'<>'material'))then raise exception 'Matjord cannot inherit transport selling price';end if;
  if has_function_privilege('anon','public.hub_kpi_internal_economy_export_v1(uuid,date,date,integer[])','EXECUTE')then raise exception 'Anonymous export access';end if;
 end$$;
-select 'PASS material self cost, full transport, tipping 90%, credit, bundle conservation and missing evidence'as result;
+select 'PASS material self cost, full transport and tipping, credit, bundle conservation and missing evidence'as result;
 rollback;

@@ -8,8 +8,8 @@ transfer amounts and material price evidence. It is available separately for
 Final approved valuation:
 
 - Material: existing Hub purchase/self-cost evidence, including approved
-  provisional estimates. No additional 10% discount on this cost.
-- Tipping/deposit fees: 90% of debited line amount.
+  provisional estimates. No additional discount on this cost.
+- Tipping/deposit fees: 100% of debited line amount.
 - Transport: 100% of debited line amount, including a published transport
   component split from a material-with-transport article.
 - Credits preserve their sign. Round each transfer component to two decimals.
@@ -27,7 +27,7 @@ production cost is inferred from a gravel price list or from its selling price.
 Supplying an approved soil self cost remains necessary for that part of KST 20.
 
 Applied functions are additive to the existing transfer ledger. Tests cover
-full transport price, tipping discount, negative credits, material self cost,
+full transport and tipping prices, negative credits, material self cost,
 bundle conservation, missing prices, Matjord and anonymous denial. The pure
 engine and tenant-scoped live report are verified before publication. The
 supplied source PDF is not stored in the public repository; only its wordmark
