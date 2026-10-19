@@ -35,3 +35,17 @@ bundle conservation, missing prices, Matjord and anonymous denial. The pure
 engine and tenant-scoped live report are verified before publication. The
 supplied source PDF is not stored in the public repository; only its wordmark
 is reused as the document's branding asset.
+
+The internal reader reuses canonical vehicle mappings when raw registration is
+empty. A unique confirmed name mapping on the same batch, order, date, driver
+and receiving project can supply a missing vehicle. Explicit registrations and
+article project/tipping rules retain priority. Approved article cost centers
+are used when the vehicle classification lacks a center. Raw imports and the
+transfer ledger are unchanged.
+
+September live regression: the five rows on orders 44343/44667 resolve to
+vehicle carrier KST 30 and receiving KST 10; original debit 24,082.64 SEK is
+preserved. A sixth existing canonical vehicle row (1,350 SEK) also resolves,
+retaining preliminary status and missing project. Source 366 rows / 1,885,131.57
+SEK and 47 other-transfer rows are unchanged; no unassigned income centers or
+missing export prices remain. Transport PDF: 276 rows / 1,334,572.18 SEK.
