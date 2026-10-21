@@ -16,6 +16,8 @@ begin
  where f.generation_id=g and f.tenant_id=tenant and f.cost_center='30' and f.occurred_on between '2026-09-01' and '2026-09-30'
  and not coalesce((f.original->>'_humla_excluded_from_kpi')::boolean,false);
  if (r#>>'{summary,revenue}')::numeric is distinct from expected then raise exception 'Published revenue mismatch';end if;
+ r:=public.hub_transport_leader_scorecard_v2(tenant,'2026-09-01','2027-08-31',null,null,0,array[9]);
+ if (r#>>'{summary,revenue}')::numeric is distinct from expected then raise exception 'Saved month scope mismatch';end if;
  perform public.hub_transport_unit_target_save_v2(tenant,unit,'2026-09-01',4,'Regression first target');
  perform public.hub_transport_unit_target_save_v2(tenant,unit,'2026-09-16',10,'Regression revised target');
  r:=public.hub_transport_leader_scorecard_v2(tenant,'2026-09-01','2026-09-30',null,unit);
