@@ -348,6 +348,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       <nav className="nav">
         <Link prefetch={false} className={view === "overview" ? "active" : ""} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
         <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>Enhetsuppföljning</Link>
+        <Link prefetch={false} href={`/kpi/transportledare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`} onClick={() => setMobileMenu(false)}><Truck size={18}/>Transportledar-KPI</Link>
         <Link prefetch={false} href="/kpi/fordon" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Fordon &amp; TCO</Link>
         <Link prefetch={false} href="/kpi/projekt" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Projektuppföljning</Link>
         <Link prefetch={false} className={view === "internal" ? "active" : ""} href={kpiHref("internal")} onClick={() => setMobileMenu(false)}><Truck size={18}/>Interna körningar</Link>
