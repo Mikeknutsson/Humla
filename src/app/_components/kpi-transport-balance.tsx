@@ -10,8 +10,8 @@ const pct = (n:number|null|undefined) => n == null ? '–' : `${number.format(n)
 const labels:Record<string,string> = {transport:'Transport',material:'Material / ballast',tipp:'Tippavgifter',tipp_deponi:'Tippavgifter / deponi',other:'Övrigt',unclassified:'Ej klassificerat',personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',depreciation:'Avskrivning',hired:'Inhyrda resurser'};
 
 function BalanceCard({label,href,metrics,previous}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics}) {
- return <article className={styles.card}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
- <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/>
+ return <article className={styles.card}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
+ <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
  <dl className={styles.facts}>
  <dt>Intäkter</dt><dd>{money(metrics.revenue)}</dd><dt>Kostnader</dt><dd>{money(metrics.cost)}</dd>
  <dt>Resultat</dt><dd><strong>{money(metrics.result)}</strong></dd>
