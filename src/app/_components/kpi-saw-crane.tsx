@@ -1,7 +1,6 @@
 import type {TransportScorecard} from '@/lib/kpi/transport-leader';
 
 const money=new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0});
-const hours=new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1});
 const articlePattern=/(?:^|\\D)12[- ]?04(?:\\D|$)/i;
 function articleEvidence(original:Record<string,unknown>):string|null {
  const keys=['article_code','article_number','article_no','article','articleName','article_name','artikelnummer','artikel','item_code','item_number','description'];
