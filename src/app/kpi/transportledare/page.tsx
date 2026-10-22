@@ -30,8 +30,8 @@ export default async function TransportLeader({searchParams}:{searchParams:Promi
  const page=Number(q.page??0);if(!Number.isInteger(page)||page<0||page>10000)return <main>Ogiltig sida.</main>;
  const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:targetUser,p_unit:unit,p_page:page,p_months:months,p_group:group};
  const [{data,error},{data:previous},{data:people},{data:sawData}]=await Promise.all([
- db.rpc('hub_transport_leader_scorecard_v3',args),
- db.rpc('hub_transport_leader_scorecard_v3',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to),p_page:0}),
+ saw?Promise.resolve({data:null,error:null}):db.rpc('hub_transport_leader_scorecard_v3',args),
+ saw?Promise.resolve({data:null}):db.rpc('hub_transport_leader_scorecard_v3',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to),p_page:0}),
  owner?db.from('hub_tenant_members').select('user_id,display_name').eq('tenant_id',member.tenant_id).eq('status','active').order('display_name'):Promise.resolve({data:[]}),
  saw?db.rpc('hub_saw_activity_report_v1',{p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:targetUser,p_unit:unit,p_months:months}):Promise.resolve({data:null})]);
  const params=new URLSearchParams({from,to});if(targetUser)params.set('user_id',targetUser);if(months)params.set('months',months.join(','));
@@ -41,13 +41,13 @@ export default async function TransportLeader({searchParams}:{searchParams:Promi
  const selected=report?.units.find(u=>u.unit_id===unit);
  const sawParams=new URLSearchParams(base);sawParams.set('activity','saw');sawParams.delete('group');
  const periodScope={...(targetUser?{user_id:targetUser}:{}),...(saw?{activity:'saw'}:{}),...(group?{group}:{}),...(unit?{unit}:{})};
- const selfView=report?.scope==='assigned';
+ const selfView=saw?(!owner||Boolean(targetUser)):report?.scope==='assigned';
  return <KpiDetailShell query={base} title="Transportledar-KPI" extraNavigation={<Link href={'/kpi/transportledare?'+base}>Transportledar-KPI</Link>}><div className="content">
  <section className="panel"><div className="panel-head"><div><h2>{saw?'Kranbil med Såg – egen uppföljning':unit?selected?.unit_name??'Enhetsunderlag':selfView?'Mina kostnadsenheter':'Transport – samlad uppföljning'}</h2><p>{from} – {to}{selfView?' · Enbart tilldelade enheter, på de datum ansvaret gäller':' · KST 30'}</p></div><KpiPrint/></div>
  <nav style={{display:'flex',gap:16,marginBottom:16}}><Link href={'/kpi/transportledare?'+base}>Balans per enhet</Link><Link href={'/kpi/transportledare?'+sawParams}>12-04 · Kranbil med Såg</Link></nav>
  <form method="get" className="form-grid">{unit&&<input type="hidden" name="unit" value={unit}/>}{saw&&<input type="hidden" name="activity" value="saw"/>}{group&&<input type="hidden" name="group" value={group}/>}{months&&<input type="hidden" name="months" value={months.join(',')}/>}<label>Från<input type="date" name="from" defaultValue={from} required/></label><label>Till<input type="date" name="to" defaultValue={to} required/></label>{owner&&<label>Ansvar<select name="user_id" defaultValue={targetUser??''}><option value="">Alla enheter inom Transport</option>{people?.map(p=><option key={p.user_id} value={p.user_id}>{p.display_name??'Användare'} – tilldelade enheter</option>)}</select></label>}<button type="submit">Visa</button></form>
  <p>{months&&<>Valda månader: {months.join(', ')}. <Link href={'/kpi/transportledare?'+new URLSearchParams({from,to,...periodScope})}>Visa alla månader i datumintervallet</Link> · </>}<Link href={'/kpi/transportledare?'+new URLSearchParams({from:`${fy}-09-01`,to:todayText,...periodScope})}>YTD till dagens datum</Link>{owner&&<> · <Link href="/transport-styrning/admin">Hantera tilldelningar</Link></>}</p></section>
- {error||!report?<section className="panel" role="alert"><h2>Styrkortet kunde inte hämtas</h2><p>Kontrollera behörighet och publicerat rapportunderlag. Saknade belopp visas inte som noll.</p></section>:saw?<SawFollowup report={sawData as SawReport|null}/>:<>
+ {saw?<SawFollowup report={sawData as SawReport|null}/>:error||!report?<section className="panel" role="alert"><h2>Styrkortet kunde inte hämtas</h2><p>Kontrollera behörighet och publicerat rapportunderlag. Saknade belopp visas inte som noll.</p></section>:<>
  <section className="metrics-grid">{([['Omsättning','revenue'],['Kostnader','cost'],['Resultat','result']]as const).map(([label,key])=><article className="metric-card" key={key}><span>{label}</span><strong>{money(report.summary[key])}</strong><small>Samma period fg. år: {money(prior?.summary[key])}</small></article>)}<article className="metric-card"><span>Marginal i urvalet</span><KpiMarginGauge label="Urvalet" margin={report.summary.margin_percent} target={report.summary.target_margin_percent}/><small>Samma period fg. år: {pct(prior?.summary.margin_percent)}</small></article></section>
  {!report.units.length&&<section className="panel"><h2>Inget underlag i urvalet</h2><p>{selfView?'Inga transaktioner är kopplade till dina tilldelade enheter under dessa datum. En ägare kan lägga in ansvar med giltighetsdatum.':'Det finns inga publicerade transaktioner för urvalet.'}</p></section>}
  <TransportBalanceCards report={report} prior={prior} base={base} selectedUnit={unit} selectedGroup={group}/><TransportBreakdowns report={report} prior={prior}/>

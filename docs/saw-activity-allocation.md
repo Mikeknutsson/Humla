@@ -6,7 +6,7 @@ Hub owns the persistent rule, canonical EconomicUnit and calculations. Article 1
 
 NEXT project identities 10648 and 11291 resolve to canonical Hub objects. Their costs move to Sågning, including amounts previously distributed between trucks. Invoice lines from the exact named supplier Ett strå vassare i Sölvesborg AB are split 50/50, taking precedence over project matching. The retained half stays on its former unit/cost center. Signed credits follow the same rules. All invoice values use published net amounts.
 
-Project 10818 is shared. Only explicit activity evidence in the available description fields qualifies for automatic allocation; unmatched rows remain on their original unit and are shown for review. The current imported texts do not establish which of these rows concern sawing. The reported result is therefore before unverified costs, not a final job margin.
+Project 10818 is shared. Only explicitly labelled order references matched to published Workify saw orders, or a description beginning with “Extra såggubbe”, qualify for automatic allocation. Generic saw/tree-felling keywords do not qualify; unmatched rows remain on their original unit and are shown for review. The current imported texts do not establish which of these rows concern sawing. The reported result is therefore before unverified costs, not a final job margin.
 
 The generation publication hook runs after existing allocations and identity resolution. It asserts unchanged fiscal-year revenue/cost totals and is idempotent. Derived display facts and full facts are updated together. Anonymous RPC access is denied and all detail rows pass the existing dated assignment authorization. Limited personal/unit selections do not show a full business result.
 
