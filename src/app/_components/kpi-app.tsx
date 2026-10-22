@@ -383,6 +383,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       {view === "review" && <div className="content"><WorkifyNameRules canManage={canManage}/><KpiReviewQueue key={`${from}-${to}`} from={from} to={to} canManage={canManage}/><HubReview initial={hubReviews as never[]}/></div>}
       {(view==='overview'||view==='kpi')&&<div className="content"><KpiMaterialProject unit={dashboard.economic_units?.find(u=>u.key===dashboard.material_unit_id)} unitId={dashboard.material_unit_id} query={periodQuery}/></div>}
       {(view==='overview'||view==='kpi')&&<div className="content"><KpiYearComparison key={periodQuery} query={periodQuery}/></div>}
+      {(view === "overview" || view === "kpi") && <div className="content"><section className="panel"><h2>12-04 – Kranbil med Såg</h2><p>Uppföljning av artikel 12-04. Intäkter och kostnader visas endast när orderkoppling är verifierad; timmar och övriga kostnader behöver fortfarande stämmas av.</p><Link prefetch={false} href={"/kpi/transportledare?from="+encodeURIComponent(from)+"&to="+encodeURIComponent(to)}>Öppna uppföljningen →</Link></section></div>}
       {view === "overview" && <div className="content">
         <section className="overview-hero"><div><span className="section-kicker">Verksamhetsår {overviewPeriod.label}</span><h2>Valda månader · {overviewPeriod.label}</h2><p>Jämförelsen använder motsvarande månader föregående verksamhetsår.</p></div><span className="asof">Vald rapportperiod</span></section>
         <KpiBillingBalance key={periodQuery} query={periodQuery}/>
