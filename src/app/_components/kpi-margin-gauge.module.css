@@ -3,7 +3,7 @@
 .value { font-size:1.7rem; line-height:1.15; font-variant-numeric:tabular-nums; }
 .gauge small { font-size:.72rem; text-align:center; }
 .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; margin:16px 0; }
-.card { padding:20px; border:1px solid var(--border,#dce2e8); border-radius:16px; background:var(--panel,#fff); min-width:0; }
+.card { padding:20px; border:1px solid var(--border,#dce2e8); border-radius:16px; background:#fff; color:#0f172a; min-width:0; }
 .card h3 { margin:0 0 8px; font-size:1rem; }
 .facts { display:grid; grid-template-columns:1fr auto; gap:8px 12px; margin:18px 0 0; font-size:.85rem; }
 .facts dt { color:#64748b; }
