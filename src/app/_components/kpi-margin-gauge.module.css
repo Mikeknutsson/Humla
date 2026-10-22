@@ -1,11 +1,14 @@
-.gauge { display:grid; justify-items:center; gap:3px; min-width:140px; color:#475569; }
-.gauge svg { width:100%; max-width:220px; height:auto; }
-.value { font-size:1.7rem; line-height:1.15; font-variant-numeric:tabular-nums; }
-.gauge small { font-size:.72rem; text-align:center; }
-.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; margin:16px 0; }
-.card { padding:20px; border:1px solid var(--border,#dce2e8); border-radius:16px; background:#fff; color:#0f172a; min-width:0; }
-.card h3 { margin:0 0 8px; font-size:1rem; }
-.facts { display:grid; grid-template-columns:1fr auto; gap:8px 12px; margin:18px 0 0; font-size:.85rem; }
+.gauge { display:grid; justify-items:center; align-content:center; gap:2px; min-width:0; color:#475569; }
+.gauge svg { width:100%; max-width:116px; height:auto; }
+.value { font-size:1.05rem; line-height:1.15; font-variant-numeric:tabular-nums; }
+.gauge > span { font-size:.72rem; font-weight:600; text-align:center; }
+.gauge small { font-size:.65rem; text-align:center; }
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:10px; margin:12px 0; }
+.card { padding:13px 15px; border:1px solid var(--border,#dce2e8); border-radius:12px; background:#fff; color:#0f172a; min-width:0; }
+.card h3 { margin:0; font-size:.95rem; }
+.cardTop { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.cardTop .gauge { width:116px; flex:0 0 116px; }
+.facts { display:grid; grid-template-columns:1fr auto; gap:5px 10px; margin:10px 0 0; font-size:.8rem; }
 .facts dt { color:#64748b; }
 .facts dd { margin:0; text-align:right; font-variant-numeric:tabular-nums; }
 .breakdowns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
