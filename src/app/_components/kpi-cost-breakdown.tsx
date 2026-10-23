@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {analysisHref} from '@/lib/kpi/analysis';
 const categories = [
+  ["management", "Arbetsledning"], ["overhead", "Övrig overhead"],
   ["personnel", "Personal"], ["fuel", "Bränsle"],
   ["service_repair", "Service & Rep"], ["depreciation", "Avskrivning"],
   ["fixed", "Fasta kostnader"], ["material", "Material / Ballast"],

@@ -7,7 +7,7 @@ const currency = new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',
 const number = new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1});
 const money = (n:number|null|undefined) => n == null ? 'Underlag saknas' : currency.format(n);
 const pct = (n:number|null|undefined) => n == null ? '–' : `${number.format(n)} %`;
-const labels:Record<string,string> = {transport:'Transport',material:'Material / ballast',tipp:'Tippavgifter',tipp_deponi:'Tippavgifter / deponi',other:'Övrigt',unclassified:'Ej klassificerat',personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',depreciation:'Avskrivning',hired:'Inhyrda resurser'};
+const labels:Record<string,string> = {management:'Arbetsledning',overhead:'Övrig overhead',transport:'Transport',material:'Material / ballast',tipp:'Tippavgifter',tipp_deponi:'Tippavgifter / deponi',other:'Övrigt',unclassified:'Ej klassificerat',personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',depreciation:'Avskrivning',hired:'Inhyrda resurser'};
 
 function BalanceCard({label,href,metrics,previous}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics}) {
  return <article className={styles.card}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
