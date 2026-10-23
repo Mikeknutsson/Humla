@@ -1,0 +1,25 @@
+import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
+const{PGlite}=await import(process.env.PGLITE_MODULE??'@electric-sql/pglite');const db=new PGlite();
+await db.exec(`create schema private;create schema auth;create role anon;create role authenticated;create role service_role;
+create function auth.uid()returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
+create function public.hub_has_permission(uuid,text)returns boolean language sql as $$select $1='20000000-0000-0000-0000-000000000001'::uuid$$;
+create table private.hub_kpi_report_state(tenant_id uuid,active_generation uuid);
+create table public.kpi_import_batches(id uuid,tenant_id uuid,status text,created_at timestamptz,file_name text);
+create table public.kpi_import_rows(id uuid,tenant_id uuid,batch_id uuid,data_kind text,source_data jsonb,occurred_on date,currency text,amount numeric,is_valid boolean,row_number integer);
+create table private.hub_kpi_prepared_facts(tenant_id uuid,generation_id uuid,source text,kind text,cost_center text,occurred_on date,original jsonb,amount numeric,fact_id text,vehicle text,project text);`);
+await db.exec(await readFile(new URL('../supabase/migrations/20261014084845_hub_workify_period_comparison.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../supabase/migrations/20261014085215_hub_workify_period_source_details.sql',import.meta.url),'utf8'));
+const t='20000000-0000-0000-0000-000000000001',g='60000000-0000-0000-0000-000000000001',b='30000000-0000-0000-0000-000000000001';
+await db.query('insert into private.hub_kpi_report_state values($1,$2)',[t,g]);await db.query("insert into public.kpi_import_batches values($1,$2,'needs_review',now(),'snapshot.xlsx')",[b,t]);
+for(const[order,amount]of[['A',60],['A',40],['B',20],['C',-10]])await db.query("insert into private.hub_kpi_prepared_facts values($1,$2,'Workify','revenue','30','2026-09-10',$3,$4,$5,null,null)",[t,g,{Ordernummer:order},amount,order+amount]);
+let i=0;for(const[order,status,amount]of[['A','Invoiced',100],['C','Reported',-10],['D','Done',50]]){i++;await db.query("insert into public.kpi_import_rows values($1,$2,$3,'revenue',$4,'2026-09-10','SEK',$5,true,$6)",[`80000000-0000-0000-0000-${String(i).padStart(12,'0')}`,t,b,{Ordernummer:order,Orderstatus:status,Kostnadsställe:'30'},amount,i]);}
+await db.query("insert into private.hub_workify_period_controls(tenant_id,period_from,period_to,cost_center,amount,reference)values($1,'2026-09-01','2026-09-30','30',95,'Reported live balance')",[t]);
+const call=()=>db.query("select public.hub_workify_period_comparison_v1($1,'2026-09-01','2026-09-30','30',0)r",[t]);
+await assert.rejects(call(),/KPI access required/);await db.exec("set test.actor='10000000-0000-0000-0000-000000000001'");
+await assert.rejects(db.query("select public.hub_workify_period_comparison_v1('20000000-0000-0000-0000-000000000002','2026-09-01','2026-09-30')"),/KPI access required/);
+const r=(await call()).rows[0].r;assert.equal(r.totals.current_amount,110);assert.equal(r.totals.latest_amount,90);assert.equal(r.totals.latest_all_statuses,140);assert.equal(r.totals.difference,20);assert.equal(r.totals.difference_to_reported,15);assert.equal(r.totals.latest_to_reported,5);assert.equal(r.totals.order_partition_difference,0);
+assert.equal(r.orders.find(o=>o.order_no==='A').difference,0);assert.equal(r.orders.find(o=>o.order_no==='C').current_amount,-10);assert.equal(r.orders.find(o=>o.order_no==='D').latest_amount,0);
+assert.equal((await db.query('select sum(amount)amount from private.hub_kpi_prepared_facts')).rows[0].amount,'110');
+await db.query("update public.kpi_import_batches set status='withdrawn'");assert.equal((await call()).rows[0].r.available,false);
+assert.equal((await db.query("select has_function_privilege('anon','public.hub_workify_period_comparison_v1(uuid,date,date,text,integer)','execute')a")).rows[0].a,false);
+console.log('PASS: source snapshot vs current/control totals, material parts conserved, credits, status scope, withdrawn imports and tenant/auth isolation');await db.close();

@@ -1,0 +1,23 @@
+begin;
+do $$declare t uuid;g uuid;actor uuid;first_state jsonb;second_state jsonb;report jsonb;denied boolean:=false;begin
+ select r.tenant_id,s.active_generation into strict t,g from private.hub_saw_activity_rules_v1 r join private.hub_kpi_report_state s using(tenant_id);
+ select user_id into actor from public.hub_tenant_members where tenant_id=t and role='owner' and status='active' limit 1;
+ perform private.hub_apply_saw_activity_v1(t,g);
+ select jsonb_build_object('rows',count(*),'revenue',sum(amount)filter(where kind='revenue'),'cost',sum(amount)filter(where kind='cost')) into first_state from private.hub_kpi_prepared_facts where tenant_id=t and generation_id=g;
+ perform private.hub_apply_saw_activity_v1(t,g);
+ select jsonb_build_object('rows',count(*),'revenue',sum(amount)filter(where kind='revenue'),'cost',sum(amount)filter(where kind='cost')) into second_state from private.hub_kpi_prepared_facts where tenant_id=t and generation_id=g;
+ if first_state is distinct from second_state then raise exception 'Not idempotent';end if;
+ if exists(select 1 from private.hub_kpi_prepared_facts where tenant_id=t and generation_id=g and original#>>'{_humla_saw_activity,branch}'='retained' and original#>>'{_humla_saw_activity,reason}'='article_hour_split' and amount<>(original#>>'{_humla_saw_activity,hours}')::numeric*1250)then raise exception 'Truck hourly allocation mismatch';end if;
+ if exists(select 1 from private.hub_kpi_prepared_facts where tenant_id=t and generation_id=g and original#>>'{_humla_saw_activity,branch}'='saw' and original#>>'{_humla_saw_activity,reason}'='supplier_50_percent' and amount<>round((original#>>'{_humla_saw_activity,original_amount}')::numeric*0.5,2))then raise exception 'Supplier allocation mismatch';end if;
+ if exists(select 1 from private.hub_kpi_prepared_facts where tenant_id=t and generation_id=g and original#>>'{_humla_saw_activity,branch}'='retained' and original#>>'{_humla_saw_activity,reason}'='confirmed_saw_project' and amount<>0)then raise exception 'Project cost left on truck';end if;
+ if exists(select 1 from private.hub_kpi_prepared_display_facts d join private.hub_kpi_prepared_facts f using(tenant_id,generation_id,fact_id) where f.tenant_id=t and f.generation_id=g and f.amount<>d.amount)then raise exception 'Display mismatch';end if;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ report:=public.hub_saw_activity_report_v1(t,'2025-09-01','2026-08-31');
+ if (report#>>'{summary,gross_revenue}')::numeric<>(report#>>'{summary,truck_revenue}')::numeric+(report#>>'{summary,saw_revenue}')::numeric then raise exception 'Report revenue reconciliation';end if;
+ if abs((select sum((x->>'saw_revenue')::numeric)from jsonb_array_elements(report->'orders')x)-(report#>>'{summary,saw_revenue}')::numeric)>0.001 then raise exception 'Order reconciliation';end if;
+ if abs((select sum((x->>'amount')::numeric)from jsonb_array_elements(report->'costs')x)-(report#>>'{summary,cost}')::numeric)>0.001 then raise exception 'Cost reconciliation';end if;
+ perform set_config('request.jwt.claim.sub','',true);
+ begin perform public.hub_saw_activity_report_v1(t,'2025-09-01','2026-08-31');exception when others then denied:=true;end;
+ if not denied then raise exception 'Anonymous call allowed';end if;
+end $$;
+rollback;

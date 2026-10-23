@@ -1,0 +1,51 @@
+# Accounting PDF for internal transfers
+
+The export follows the supplied Elleholms landscape template with a project
+summary, detailed order rows, original debited amounts, price adjustments,
+transfer amounts. Price evidence remains in Hub; the PDF omits the evidence
+appendix and introductory explanation. Its summary shows the transfer total,
+original debitable amount and their difference (debitable minus transfer).
+Missing prices leave the transfer total and difference incomplete. It is available separately for
+10 -> 30 Transport and 10 -> 20 Sortergården in Internal transfers.
+
+Final approved valuation:
+
+- Material: existing Hub purchase/self-cost evidence, including approved
+  provisional estimates. No additional discount on this cost.
+- Matjord: 100% of debited line amount, an approved exception to material self cost.
+- Tipping/deposit fees: 100% of debited line amount.
+- Transport: 100% of debited line amount, including a published transport
+  component split from a material-with-transport article.
+- Credits preserve their sign. Round each transfer component to two decimals.
+
+Hub owns selection, duplicate reconciliation, valuation and totals. PDF code
+formats its report and filters its already calculated center summaries. A
+download does not book, change export status or alter KPI revenue. Previously
+exported/preliminary rows remain visible with their evidence status. Conflicting
+source rows and unallocated centers stay in the reconciliation, not silently
+valued. Missing cost is null and explicitly incomplete rather than zero.
+
+The legacy R0-1 Matjord article is classified as transport. The accounting
+projection recognizes its material name and retains the full debited price
+under the approved Matjord exception, with explicit full-price evidence.
+
+Applied functions are additive to the existing transfer ledger. Tests cover
+full transport and tipping prices, negative credits, material self cost,
+bundle conservation, missing prices, Matjord and anonymous denial. The pure
+engine and tenant-scoped live report are verified before publication. The
+supplied source PDF is not stored in the public repository; only its wordmark
+is reused as the document's branding asset.
+
+The internal reader reuses canonical vehicle mappings when raw registration is
+empty. A unique confirmed name mapping on the same batch, order, date, driver
+and receiving project can supply a missing vehicle. Explicit registrations and
+article project/tipping rules retain priority. Approved article cost centers
+are used when the vehicle classification lacks a center. Raw imports and the
+transfer ledger are unchanged.
+
+September live regression: the five rows on orders 44343/44667 resolve to
+vehicle carrier KST 30 and receiving KST 10; original debit 24,082.64 SEK is
+preserved. A sixth existing canonical vehicle row (1,350 SEK) also resolves,
+retaining preliminary status and missing project. Source 366 rows / 1,885,131.57
+SEK and 47 other-transfer rows are unchanged; no unassigned income centers or
+missing export prices remain. Transport PDF: 276 rows / 1,334,572.18 SEK.

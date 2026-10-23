@@ -1,4 +1,5 @@
 import {createClient} from "@/lib/supabase/server";
+import {repairFinancialScope} from "@/lib/hub/repair-financial-scope";
 const escape=(value:unknown)=>'"'+String(value??"").replace(/"/g,'""')+'"';
 export async function GET(){
  const db=await createClient();
@@ -8,8 +9,13 @@ export async function GET(){
  if(!member)return Response.json({error:"Arbetsyta saknas"},{status:403});
  const {data:allowed}=await db.rpc("hub_has_permission",{p_tenant_id:member.tenant_id,p_permission:"kpi.manage"});
  if(!allowed)return Response.json({error:"Behörighet saknas"},{status:403});
- const {data,error}=await db.from("hub_fordonskontrollen_cost_outbox").select("external_reference,external_vehicle_id,occurred_on,amount,account,description,status").eq("tenant_id",member.tenant_id).eq("status","approved").order("occurred_on",{ascending:true}).limit(10000);
+ const {data,error}=await db.from("hub_fordonskontrollen_cost_outbox").select("id,external_reference,external_vehicle_id,occurred_on,amount,account,description,status").eq("tenant_id",member.tenant_id).eq("status","approved").order("occurred_on",{ascending:true}).limit(10000);
  if(error)return Response.json({error:error.message},{status:500});
+ try {
+  const scope=await repairFinancialScope(db,member.tenant_id,(data??[]).map(row=>row.id));
+  const blocked=(data??[]).filter(row=>!scope.get(row.id)?.published).length;
+  if(blocked)return Response.json({error:`Export stoppad: ${blocked} poster saknar verifierad koppling till aktuellt KPI-underlag. Historiken finns kvar för granskning.`,blocked},{status:409});
+ }catch{return Response.json({error:"Källkopplingarna kunde inte verifieras. Exporten har stoppats."},{status:503});}
  const lines=["Humla-referens;Fordonskontrollen fordons-ID;Datum;Belopp;Konto;Beskrivning;Status",...(data??[]).map(r=>[r.external_reference,r.external_vehicle_id,r.occurred_on,r.amount,r.account,r.description,r.status].map(escape).join(";"))];
  const csv="\uFEFF"+lines.join("\r\n");
  return new Response(csv,{headers:{"content-type":"text/csv; charset=utf-8","content-disposition":"attachment; filename=humla-fordonskontrollen-reparationer.csv","cache-control":"no-store"}});

@@ -1,4 +1,4 @@
-import {parseMonthPeriod} from "./period";
+import {parseMonthPeriod,periodFilters} from "./period";
 // Preserve the actual month selection and drill down from the current scope.
 export function analysisHref(query: string, changes: Record<string, string | null> = {}) {
  const p = new URLSearchParams(query);
@@ -11,10 +11,12 @@ export function analysisHref(query: string, changes: Record<string, string | nul
 }
 export const filterKeys = ['cost_center','group','unit','vehicle','project','category','kind','source','date_from','date_to'] as const;
 export function analysisQuery(params: URLSearchParams) {
- const from=params.get('from') ?? '',to=params.get('to') ?? '';
+ const period=parseMonthPeriod(params.get('fiscal_year')??undefined,params.get('months')??undefined,new Date(),params.get('period_mode')??undefined);
+ const from=period.mode==='ytd'?`${period.fiscalYear}-09-01`:params.get('from') ?? '',to=period.mode==='ytd'?period.to!:params.get('to') ?? '';
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||to<from) throw new Error('Välj en giltig rapportperiod.');
- const filters:Record<string,string|number|number[]>=Object.fromEntries(filterKeys.filter(k=>params.has(k)).map(k=>[k,params.get(k)!]));
- if(params.has('months')||params.has('fiscal_year')){const period=parseMonthPeriod(params.get('fiscal_year')??undefined,params.get('months')??undefined);Object.assign(filters,{fiscal_year:period.fiscalYear,selected_months:period.months});}
+ const filters:Record<string,string|number|number[]>=periodFilters(period,Object.fromEntries(filterKeys.filter(k=>params.has(k)).map(k=>[k,params.get(k)!])));
+ delete filters.period_mode;
+ if(params.has('months')||params.has('fiscal_year'))Object.assign(filters,{fiscal_year:period.fiscalYear,selected_months:period.months});
  const level=params.get('level')??'group',grain=params.get('grain')??'month';
  if(!['cost_center','group','unit','project','transaction'].includes(level)||!['year','month','week','day'].includes(grain)) throw new Error('Ogiltig analysnivå.');
  const page=Number(params.get('page')??0);if(!Number.isInteger(page)||page<0)throw new Error('Ogiltig sida.');

@@ -2,7 +2,7 @@ import 'server-only';
 import {cookies} from 'next/headers';
 import {createClient} from '@/lib/supabase/server';
 import {cachedKpiReport} from '@/lib/kpi/report-cache';
-import {parseMonthPeriod} from '@/lib/kpi/period';
+import {parseMonthPeriod,periodFilters,previousYearDate} from '@/lib/kpi/period';
 import {filterKeys} from '@/lib/kpi/analysis';
 import {selectionCookie,selectionFromQuery,readSavedSelection} from '@/lib/kpi/selection';
 import type {KpiAppProps,Dashboard} from '@/app/_components/kpi-app';
@@ -19,10 +19,11 @@ type Report = Dashboard & {
 export async function loadKpiPeriod(query:string) {
  if(query.length>4000)throw new Error('Ogiltigt urval.');
  const p=new URLSearchParams(query);
- const monthPeriod=parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined);
- const activeFilters=Object.fromEntries(filterKeys.filter(k=>p.get(k)).map(k=>[k,p.get(k)!]));
+ const monthPeriod=parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined,new Date(),p.get('period_mode')??undefined);
+ if(monthPeriod.mode==='ytd'){p.delete('date_from');p.delete('date_to');}
+ const activeFilters=periodFilters(monthPeriod,Object.fromEntries(filterKeys.filter(k=>p.get(k)).map(k=>[k,p.get(k)!])));
  const costCenter=p.get('cost_center')?.trim()||null;
- const from=`${monthPeriod.fiscalYear}-09-01`,to=`${monthPeriod.fiscalYear+1}-08-31`;
+ const from=`${monthPeriod.fiscalYear}-09-01`,to=monthPeriod.to??`${monthPeriod.fiscalYear+1}-08-31`;
  const db=await createClient();
  const {data:claims,error:claimsError}=await db.auth.getClaims();
  const userId=claims?.claims?.sub;
@@ -37,6 +38,6 @@ export async function loadKpiPeriod(query:string) {
  if(readSavedSelection(saved))(await cookies()).set(selectionCookie(userId),saved,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:31536000});
  const dashboard=result.data;
  return {monthPeriod,activeFilters,from,to,dashboard,overviewMonthly:dashboard.monthly??[],overviewPrevious:dashboard.previous??null,
-  overviewPeriod:{current:{from,to},previous:{from:`${monthPeriod.fiscalYear-1}-09-01`,to:`${monthPeriod.fiscalYear}-08-31`},label:`${monthPeriod.fiscalYear}/${monthPeriod.fiscalYear+1}`},
+  overviewPeriod:{current:{from,to},previous:{from:previousYearDate(from),to:previousYearDate(to)},label:`${monthPeriod.fiscalYear}/${monthPeriod.fiscalYear+1}`},
   transpaVehicleTime:dashboard.transpa_vehicle_time??null,efficiency:dashboard.efficiency??null,hiredCapacity:dashboard.hired_capacity??null,driverProductivity:dashboard.driver_productivity??null};
 }

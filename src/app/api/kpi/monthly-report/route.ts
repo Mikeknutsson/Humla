@@ -1,6 +1,6 @@
 import {createClient} from '@/lib/supabase/server';
 import {cachedKpiReport} from '@/lib/kpi/report-cache';
-import {parseMonthPeriod} from '@/lib/kpi/period';
+import {parseMonthPeriod,stockholmToday} from '@/lib/kpi/period';
 import {monthlyExcel} from '@/lib/kpi/monthly-report-export';
 import {departmentMonthlyPdf} from '@/lib/kpi/department-monthly-pdf';
 import type {MonthlyTransportReport} from '@/lib/kpi/monthly-report';
@@ -20,17 +20,25 @@ export async function GET(request:Request){
  const variant=params.get('variant')==='ledning'?'ledning':'utforlig';
  if(costCenter.length>100)return Response.json({error:'Ogiltigt kostnadsställe.'},{status:400});
  const filters=Object.fromEntries(['group','unit','vehicle','project'].filter(k=>params.get(k)).map(k=>[k,params.get(k)!]));
+ const today=stockholmToday(),currentYear=today.month>=9?today.year:today.year-1;
+ if(params.get('period_mode')==='ytd'||year===currentYear&&month===today.month)filters.period_mode='ytd';
  if(JSON.stringify(filters).length>2000)return Response.json({error:'För stort urval.'},{status:400});
- const loadDepartment=(code:string)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v4',year,month,costCenter:code,filters:{}},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:year,p_month:month,p_cost_center:code,p_filters:{}}));
+ const loadComparable=async(code:string,selectedFilters:Record<string,string>)=>{
+  const load=(fiscalYear:number)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v10-combined-time',year:fiscalYear,month,costCenter:code,filters:selectedFilters,asOf:selectedFilters.period_mode==='ytd'?`${today.year}-${today.month}-${today.day}`:null},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:fiscalYear,p_month:month,p_cost_center:code,p_filters:selectedFilters}));
+  const [current,previous]=await Promise.all([load(year),load(year-1)]);
+  return current.data?{...current,data:{...current.data,previous:previous.data?{period:previous.data.period,month:previous.data.month,ytd:previous.data.ytd}:null,previous_available:!!previous.data}}:current;
+ };
+ const loadDepartment=(code:string)=>loadComparable(code,filters.period_mode?{period_mode:filters.period_mode}:{});
  if(format==='pdf'){
-  const departments=await Promise.all([['20','Sortergården'],['30','Transport']].map(async([code,name])=>({code,name,result:await loadDepartment(code)})));
+  const departments=[];
+  for(const [code,name]of [['20','Sortergården'],['30','Transport']])departments.push({code,name,result:await loadDepartment(code)});
   if(departments.some(d=>d.result.error||!d.result.data))return Response.json({error:'Båda avdelningarnas verifierade underlag krävs för PDF-rapporten.'},{status:503});
   try{const bytes=await departmentMonthlyPdf(departments.map(d=>({code:d.code,name:d.name,report:d.result.data!})),variant);return new Response(new Uint8Array(bytes),{headers:{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="humla-manadsrapport-${variant}-${year}-${String(month).padStart(2,'0')}.pdf"`,'Cache-Control':'private, no-store'}});}catch{return Response.json({error:'PDF kunde inte skapas.'},{status:500});}
  }
- const result=await cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'transport-monthly-v4',year,month,costCenter,filters},async()=>db.rpc('hub_kpi_monthly_transport_report_v1',{p_tenant_id:member.tenant_id,p_fiscal_year:year,p_month:month,p_cost_center:costCenter,p_filters:filters}));
+ const result=await loadComparable(costCenter,filters);
  if(result.error||!result.data){console.error('[kpi monthly] report unavailable',{code:result.error?.code});return Response.json({error:'Månadsrapporten kunde inte hämtas från Hubben. Försök igen.'},{status:503});}
  const report=result.data;
  // The browser needs monthly evidence only; full YTD transactions remain server-side for export.
- if(!format)return Response.json({...report,ytd:{...report.ytd,fuel_sources:report.ytd.fuel_sources?{...report.ytd.fuel_sources,transactions:[]}:undefined}},{headers:{'Cache-Control':'private, no-store'}});
+ if(!format)return Response.json({...report,ytd:{...report.ytd,fuel_sources:report.ytd.fuel_sources?{...report.ytd.fuel_sources,transactions:[]}:undefined},previous:report.previous?{...report.previous,month:{...report.previous.month,fuel_sources:report.previous.month.fuel_sources?{...report.previous.month.fuel_sources,transactions:[]}:undefined},ytd:{...report.previous.ytd,fuel_sources:report.previous.ytd.fuel_sources?{...report.previous.ytd.fuel_sources,transactions:[]}:undefined}}:null},{headers:{'Cache-Control':'private, no-store'}});
  try{const bytes=monthlyExcel(report);return new Response(new Uint8Array(bytes),{headers:{'Content-Type':format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/pdf','Content-Disposition':`attachment; filename="humla-nyckeltal-transport-${report.period.from.slice(0,7)}.${format}"`,'Cache-Control':'private, no-store'}});}catch{ return Response.json({error:'Rapportfilen kunde inte skapas. Försök igen.'},{status:500});}
 }
