@@ -23,7 +23,7 @@ export async function POST(req:Request){
    ]);
    if(error||!data)return Response.json({error:'Workify/NeXT-underlaget kunde inte hämtas från Hubben.'},{status:503});
    if(salary.error||!salary.data)return Response.json({error:'TransPA-löneunderlaget kunde inte hämtas från Hubben.'},{status:503});
-   if(data.synced_at!==salary.data.synced_at)return Response.json({error:'Hubben uppdaterades under hämtningen. Hämta underlaget igen.'},{status:503});
+   if(data.controls?.scope!=='live_approved_imports'&&data.synced_at!==salary.data.synced_at)return Response.json({error:'Hubben uppdaterades under hämtningen. Hämta underlaget igen.'},{status:503});
    return Response.json(outcomeForecast(data as OutcomeSource,body.asOf,body.supplierDays??30,body.periodOffset??0,salary.data as PayrollSource),{headers:{'Cache-Control':'no-store'}});
   }
   return Response.json(paymentForecast(body as ForecastInput),{headers:{'Cache-Control':'no-store'}});

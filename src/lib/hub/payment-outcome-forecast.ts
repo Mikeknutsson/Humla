@@ -30,7 +30,7 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  const warnings=['Beloppen är enligt Workify/NeXT-underlaget, exklusive moms. Ingen verifierad reskontra eller faktisk betalningsstatus.','NeXT-kostnader flyttas med antagen betalningstid; detta är inte verifierade leverantörsförfallodatum.'];
  const syncedDate=source.synced_at?.slice(0,10);
  if(syncedDate&&now-dateValue(syncedDate)>2*day)warnings.push(`Underlaget är senast uppdaterat ${syncedDate}. Nyare importer kan saknas; prognosen är inte aktuell förrän Hubben har publicerat ett nytt underlag.`);
- if(source.controls){warnings.push('Raderna följer det publicerade KPI-underlagets dubblettskydd. Egentanksförbrukning, registrerad lön på konto 7010 och intern tid/fördelning används inte som antagna leverantörsbetalningar. Importer som väntar på ekonomisk avstämning ingår inte.');}
+ if(source.controls){warnings.push('Raderna följer Hubbens dubblettskydd på radnivå. Senaste uppladdade, godkända Workify- och NeXT-rader används. Egentanksförbrukning, registrerad lön på konto 7010 och intern tid/fördelning används inte som antagna leverantörsbetalningar. Importer som väntar på ekonomisk avstämning ingår inte.');}
  const rows=source.rows.map((r,i)=>({...r,id:'outcome:'+i,dateValue:dateValue(r.date),paymentDate:expectedPaymentDate(r,supplierDays)}));
  const external=rows.filter(r=>!r.internal);
  const toPayment=(r:typeof rows[number]):Payment=>({id:r.id,center:r.center,kind:r.kind,date:r.paymentDate,amount:Number(r.amount),internal:r.internal});
