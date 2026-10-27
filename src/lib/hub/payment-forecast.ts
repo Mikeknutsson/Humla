@@ -1,8 +1,8 @@
 /** Hub domain calculation. KPI filters and vehicle identities deliberately do not apply. */
 export const payrollDepartments = {'30':'Transport','20':'Sortergården','40':'Verkstad'} as const;
-export const departments = {...payrollDepartments,'50':'Fastigheter','90':'Övrigt'} as const;
-/** Workshop, properties and other overhead are included as cost departments only. */
-export const costOnly = (center:string) => ['40','50','90'].includes(center);
+export const departments = {...payrollDepartments} as const;
+/** Workshop is included as a cost department only; 50 and 90 are temporarily outside forecast scope. */
+export const costOnly = (center:string) => center==='40';
 export const emptyIncoming = () => ({known:0,forecast:0,total:0,baseline:0,factor:1});
 /** Explicit partial amounts preserve registered costs without implying full coverage. */
 export function availableForecast(parts:{center:string;incoming:{total:number|null;known:number};outgoing:{total:number|null;known:number}}[]){
