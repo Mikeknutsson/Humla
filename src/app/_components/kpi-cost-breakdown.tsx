@@ -1,7 +1,7 @@
+'use client';
 import Link from 'next/link';
 import {analysisHref} from '@/lib/kpi/analysis';
 const categories = [
-  ["management", "Arbetsledning"], ["overhead", "Övrig overhead"],
   ["personnel", "Personal"], ["fuel", "Bränsle"],
   ["service_repair", "Service & Rep"], ["depreciation", "Avskrivning"],
   ["fixed", "Fasta kostnader"], ["material", "Material / Ballast"],
@@ -18,6 +18,8 @@ export function KpiCostBreakdown({ values, total, query, personnelBasis }: {
   query: string;
   personnelBasis?: string;
 }) {
+  const overheadParts=[values.management,values.overhead].filter(v=>v!=null&&v!==""&&Number.isFinite(Number(v)));
+  const overheadTotal=overheadParts.length?overheadParts.reduce<number>((sum,v)=>sum+Number(v),0):undefined;
   function detail(category: string) {
     const params = new URLSearchParams(query);
     params.set("category", category);
@@ -27,7 +29,7 @@ export function KpiCostBreakdown({ values, total, query, personnelBasis }: {
   }
   return <section className="panel cost-breakdown" aria-label="Kostnadsfördelning">
     <div className="panel-head"><div><span className="section-kicker">Kostnader i valt urval</span><h2>Kostnadsfördelning</h2></div><div><span>Total kostnad</span><Link prefetch={false} href={analysisHref(query,{category:null,kind:"cost"})}><strong>{amount(total)}</strong></Link></div></div>
-    <div className="cost-breakdown-grid">{categories.map(([key, label]) => <Link prefetch={false} key={key} href={detail(key)}>
+    <div className="cost-breakdown-grid"><details className="cost-breakdown-overhead"><summary><span>Overhead</span><strong>{amount(overheadTotal)}</strong><small>Visa detaljer och arbetsledning →</small></summary><div><Link prefetch={false} href={detail("management")}>Arbetsledning<strong>{amount(values.management)}</strong></Link><Link prefetch={false} href={detail("overhead")}>Övrig overhead<strong>{amount(values.overhead)}</strong></Link><a href="#overhead-settings" onClick={e=>{const target=e.currentTarget.ownerDocument.getElementById("overhead-settings");if(target instanceof HTMLDetailsElement)target.open=true;}}>Visa och ändra underlag →</a></div></details>{categories.map(([key, label]) => <Link prefetch={false} key={key} href={detail(key)}>
       <span>{label}</span><strong>{amount(values[key])}</strong><small>Visa underlag →</small>
     </Link>)}</div>
     <p>Beloppen ingår redan i total kostnad. Klicka på en kategori för detaljer med samma period, kostnadsställe, verksamhetsgrupp och enhetsurval.</p>
