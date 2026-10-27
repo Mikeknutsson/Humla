@@ -4,7 +4,7 @@ import {outcomeForecast,type OutcomeSource} from '@/lib/hub/payment-outcome-fore
 import type {PayrollSource} from '@/lib/hub/payment-payroll-forecast';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
-export const maxDuration=60;
+export const maxDuration=180;
 export async function POST(req:Request){
  if(req.headers.get('origin')!==new URL(req.url).origin)return Response.json({error:'Ogiltigt ursprung'},{status:403});
  const db=await createClient();const {data:{user}}=await db.auth.getUser();
