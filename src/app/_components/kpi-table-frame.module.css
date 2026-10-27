@@ -9,3 +9,5 @@
 .body thead { opacity:0; }
 .body thead th { height:0; line-height:0; padding-top:0!important; padding-bottom:0!important; border-bottom:0!important; }
 @media print { .sticky { display:none; } .body thead { opacity:1; } .body thead th { height:auto; line-height:normal; padding:9px 10px!important; } }
+
+.heading button:focus-visible{outline:2px solid #16816a;outline-offset:3px;border-radius:2px}.heading button:hover{color:#141619;text-decoration:underline}
