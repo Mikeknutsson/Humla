@@ -15,6 +15,12 @@ export async function POST(req:Request){
  const text=await req.text();if(text.length>8_000_000)return Response.json({error:'Underlaget är för stort'},{status:413});
  try{
   const body=JSON.parse(text);
+  if(body.action==='set-one-off'){
+   if(!member||!Array.isArray(body.rowIds)||!body.rowIds.length||body.rowIds.length>200||body.rowIds.some((id:unknown)=>typeof id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))||typeof body.excluded!=='boolean')return Response.json({error:'Ogiltigt radurval'},{status:400});
+   const {data,error}=await db.rpc('hub_payment_forecast_set_exclusion_v1',{p_tenant_id:member.tenant_id,p_rows:body.rowIds,p_excluded:body.excluded,p_note:body.note??''});
+   if(error)return Response.json({error:'Markeringen kunde inte sparas.'},{status:400});
+   return Response.json(data,{headers:{'Cache-Control':'no-store'}});
+  }
   if(body.mode==='automatic'){
    if(!member)throw Error('Arbetsyta saknas');
    const [{data,error},salary]=await Promise.all([

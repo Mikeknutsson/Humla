@@ -1,6 +1,7 @@
 import {dateValue,departments,costOnly,emptyIncoming,availableForecast,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
 import {payrollForecast,type PayrollSource} from './payment-payroll-forecast';
-export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean};
+export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean;oneOff?:boolean;id?:string;rowId?:string|null;reference?:string;description?:string;account?:string;project?:string;paymentDate?:string};
+export type ForecastBreakdown={weekFrom:string;center:string;kind:'in'|'out';internal:boolean;baseline:number|null;factor:number|null;known:number;forecast:number|null;total:number|null;trendPrevious:number;trendCurrent:number;excludedBaseline:number;baselineRows:string[];knownRows:string[];trendPreviousRows:string[];trendCurrentRows:string[];spike:boolean};
 export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number;generation?:string;controls?:{scope:string;from:string;to:string;supplierRows:number;supplierAmount:number;excludedNonPayments:{reason:string;rows:number;amount:number}[]}};
 const day=86400000,iso=(n:number)=>new Date(n).toISOString().slice(0,10),round=(n:number)=>Math.round(n*100)/100;
 const name=(s:string)=>s.toLocaleLowerCase('sv-SE').normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -21,7 +22,7 @@ export function expectedPaymentDate(row:Outcome,supplierDays=30){
  const anchor=row.kind==='in'&&row.invoiceDate?dateValue(row.invoiceDate):delivery;
  return iso(anchor+(row.kind==='in'?term.days:supplierDays)*day);
 }
-export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;controls?:OutcomeSource['controls'];payroll?:ReturnType<typeof payrollForecast>}};
+export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;breakdown:ForecastBreakdown[];auditRows:Outcome[];controls?:OutcomeSource['controls'];payroll?:ReturnType<typeof payrollForecast>}};
 export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0,payrollSource?:PayrollSource):AutomaticForecast{
  const now=dateValue(asOf);if(!Number.isInteger(supplierDays)||supplierDays<0||supplierDays>180)throw Error('Leverantörstid måste vara 0–180 dagar');
  const monthStart=Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),1),trendEnd=monthStart-day;
@@ -37,18 +38,21 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  const result=paymentForecast({asOf,periodOffset,ledger:[],history:[],historyFrom:'',historyTo:''});
  const sum=(rs:typeof rows,a:number,b:number)=>round(rs.filter(r=>r.dateValue>=a&&r.dateValue<=b).reduce((s,r)=>s+Number(r.amount),0));
  const payroll=payrollSource?payrollForecast(payrollSource,asOf,result.weeks):undefined;
+ const breakdown:ForecastBreakdown[]=[];const detailRows=new Map<string,Outcome>();
  for(const w of result.weeks){
   const start=dateValue(w.from),end=dateValue(w.to);
   for(const p of w.parts)for(const internalScope of [false,true])for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){
    if(costOnly(p.center)&&kind==='in'){if(internalScope)p.internal.incoming=0;else p.incoming=emptyIncoming();continue;}
    const group=rows.filter(r=>r.internal===internalScope&&r.center===p.center&&r.kind===kind);
    const dates=group.map(r=>r.dateValue),min=dates.length?Math.min(...dates):Infinity,max=dates.length?Math.max(...dates):-Infinity;
-   const before=sum(group,previous(trendStart),previous(trendEnd)),current=sum(group,trendStart,trendEnd);
+   const recurring=group.filter(r=>!r.oneOff);
+   const before=sum(recurring,previous(trendStart),previous(trendEnd)),current=sum(recurring,trendStart,trendEnd);
    // This is monthly activity availability, not proof of import completeness.
    // A department need not transact on the first/last calendar day of a month.
    const enough=group.length>0&&calendarMonth(min)<=previous(trendStart)&&calendarMonth(max)>=calendarMonth(trendEnd);
    const factor=enough&&before>0?current/before:null;
-   const baselineRows=group.filter(r=>{const n=dateValue(r.paymentDate);return n>=start-364*day&&n<=end-364*day});
+   const allBaselineRows=group.filter(r=>{const n=dateValue(r.paymentDate);return n>=start-364*day&&n<=end-364*day});
+   const baselineRows=allBaselineRows.filter(r=>!r.oneOff);
    // Earliest source coverage must reach the source months that can feed this payment week.
    const paymentDates=group.map(r=>dateValue(r.paymentDate));
    // Internal rows have their own actual assumed payment-date coverage, not the
@@ -61,6 +65,10 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
    const known=round(registered.reduce((s,r)=>s+Number(r.amount),0));
    const forecast=baseline!==null&&factor!==null?round(Math.max(0,baseline*factor-known)):null;
    const total=forecast===null?null:round(known+forecast);
+   const plain=(r:typeof rows[number]):string=>{const {dateValue:_,...source}=r;detailRows.set(r.id,source);return r.id;};
+   const absolute=baselineRows.reduce((s,r)=>s+Math.abs(Number(r.amount)),0);
+   const parties=new Map<string,number>();for(const r of baselineRows)parties.set(r.party,(parties.get(r.party)??0)+Math.abs(Number(r.amount)));
+   breakdown.push({weekFrom:w.from,center:p.center,kind,internal:internalScope,baseline,factor,known,forecast,total,trendPrevious:before,trendCurrent:current,excludedBaseline:round(allBaselineRows.filter(r=>r.oneOff).reduce((s,r)=>s+Number(r.amount),0)),baselineRows:allBaselineRows.map(plain),knownRows:registered.map(plain),trendPreviousRows:group.filter(r=>r.dateValue>=previous(trendStart)&&r.dateValue<=previous(trendEnd)).map(plain),trendCurrentRows:group.filter(r=>r.dateValue>=trendStart&&r.dateValue<=trendEnd).map(plain),spike:kind==='out'&&absolute>=50000&&Array.from(parties.values()).some(amount=>amount>=absolute/2)});
    if(internalScope)p.internal[key]=total;
    else p[key]={known,forecast,total,baseline,factor};
   }
@@ -83,5 +91,6 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}
  if(source.review_rows)warnings.push(`${source.review_rows} importrader för granskning ingår inte; belopp ${round(source.review_amount)} kr.`);
  if(payroll){warnings.push(...payroll.warnings);result.method+=' Löner: föregående månads TransPA-bruttolöneschablon betalas den 25:e; egen historik/trend eller tydligt märkt senaste-månad-reserv. Löneprognosen särredovisas och ingår inte i kostnader eller netto. PO-pålägg ingår inte i löneutbetalningen.';}
- return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,controls:source.controls,payroll}};
+ if(source.rows.some(r=>r.oneOff))warnings.push('Markerade engångskostnader används inte i fjolårsbas eller trend. Registrerade kostnader ligger kvar i sin beräknade betalningsvecka.');
+ return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,breakdown,auditRows:Array.from(detailRows.values()),controls:source.controls,payroll}};
 }
