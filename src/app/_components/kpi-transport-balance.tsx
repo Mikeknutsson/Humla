@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type {TransportScorecard, TransportMetrics, TransportBreakdown} from '@/lib/kpi/transport-leader';
+import type {TransportScorecard, TransportMetrics, TransportBreakdown, TransportCardAnalysis} from '@/lib/kpi/transport-leader';
 import {KpiMarginGauge} from './kpi-margin-gauge';
 import styles from './kpi-margin-gauge.module.css';
 
@@ -9,28 +9,43 @@ const money = (n:number|null|undefined) => n == null ? 'Underlag saknas' : curre
 const pct = (n:number|null|undefined) => n == null ? '–' : `${number.format(n)} %`;
 const labels:Record<string,string> = {management:'Arbetsledning',overhead:'Övrig overhead',transport:'Transport',material:'Material / ballast',tipp:'Tippavgifter',tipp_deponi:'Tippavgifter / deponi',other:'Övrigt',unclassified:'Ej klassificerat',personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',depreciation:'Avskrivning',hired:'Inhyrda resurser'};
 
-function BalanceCard({label,href,metrics,previous}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics}) {
+function BalanceCard({label,href,metrics,previous,analysis}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis}) {
  return <article className={styles.card}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
  <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
  <dl className={styles.facts}>
  <dt>Intäkter</dt><dd>{money(metrics.revenue)}</dd><dt>Kostnader</dt><dd>{money(metrics.cost)}</dd>
  <dt>Resultat</dt><dd><strong>{money(metrics.result)}</strong></dd>
+ <dt>Målmarginal</dt><dd>{metrics.target_margin_percent==null?'Mål saknas':pct(metrics.target_margin_percent)}</dd>
  <dt>Avvikelse mot mål</dt><dd>{metrics.deviation_pp==null?'Mål saknas':`${number.format(metrics.deviation_pp)} pp`}</dd>
  <dt>Marginal fg. år</dt><dd>{pct(previous?.margin_percent)}</dd>
  <dt>Resultat fg. år</dt><dd>{money(previous?.result)}</dd>
- </dl></article>;
+ </dl>
+ {analysis&&<aside className={styles.analysis} aria-label={`Snabbanalys – ${label}`} data-status={analysis.status}>
+ <h4>Snabbanalys</h4><p>{analysis.summary}</p>
+ {analysis.insights.length>0&&<ul>{analysis.insights.map(i=><li key={i.title}><strong>{i.title}</strong>{i.evidence.map(e=><p key={e}>{e}</p>)}</li>)}</ul>}
+ {analysis.limitations.length>0&&<details><summary>Underlag och begränsningar</summary>{analysis.limitations.map(x=><p key={x}>{x}</p>)}</details>}
+ </aside>}
+ <details className={styles.explanation}><summary>Så läser du rutan</summary>
+ <p><strong>Intäkter:</strong> registrerade intäkter i valt urval. <strong>Kostnader:</strong> kostnader som kopplats till urvalet, inklusive fördelad overhead. <strong>Resultat:</strong> intäkter minus kostnader.</p>
+ <p><strong>Marginal:</strong> resultatets andel av intäkterna. <strong>Målmarginal:</strong> sparade mål som gäller under perioden, vägda med intäkterna. Saknas något mål visas ”Mål saknas”.</p>
+ <p><strong>Avvikelse mot mål:</strong> marginal minus målmarginal i procentenheter (pp). Exempel: 5 % marginal mot 10 % mål ger −5 pp. <strong>Fg. år:</strong> samma datum och valda månader föregående år.</p>
+ <p><strong>Snabbanalys:</strong> indikatorer att undersöka. Kostnadsandelar jämförs med egen historik och medianen för minst två andra enheter i samma verksamhetsområde och behörighetsurval. Den egna enheten ingår inte i medianen. Områdesrutor visar även avvikande enheter.</p>
+ <p>En kostnad markeras när den är minst 5 000 kr och andelen överstiger jämförelsen med minst 3 pp och 25 %. Intäkt per timme markeras vid minst 20 % lägre nivå, med minst 40 timmar per jämförd enhet. Jämförelseintäkter ska vara minst 10 000 kr.</p>
+ <p>Timanalysen använder entydigt kopplad TransPA-tid och visas bara när annan personalkostnad inte gör tidsunderlaget ofullständigt. Intäkt per timme använder rutans intäkter och är inte ett mått på enbart fakturerade körtimmar. Engångsreparationer och olika uppdrag kan påverka jämförelsen; analysen fastställer ingen orsak.</p>
+ </details></article>;
 }
 
-export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null}) {
+export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>}}) {
  const link = (key:string,value:string) => {const p=new URLSearchParams(base);p.set(key,value);return '/kpi/transportledare?'+p;};
  const all=new URLSearchParams(base);all.delete('group');
  return <>
  <section className="panel"><h2>{selectedGroup??'Verksamhetsområden'}</h2>
  {selectedGroup&&<Link href={'/kpi/transportledare?'+all}>← Alla verksamhetsområden</Link>}
  <p>Marginal efter samtliga kostnader i urvalet. Rött visar negativt resultat, gult positiv marginal under mål och grönt uppnått mål. Grått fält betyder att mål saknas.</p>
- <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
+ <p>Period: {report.from}–{report.to}. Klicka på ett verksamhetsområde eller en enhet för att se underlaget. Förklaringar finns i varje ruta under ”Så läser du rutan”.</p>
+ <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} analysis={analyses?.groups[g.business_group]} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
  </section>
- <section className="panel"><h2>Enheternas balans</h2><div className={styles.cards}>{report.units.map(u=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} href={u.unit_id?link('unit',u.unit_id):undefined}/>)}</div></section>
+ <section className="panel"><h2>Enheternas balans</h2><div className={styles.cards}>{report.units.map(u=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} href={u.unit_id?link('unit',u.unit_id):undefined}/>)}</div></section>
  </>;
 }
 

@@ -6,10 +6,13 @@ export type TransportMetrics = {
 export type TransportUnit = TransportMetrics & {unit_id:string|null;unit_name:string|null};
 export type TransportGroup = TransportMetrics & {business_group:string};
 export type TransportBreakdown = {kind:'revenue'|'cost';category:string;amount:number;rows:number;share_of_revenue:number|null};
+export type TransportAnalysisInput = {unit_id:string;unit_name:string|null;business_group:string;revenue:number;personnel:number;service_repair:number;fuel:number;worked_hours:number|null};
+export type TransportCardAnalysis = {status:'ok'|'warning'|'unknown';summary:string;insights:{title:string;evidence:string[]}[];limitations:string[]};
 export type TransportScorecard={
  from:string;to:string;scope:'transport'|'assigned';generation:string;synced_at:string;
  summary:Omit<TransportMetrics,'revenue'|'cost'|'result'> & {revenue:number|null;cost:number|null;result:number|null;unassigned_rows:number};
  units:TransportUnit[];groups:TransportGroup[];breakdown:TransportBreakdown[];
+ analysis_inputs?:TransportAnalysisInput[];
  sections:{section:string;revenue:number;cost:number;result:number|null;margin_percent:number|null}[];
  transactions:{fact_id:string;occurred_on:string;kind:string;amount:number;category:string;project:string|null;vehicle:string|null;source:string;order_number:string|null;customer:string|null;original:Record<string,unknown>}[];
 };
