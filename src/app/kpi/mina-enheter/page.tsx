@@ -17,21 +17,22 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  const q=await searchParams,today=stockholmToday(),fy=today.month>=9?today.year:today.year-1;
  const from=q.from??`${fy}-09-01`,to=q.to??`${today.year}-${String(today.month).padStart(2,'0')}-${String(today.day).padStart(2,'0')}`;
  const owner=member.role==='owner';
- const people=owner?await db.from('hub_tenant_members').select('user_id,display_name').eq('tenant_id',member.tenant_id).eq('status','active').eq('role','supervisor').order('display_name'):{data:[],error:null};
+ const people=owner?await db.rpc('hub_foreman_profiles_v1',{p_tenant:member.tenant_id}):{data:[],error:null};
+ const profileRows=(people.data??[]) as {user_id:string;display_name:string|null;role:string}[];
  const target=owner?(q.user_id??null):user.id;
  const period=new URLSearchParams({from,to});
- const profiles=owner&&<section className="panel"><h2>Välj arbetsledarvy</h2><p>Förhandsvisa det underlag respektive läsprofil får se.</p>{people.error?<p role="alert">Profilerna kunde inte hämtas. Försök igen.</p>:<div className="metrics-grid">{people.data?.map(p=><Link key={p.user_id} prefetch={false} className="metric-card" aria-current={target===p.user_id?'page':undefined} style={{textDecoration:'none',border:target===p.user_id?'2px solid #e1ad27':undefined}} href={'/kpi/mina-enheter?'+new URLSearchParams({from,to,user_id:p.user_id})}><strong>{p.display_name??'Arbetsledare'}</strong><span>Läsåtkomst</span><small>Visa arbetsledarvy →</small></Link>)}</div>}{!people.error&&!people.data?.length&&<p>Inga arbetsledarprofiler finns att förhandsvisa.</p>}</section>;
+ const profiles=owner&&<section className="panel"><h2>Välj arbetsledarvy</h2><p>Förhandsvisa det underlag respektive läsprofil får se.</p>{people.error?<p role="alert">Profilerna kunde inte hämtas. Försök igen.</p>:<div className="metrics-grid">{profileRows.map(p=><Link key={p.user_id} prefetch={false} className="metric-card" aria-current={target===p.user_id?'page':undefined} style={{textDecoration:'none',border:target===p.user_id?'2px solid #e1ad27':undefined}} href={'/kpi/mina-enheter?'+new URLSearchParams({from,to,user_id:p.user_id})}><strong>{p.display_name??'Arbetsledare'}</strong><span>Läsåtkomst</span><small>Visa arbetsledarvy →</small></Link>)}</div>}{!people.error&&!profileRows.length&&<p>Inga arbetsledarprofiler finns att förhandsvisa.</p>}</section>;
  if(owner&&!target)return <KpiDetailShell title="Arbetsledarvyer" breadcrumb="Humla Dashboard / Arbetsledarvyer" query={period.toString()}><div className="content">{profiles}</div></KpiDetailShell>;
  if(!target)return <main className="content"><p>Ingen profil vald.</p></main>;
  if(!validTransportDate(from)||!validTransportDate(to)||from>to||Date.parse(to)-Date.parse(from)>366*86400000||!/^[0-9a-f-]{36}$/i.test(target))return <main className="content"><p>Ogiltigt urval.</p><Link href="/kpi/mina-enheter">Återställ</Link></main>;
  const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:target};
- if(owner&&!people.data?.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
+ if(owner&&!profileRows.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
  const [current,old]=await Promise.all([
   db.rpc('hub_transport_leader_scorecard_v4',args),
   db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to)}),
  ]);
  const report=current.data as TransportScorecard|null,prior=old.data as TransportScorecard|null;
- const name=owner?people.data?.find(p=>p.user_id===target)?.display_name:member.display_name;
+ const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
  const base=new URLSearchParams({from,to,user_id:target}).toString();
  const view=<div className="content">{profiles}
  <header className="panel"><h1>{owner?name??'Arbetsledarvy':'Mina enheter'}</h1><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>

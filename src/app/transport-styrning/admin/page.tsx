@@ -9,13 +9,14 @@ export default async function TransportAssignments({searchParams}:{searchParams:
   .eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
  if(!member||member.role!=="owner")return <main className="section" role="alert"><h1>Åtkomst nekad</h1><p>Endast organisationens ägare kan tilldela arbetsledaransvar.</p></main>;
  const [{data:people,error:peopleError},{data:units,error:unitsError},{data:assignments,error:assignError}]=await Promise.all([
-  db.from("hub_tenant_members").select("user_id,display_name,role").eq("tenant_id",member.tenant_id).eq("status","active").order("display_name"),
+  db.rpc("hub_foreman_profiles_v1",{p_tenant:member.tenant_id}),
   db.from("hub_objects").select("id,data").eq("tenant_id",member.tenant_id).eq("object_type","EconomicUnit"),
   db.from("hub_transport_leader_units").select("id,user_id,unit_id,valid_from,valid_to").eq("tenant_id",member.tenant_id).order("created_at",{ascending:false}).limit(150),
  ]);
+ const profileRows=(people??[]) as {user_id:string;display_name:string|null;role:string}[];
  const canonicalUnits=(units??[]).map(u=>({id:u.id,name:String(u.data?.name??'Namnlös enhet')})).sort((a,b)=>a.name.localeCompare(b.name,'sv'));
  const q=await searchParams;
- const nameById=new Map((people??[]).map(p=>[p.user_id,p.display_name??p.user_id]));
+ const nameById=new Map(profileRows.map(p=>[p.user_id,p.display_name??p.user_id]));
  const unitById=new Map(canonicalUnits.map(u=>[u.id,u.name]));
  return <main>
   <header className="topbar"><div><span className="eyebrow">HUMLA TRANSPORT · ADMIN</span><h1>Arbetsledarnas enheter</h1>
@@ -27,7 +28,7 @@ export default async function TransportAssignments({searchParams}:{searchParams:
     <p>Endast aktiva Humla-konton kan väljas. Enheter som byter arbetsledare behåller sin ekonomiska historik.</p>
     <form action={assignTransportUnit} style={{display:"flex",flexWrap:"wrap",gap:12,alignItems:"end"}}>
      <label>Transportledare <select name="user_id" required defaultValue=""><option value="" disabled>Välj användare</option>
-      {(people??[]).map(p=><option key={p.user_id} value={p.user_id}>{p.display_name??p.user_id} ({p.role})</option>)}</select></label>
+      {profileRows.map(p=><option key={p.user_id} value={p.user_id}>{p.display_name??p.user_id} ({p.role})</option>)}</select></label>
      <label>Ekonomisk enhet <select name="unit_id" required defaultValue=""><option value="" disabled>Välj enhet</option>
       {canonicalUnits.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
      <label>Gäller från <input type="date" name="valid_from" required defaultValue={new Date().toISOString().slice(0,10)}/></label>

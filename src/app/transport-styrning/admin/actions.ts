@@ -16,10 +16,11 @@ export async function assignTransportUnit(form:FormData){
  const to=String(form.get("valid_to")??"");
  if(!UUID.test(assignee)||!UUID.test(unit)||!DATE.test(from)||(to&&!DATE.test(to))||(to&&to<from))
   redirect("/transport-styrning/admin?result=invalid");
- const [{data:target},{data:resource}]=await Promise.all([
-  db.from("hub_tenant_members").select("user_id").eq("tenant_id",owner.tenant_id).eq("user_id",assignee).eq("status","active").maybeSingle(),
+ const [{data:profiles},{data:resource}]=await Promise.all([
+  db.rpc("hub_foreman_profiles_v1",{p_tenant:owner.tenant_id}),
   db.from("hub_objects").select("id").eq("tenant_id",owner.tenant_id).eq("id",unit).eq("object_type","EconomicUnit").maybeSingle(),
  ]);
+ const target=(profiles as {user_id:string}[]|null)?.some(p=>p.user_id===assignee);
  if(!target||!resource)redirect("/transport-styrning/admin?result=invalid");
  const {error}=await db.from("hub_transport_leader_units").insert({
   tenant_id:owner.tenant_id,user_id:assignee,unit_id:unit,
