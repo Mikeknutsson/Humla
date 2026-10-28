@@ -18,7 +18,7 @@ export async function assignTransportUnit(form:FormData){
   redirect("/transport-styrning/admin?result=invalid");
  const [{data:target},{data:resource}]=await Promise.all([
   db.from("hub_tenant_members").select("user_id").eq("tenant_id",owner.tenant_id).eq("user_id",assignee).eq("status","active").maybeSingle(),
-  db.from("kpi_units").select("id").eq("tenant_id",owner.tenant_id).eq("id",unit).in("origin",["manual","manual_builder"]).eq("enabled",true).maybeSingle(),
+  db.from("hub_objects").select("id").eq("tenant_id",owner.tenant_id).eq("id",unit).eq("object_type","EconomicUnit").maybeSingle(),
  ]);
  if(!target||!resource)redirect("/transport-styrning/admin?result=invalid");
  const {error}=await db.from("hub_transport_leader_units").insert({

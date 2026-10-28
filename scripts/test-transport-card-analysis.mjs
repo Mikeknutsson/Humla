@@ -34,4 +34,5 @@ if(process.argv.includes('--live')) {
  assert.equal(Object.keys(live.groups).length,current.groups.length);
  console.log(JSON.stringify({liveExamples:Object.entries(live.units).filter(([,x])=>x.insights.length).slice(0,3).map(([id,analysis])=>({unit:current.units.find(u=>u.unit_id===id)?.unit_name,analysis})),groups:Object.entries(live.groups).filter(([,a])=>a.insights.length).length},null,2));
 }
+assert.equal(analyzeTransportCard(metrics,input('self',{service_repair:12000}),input('self',{service_repair:9000}),[]).insights.length,0,'moderate deviations stay quiet');
 console.log('PASS: goal status, history, peer exclusion, minimum evidence, missing hours, mixed cost classifications and immutable inputs');

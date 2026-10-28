@@ -63,7 +63,7 @@ export function analyzeTransportCard(
     const evidence: string[] = [];
     let severity = 0;
     for (const [baseline,label] of [[own,'samma period föregående år'],[peer,`medianen för ${costPeers.length} andra enheter i ${current.business_group}`]] as const) {
-      if (baseline != null && current[key] >= 5000 && value-baseline >= 3 && value >= baseline*1.25) {
+      if (baseline != null && current[key] >= 10000 && value-baseline >= 5 && value >= baseline*1.5) {
         evidence.push(`${percent(value)} av intäkterna (${money(current[key])}), jämfört med ${percent(baseline)} ${label}.`);
         severity = Math.max(severity,value-baseline);
       }
@@ -78,7 +78,7 @@ export function analyzeTransportCard(
     const evidence: string[] = [];
     let severity = 0;
     for (const [baseline,label] of [[own,'samma period föregående år'],[peer,`medianen för ${timedPeers.length} andra enheter i ${current.business_group}`]] as const) {
-      if (baseline != null && baseline > 0 && hourly <= baseline*.8) {
+      if (baseline != null && baseline > 0 && hourly <= baseline*.7) {
         evidence.push(`${money(hourly)}/tim mot ${money(baseline)}/tim ${label} (${number.format(current.worked_hours)} TransPA-timmar).`);
         severity = Math.max(severity,(1-hourly/baseline)*100);
       }
