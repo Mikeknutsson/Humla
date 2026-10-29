@@ -1,0 +1,9 @@
+# Stena portal revenue priority
+
+Owner-approved portal Excel amounts supersede matching Workify transport revenue. History uses (Pris + Pris övrigt) × AntalLB, rounded per row. Settled uses Pris SEK directly. Positive price without AntalLB remains unresolved. A known zero price remains zero.
+
+Private file observations retain SHA-256 and row provenance. Only complete files participate. Canonical TransportRevenue objects and hub_identity_keys own journey identity; booking references stay in the adapter. Settled has priority over history for future overlapping bookings. Exact date-valid economic-unit registration mapping is used; unknown registrations go to the configured hired-vehicle unit. No fuzzy registration corrections.
+
+Workify matching is restricted to the two Stena customer names and exact booking references in Littranummer/ArtikelKommentar. Multiple booking references suppress the aggregate Workify row once. Components touching an unresolved portal amount are blocked together. Unmatched Workify remains included. Superseded derived facts are backed up privately; raw imports are never deleted. Repeat projection restores the backed-up baseline before recomputing. Display facts are updated in the same transaction and totals reconciled. Nightly applies the projector before allocation; monthly overhead was recalculated after initial publication. Revenue cutoff includes complete priced Stena source imports.
+
+Validated in production with rollback tests: replay preserves total, duplicate file replay adds zero rows, no portal journey duplication, superseded Workify absent from prepared totals, display equality, canonical fallback, dated vehicle areas, owner permission and anonymous denial. Source rows and workbook financial content are private and deliberately absent from this repository. Payment-forecast ingestion is a separate source path and is not covered by this KPI projector.
