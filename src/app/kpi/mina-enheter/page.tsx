@@ -5,6 +5,7 @@ import {stockholmToday,previousYearDate} from '@/lib/kpi/period';
 import {validTransportDate,type TransportScorecard} from '@/lib/kpi/transport-leader';
 import {TransportBalanceCards} from '@/app/_components/kpi-transport-balance';
 import {buildTransportCardAnalyses} from '@/lib/hub/transport-card-analysis';
+import {ForemanAreaKpis,type AreaKpis} from '@/app/_components/foreman-area-kpis';
 import {ForemanResultTrend} from '@/app/_components/foreman-result-trend';
 import type {ForemanTrend} from '@/lib/kpi/foreman-trend';
 import {ForemanPeriodPicker} from '@/app/_components/foreman-period-picker';
@@ -57,6 +58,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>Försök igen. Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
  {trendAvailable?<ForemanResultTrend key={target+from+to+report.generation} trend={trend!}/>:<section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>}
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
+ <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
  <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups/>
  <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Klicka på en enhet för underlag. Inga uppgifter kan ändras i denna vy.</p>
  </>}
