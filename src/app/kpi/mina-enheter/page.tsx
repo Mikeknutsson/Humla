@@ -5,6 +5,8 @@ import {stockholmToday,previousYearDate} from '@/lib/kpi/period';
 import {validTransportDate,type TransportScorecard} from '@/lib/kpi/transport-leader';
 import {TransportBalanceCards} from '@/app/_components/kpi-transport-balance';
 import {buildTransportCardAnalyses} from '@/lib/hub/transport-card-analysis';
+import {ForemanResultTrend} from '@/app/_components/foreman-result-trend';
+import type {ForemanTrend} from '@/lib/kpi/foreman-trend';
 import {ForemanPeriodPicker} from '@/app/_components/foreman-period-picker';
 import {foremanFiscalYear,resolveForemanPeriod,foremanPeriodQuery} from '@/lib/kpi/foreman-period';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
@@ -38,11 +40,14 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  if(!validTransportDate(from)||!validTransportDate(to)||from>to||Date.parse(to)-Date.parse(from)>366*86400000||!/^[0-9a-f-]{36}$/i.test(target))return <main className="content"><p>Ogiltigt urval.</p><Link href="/kpi/mina-enheter">Återställ</Link></main>;
  const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:target};
  if(owner&&!profileRows.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
- const [current,old]=await Promise.all([
+ const [current,old,trendResult]=await Promise.all([
   db.rpc('hub_transport_leader_scorecard_v4',args),
   db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to)}),
+  db.rpc('hub_foreman_result_trend_v1',args),
  ]);
  const report=current.data as TransportScorecard|null,prior=old.data as TransportScorecard|null;
+ const trend=trendResult.data as ForemanTrend|null;
+ const trendAvailable=!trendResult.error&&trend&&report&&trend.generation===report.generation&&trend.from===from&&trend.to===to;
  const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
  const base=new URLSearchParams({from,to,user_id:target}).toString();
  const view=<div className="content">{profiles}
@@ -50,7 +55,8 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> Du ser profilens avgränsade underlag. <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
  {controls}</header>
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>Försök igen. Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
- <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}</section>
+ {trendAvailable?<ForemanResultTrend key={target+from+to+report.generation} trend={trend!}/>:<section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>}
+ <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
  <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups/>
  <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Klicka på en enhet för underlag. Inga uppgifter kan ändras i denna vy.</p>
  </>}
