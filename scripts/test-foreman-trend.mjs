@@ -8,7 +8,7 @@ assert.equal(plot.showTarget,true);
 assert.ok(plot.y(-100)>plot.zero,'negative results must plot below zero');
 assert.ok(plot.y(50)<plot.zero,'positive results must plot above zero');
 assert.ok(plot.x('2026-10-29')<856,'do not extrapolate actuals into missing future days');
-assert.ok(plot.target.startsWith('M64,'),'target starts at the zero baseline');
+assert.ok(plot.target.startsWith('M64.00,'+plot.zero.toFixed(2)),'target starts at the zero baseline');
 assert.ok(plot.min<-100&&plot.max>50,'both paths and zero remain within the scale');
 assert.ok(!/NaN|Infinity/.test(plot.actual+plot.target+plot.area));
 assert.equal(input.points[0].result,-100,'presentation must not mutate backend data');
