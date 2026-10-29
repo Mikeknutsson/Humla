@@ -1,0 +1,7 @@
+# Shared crane work time for saw follow-up
+
+Owner approved connecting saw work time with crane-truck time. The provider follows published saw activity's original canonical truck unit and exact saw-order date within authorized unit/group/month scope. It uses existing registered TransPA time and approved NEXT project time, with the existing person/day overlap subtraction. Full truck work on saw-order days is a shared resource-time basis, not an asserted isolated saw-operation duration. Other work on the same day can be included. Missing actual time is not replaced with billed hours.
+
+Shared TransPA reports enter the same ID-grouped native relation as directly visible reports, so each report is counted once in an encompassing transport scope. Shared NEXT entries are added only if their original source row is not already directly visible. Saw-only views attribute shared time to the canonical saw unit; combined views retain directly visible truck time. Financial facts, payroll costs and revenue allocations are unchanged. The latest available combined time date is used for shared-crane KPI scope so older historical NEXT time does not truncate later TransPA coverage.
+
+Verified active saw KPI availability, canonical unit linkage, own supervisor access, denial of cross-profile access, and unchanged financial totals. Shared basis is returned in time_sources.shared_crane_time. No personal payroll values are added to reports.
