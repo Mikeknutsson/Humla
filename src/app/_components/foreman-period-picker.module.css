@@ -1,0 +1,14 @@
+.picker{margin:14px 0 0;max-width:780px;color:#475569;font-size:.8rem}
+.top{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.year{display:flex;align-items:center;gap:8px;font-size:.75rem}
+.year select{width:auto;min-height:30px;margin:0;padding:4px 26px 4px 8px;font-size:.8rem;border:1px solid #dce2e8;border-radius:7px;background:#fff}
+.shortcuts,.months{display:flex;flex-wrap:wrap;gap:4px}
+.picker button{min-height:30px;padding:5px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:#475569;font:inherit;font-size:.8rem;cursor:pointer}
+.picker button:hover:not(:disabled){background:#f1f5f9}
+.picker button[aria-pressed=true]{background:#fff8d8;border-color:#e1ad27;color:#0f172a;font-weight:600}
+.picker button:disabled{opacity:.45;cursor:default}
+.picker button:focus-visible,.year select:focus-visible{outline:2px solid #b8860b;outline-offset:2px}
+.months{margin-top:8px;border-top:1px solid #f1f5f9;padding-top:6px}
+.months button{padding:4px 8px;min-width:38px}
+.caption{margin:7px 0 0;font-size:.73rem;line-height:1.5;color:#64748b}
+@media(max-width:520px){.top{gap:8px}.shortcuts{gap:2px}.picker button{padding:5px 8px}.months{gap:2px}}
