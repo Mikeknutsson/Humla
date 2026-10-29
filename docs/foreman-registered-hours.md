@@ -1,0 +1,9 @@
+# Foreman area time KPIs
+
+Area time cards consume verified published TransPA and approved NEXT project time. A non-time personnel expense does not invalidate recorded work hours. Revenue-only material and hired units do not suppress all available area hours. TransPA report IDs are counted once and only if their canonical unit assignment is unambiguous. Approved NEXT uses the existing source-occurrence deduplication, dated canonical project/unit resolution, absence/OB/repair exclusions, and person/day subtraction of TransPA overlap. No conversion from cost to hours and no guessed driver assignments.
+
+The private provider checks the same active tenant membership, profile preview permissions and bounded dates as financial scope. NEXT rows are scoped to dated unit responsibilities or the profile's cost-center authorization; user/unit/group/month filters apply to both time sources. Consumer receives only aggregate hours and coverage, with no employee identities. Private provider has no client execution grants.
+
+Time ratios use revenue, cost including overhead, and result only through the matching time cutoff. When both sources contribute, the common cutoff is the earlier source date. Selected months also apply. The compact note shows the actual time KPI period and source totals; financial summary remains the selected report period. Missing or partial coverage is explicit. No time is fabricated for profiles with no work-time source. Saw billing hours are not substituted for worked hours.
+
+SQL tests validate approved NEXT totals, TransPA presence despite other personnel costs, month filters, missing October NEXT, matched finance/time period, ratio arithmetic, owner preview, supervisor own access and cross-profile/anonymous denial. No financial totals or allocations are changed by these report functions.
