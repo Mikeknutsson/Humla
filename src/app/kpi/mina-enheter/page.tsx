@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {unitDailyRevenueTargets,weekdays} from '@/lib/hub/daily-revenue-target';
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
 import {stockholmToday,previousYearDate} from '@/lib/kpi/period';
@@ -42,12 +43,18 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  if(!validTransportDate(from)||!validTransportDate(to)||from>to||Date.parse(to)-Date.parse(from)>366*86400000||!/^[0-9a-f-]{36}$/i.test(target))return <main className="content"><p>Ogiltigt urval.</p><Link href="/kpi/mina-enheter">Återställ</Link></main>;
  const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:target};
  if(owner&&!profileRows.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
- const [current,old,trendResult]=await Promise.all([
+ const todayText=`${today.year}-${String(today.month).padStart(2,'0')}-${String(today.day).padStart(2,'0')}`;
+ const historyTo=to<todayText?to:todayText;
+ const [current,old,trendResult,history]=await Promise.all([
   db.rpc('hub_transport_leader_scorecard_v4',args),
   db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to)}),
   db.rpc('hub_foreman_result_trend_v1',args),
+  to>todayText&&from<=historyTo?db.rpc('hub_transport_leader_scorecard_v4',{...args,p_to:historyTo}):Promise.resolve(null),
  ]);
  const report=current.data as TransportScorecard|null,prior=old.data as TransportScorecard|null;
+ const dailyReport=(from>historyTo||history?.error||(history?.data&&history.data.generation!==report?.generation)?null:history?history.data:current.error?null:current.data) as TransportScorecard|null;
+ const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
+ const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,days:weekdays(dailyReport.from,dailyReport.to)}:undefined;
  const trend=trendResult.data as ForemanTrend|null;
  const trendAvailable=!trendResult.error&&trend&&report&&trend.generation===report.generation&&trend.from===from&&trend.to===to;
  const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
@@ -61,7 +68,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
  <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
- <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode/>
+ <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>
  <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
  </>}
  </div>;

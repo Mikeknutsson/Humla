@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {dailyRevenueTarget,weekdays,unitDailyRevenueTargets} from '../src/lib/hub/daily-revenue-target.ts';
+const target=dailyRevenueTarget(180000,160000,20,20);
+assert.equal(target.required,10000);assert.equal(target.actual,9000);assert.equal(target.gap,-1000);
+assert.equal(dailyRevenueTarget(0,160000,20,20).required,10000);
+assert.equal(dailyRevenueTarget(100,0,20,1).required,0);
+for(const margin of [null,100,110,NaN])assert.equal(dailyRevenueTarget(10,10,margin,1).required,null);
+assert.equal(dailyRevenueTarget(100,-10,20,1).required,null);
+assert.equal(dailyRevenueTarget(100,10,20,0).actual,null);
+assert.equal(weekdays('2026-10-01','2026-10-30'),22);
+assert.equal(weekdays('2026-10-31','2026-11-01'),0);
+assert.equal(weekdays('2024-02-29','2024-02-29'),1);
+assert.equal(weekdays('2026-10-30','2026-10-01'),0);
+const r={from:'2026-10-01',to:'2026-10-30',units:[{unit_id:'a',revenue:0,cost:8800,target_margin_percent:20,missing_targets:0},{unit_id:'b',revenue:500,cost:200,target_margin_percent:20,missing_targets:1}]};
+assert.equal(unitDailyRevenueTargets(r).a.required,500);
+assert.equal(unitDailyRevenueTargets(r).b.required,null);
+console.log('PASS: margin inversion, credits, missing goals, zero revenue, weekdays, leap day and unit isolation');
