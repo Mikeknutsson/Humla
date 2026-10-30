@@ -61,8 +61,8 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
  <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
- <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups/>
- <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Klicka på en enhet för underlag. Inga uppgifter kan ändras i denna vy.</p>
+ <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode/>
+ <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
  </>}
  </div>;
  return owner?<KpiDetailShell title="Arbetsledarvyer" breadcrumb="Humla Dashboard / Arbetsledarvyer" query={period.toString()}>{view}</KpiDetailShell>:<main>{view}</main>;
