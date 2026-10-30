@@ -3,7 +3,8 @@ export type TransportMetrics = {
  target_margin_percent:number|null; deviation_amount:number|null; deviation_pp:number|null;
  missing_targets:number; rows:number;
 };
-export type TransportUnit = TransportMetrics & {unit_id:string|null;unit_name:string|null};
+export type TransportCostBreakdown = {category:string;amount:number;rows:number};
+export type TransportUnit = TransportMetrics & {unit_id:string|null;unit_name:string|null;cost_breakdown?:TransportCostBreakdown[]};
 export type TransportGroup = TransportMetrics & {business_group:string};
 export type TransportBreakdown = {kind:'revenue'|'cost';category:string;amount:number;rows:number;share_of_revenue:number|null};
 export type TransportAnalysisInput = {unit_id:string;unit_name:string|null;business_group:string;revenue:number;personnel:number;service_repair:number;fuel:number;worked_hours:number|null};
