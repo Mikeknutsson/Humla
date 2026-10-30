@@ -7,7 +7,7 @@ const finite = (value: number | null | undefined): value is number => typeof val
 export function KpiMarginGauge({margin, target, label}: {margin: number | null | undefined; target: number | null | undefined; label: string}) {
   const hasMargin = finite(margin);
   const hasTarget = finite(target);
-  const min = -100, max = 100;
+  const min = -50, max = 50;
   const point = (value: number, radius = 76) => {
     const angle = Math.PI * (1 - (Math.max(min, Math.min(max, value)) - min) / (max - min));
     return {x: 110 + Math.cos(angle) * radius, y: 94 - Math.sin(angle) * radius};
@@ -27,7 +27,7 @@ export function KpiMarginGauge({margin, target, label}: {margin: number | null |
       {hasTarget && target > 0 && <path d={arc(0,target)} fill="none" stroke="#fbbf24" strokeWidth="15"/>}
       {hasTarget && target < max && <path d={arc(Math.max(0,target),max)} fill="none" stroke="#22c55e" strokeWidth="15"/>}
       {hasTarget && <line x1={targetStart.x} y1={targetStart.y} x2={targetEnd.x} y2={targetEnd.y} stroke="#0f172a" strokeWidth="3"><title>{`Mål ${percent.format(target)} %`}</title></line>}
-      <text x="21" y="119" fontSize="11" fill="currentColor">−100 %</text><text x="110" y="9" textAnchor="middle" fontSize="11" fill="currentColor">0</text><text x="199" y="119" textAnchor="end" fontSize="11" fill="currentColor">100 %</text>
+      <text x="21" y="119" fontSize="11" fill="currentColor">−50 %</text><text x="110" y="9" textAnchor="middle" fontSize="11" fill="currentColor">0</text><text x="199" y="119" textAnchor="end" fontSize="11" fill="currentColor">+50 %</text>
       {hasMargin && <><line x1="110" y1="94" x2={needle.x} y2={needle.y} stroke="#0f172a" strokeWidth="3.5" strokeLinecap="round"/><circle cx="110" cy="94" r="6" fill="#0f172a"/></>}
     </svg>
     <strong className={styles.value} style={{color}}>{hasMargin ? `${percent.format(margin)} %` : '–'}</strong>
