@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {unitDailyRevenueTargets,weekdays} from '@/lib/hub/daily-revenue-target';
+import {unitDailyRevenueTargets,productiveDayBasis} from '@/lib/hub/daily-revenue-target';
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
 import {stockholmToday,previousYearDate} from '@/lib/kpi/period';
@@ -54,7 +54,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  const report=current.data as TransportScorecard|null,prior=old.data as TransportScorecard|null;
  const dailyReport=(from>historyTo||history?.error||(history?.data&&history.data.generation!==report?.generation)?null:history?history.data:current.error?null:current.data) as TransportScorecard|null;
  const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
- const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,days:weekdays(dailyReport.from,dailyReport.to)}:undefined;
+ const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
  const trend=trendResult.data as ForemanTrend|null;
  const trendAvailable=!trendResult.error&&trend&&report&&trend.generation===report.generation&&trend.from===from&&trend.to===to;
  const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;

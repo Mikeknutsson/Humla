@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {dailyRevenueTarget,weekdays,unitDailyRevenueTargets} from '../src/lib/hub/daily-revenue-target.ts';
+import {dailyRevenueTarget,weekdays,productiveDayBasis,unitDailyRevenueTargets} from '../src/lib/hub/daily-revenue-target.ts';
 const target=dailyRevenueTarget(180000,160000,20,20);
 assert.equal(target.required,10000);assert.equal(target.actual,9000);assert.equal(target.gap,-1000);
 assert.equal(dailyRevenueTarget(0,160000,20,20).required,10000);
@@ -12,6 +12,17 @@ assert.equal(weekdays('2026-10-31','2026-11-01'),0);
 assert.equal(weekdays('2024-02-29','2024-02-29'),1);
 assert.equal(weekdays('2026-10-30','2026-10-01'),0);
 const r={from:'2026-10-01',to:'2026-10-30',units:[{unit_id:'a',revenue:0,cost:8800,target_margin_percent:20,missing_targets:0},{unit_id:'b',revenue:500,cost:200,target_margin_percent:20,missing_targets:1}]};
-assert.equal(unitDailyRevenueTargets(r).a.required,500);
+assert.ok(Math.abs(unitDailyRevenueTargets(r).a.required-500*251/226)<1e-9);
 assert.equal(unitDailyRevenueTargets(r).b.required,null);
 console.log('PASS: margin inversion, credits, missing goals, zero revenue, weekdays, leap day and unit isolation');
+
+assert.deepEqual(productiveDayBasis('2026-01-01','2026-12-31'),{days:226,workdays:251,vacationDays:25});
+assert.deepEqual(productiveDayBasis('2025-01-01','2025-12-31'),{days:224,workdays:249,vacationDays:25});
+for(const date of ['2026-01-01','2026-01-06','2026-04-03','2026-04-06','2026-05-01','2026-05-14','2026-06-19','2026-12-24','2026-12-25','2026-12-31','2024-03-29','2024-04-01','2024-05-09','2024-06-21'])assert.equal(productiveDayBasis(date,date).days,0,date);
+const october=productiveDayBasis('2026-10-01','2026-10-30');
+assert.equal(october.workdays,22);assert.ok(Math.abs(october.days-22*226/251)<1e-9);
+const fiscal=productiveDayBasis('2025-09-01','2026-08-31');
+const parts=[productiveDayBasis('2025-09-01','2025-12-31'),productiveDayBasis('2026-01-01','2026-08-31')];
+assert.ok(Math.abs(fiscal.days-parts[0].days-parts[1].days)<1e-9);
+assert.equal(productiveDayBasis('2026-10-31','2026-11-01').days,0);
+console.log('PASS: Swedish holidays and eves, 25 days vehicle downtime, prorated months and fiscal-year boundaries');
