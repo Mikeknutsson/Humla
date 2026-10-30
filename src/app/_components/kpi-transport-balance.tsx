@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type {TransportScorecard, TransportMetrics, TransportBreakdown, TransportCardAnalysis} from '@/lib/kpi/transport-leader';
+import type {TransportScorecard, TransportMetrics, TransportBreakdown, TransportCardAnalysis, TransportCostBreakdown} from '@/lib/kpi/transport-leader';
 import {KpiMarginGauge} from './kpi-margin-gauge';
 import styles from './kpi-margin-gauge.module.css';
 
@@ -9,11 +9,15 @@ const money = (n:number|null|undefined) => n == null ? 'Underlag saknas' : curre
 const pct = (n:number|null|undefined) => n == null ? '–' : `${number.format(n)} %`;
 const labels:Record<string,string> = {management:'Arbetsledning',overhead:'Övrig overhead',transport:'Transport',material:'Material / ballast',tipp:'Tippavgifter',tipp_deponi:'Tippavgifter / deponi',other:'Övrigt',unclassified:'Ej klassificerat',personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',depreciation:'Avskrivning',hired:'Inhyrda resurser'};
 
-function BalanceCard({label,href,metrics,previous,analysis}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis}) {
+const costCategories=['personnel','fuel','service_repair','fixed','depreciation','hired','management','overhead','material','tipp_deponi','other','unclassified'];
+const costCategoryOrder=(category:string)=>{const index=costCategories.indexOf(category);return index<0?costCategories.length:index;};
+
+function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foremanMode=false}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis;costBreakdown?:TransportCostBreakdown[];foremanMode?:boolean}) {
  return <article className={styles.card}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
  <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
  <dl className={styles.facts}>
  <dt>Intäkter</dt><dd>{money(metrics.revenue)}</dd><dt>Kostnader</dt><dd>{money(metrics.cost)}</dd>
+ {foremanMode && (costBreakdown == null ? <><dt>Kostnadsfördelning</dt><dd>Underlag saknas</dd></> : [...costBreakdown].sort((a,b)=>costCategoryOrder(a.category)-costCategoryOrder(b.category)||a.category.localeCompare(b.category,'sv')).map(row=><div key={row.category} className={styles.costRow}><dt>{labels[row.category]??row.category}</dt><dd>{money(row.amount)}</dd></div>))}
  <dt>Resultat</dt><dd><strong>{money(metrics.result)}</strong></dd>
  <dt>Målmarginal</dt><dd>{metrics.target_margin_percent==null?'Mål saknas':pct(metrics.target_margin_percent)}</dd>
  <dt>Avvikelse mot mål</dt><dd>{metrics.deviation_pp==null?'Mål saknas':`${number.format(metrics.deviation_pp)} pp`}</dd>
@@ -24,13 +28,13 @@ function BalanceCard({label,href,metrics,previous,analysis}:{label:string;href?:
  <strong>{analysis.insights[0].title}</strong>
  <details><summary>Visa jämförelse</summary>{analysis.insights[0].evidence.map(e=><p key={e}>{e}</p>)}</details>
  </aside>}
- <details className={styles.explanation}><summary>Om siffrorna</summary>
+ {!foremanMode&&<details className={styles.explanation}><summary>Om siffrorna</summary>
  <p>Resultat = intäkter minus kostnader, inklusive fördelad overhead. Marginal = resultatets andel av intäkterna. Avvikelse mot mål anges i procentenheter. Fg. år avser samma period föregående år.</p>
  <p>Endast tydliga avvikelser visas. Jämförelsen gäller egen historik eller minst två andra enheter i samma verksamhetsområde. Timanalys kräver tillförlitlig TransPA-tid. Engångskostnader och olika uppdrag kan påverka jämförelsen.</p>
- </details></article>;
+ </details>}</article>;
 }
 
-export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean}) {
+export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false,foremanMode=false}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean;foremanMode?:boolean}) {
  const link = (key:string,value:string) => {const p=new URLSearchParams(base);p.set(key,value);return '/kpi/transportledare?'+p;};
  const all=new URLSearchParams(base);all.delete('group');
  return <>
@@ -40,7 +44,7 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
  <p>Period: {report.from}–{report.to}. Klicka på ett verksamhetsområde eller en enhet för att se underlaget. Förklaringar finns i varje ruta under ”Om siffrorna”.</p>
  <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} analysis={analyses?.groups[g.business_group]} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
  </section>}
- <section className="panel"><h2>Enheternas balans</h2><div className={styles.cards}>{report.units.map(u=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} href={u.unit_id?link('unit',u.unit_id):undefined}/>)}</div></section>
+ <section className="panel"><h2>Enheternas balans</h2><div className={styles.cards}>{report.units.map(u=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} costBreakdown={u.cost_breakdown} foremanMode={foremanMode} href={!foremanMode&&u.unit_id?link('unit',u.unit_id):undefined}/>)}</div></section>
  </>;
 }
 
