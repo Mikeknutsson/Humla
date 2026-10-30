@@ -25,3 +25,7 @@
 .breakdowns th, .breakdowns td { font-size:.85rem; }
 @media(max-width:900px) { .breakdowns { grid-template-columns:1fr; } }
 @media print { .card { break-inside:avoid; } .gauge { print-color-adjust:exact; } }
+
+.costRow { display:contents; }
+.costRow dt { padding-left:10px; font-size:.75rem; }
+.costRow dd { font-size:.75rem; color:#475569; }
