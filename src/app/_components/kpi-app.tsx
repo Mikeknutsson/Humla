@@ -369,6 +369,35 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
         <section className="overview-hero"><div><span className="section-kicker">Verksamhetsår {overviewPeriod.label}</span><h2>Valda månader · {overviewPeriod.label}</h2><p>Jämförelsen använder motsvarande månader föregående verksamhetsår.</p></div><span className="asof">Vald rapportperiod</span></section>
         <section className="overview-pulse"><Link prefetch={false} href={kpiHref("kpi")} onClick={switchFinancialView}><span>Omsättning vald period</span><strong>{currency.format(currentRevenue)}</strong><small>{revenueChange == null ? "Jämförelse saknas" : `${revenueChange >= 0 ? "+" : ""}${number.format(revenueChange)} % mot fg. år`}</small></Link><Link prefetch={false} href={kpiHref("kpi")} onClick={switchFinancialView}><span>Resultatmarginal</span><strong>{resultMargin == null ? "–" : `${number.format(resultMargin)} %`}</strong><small>{previousMargin == null ? "Fg. år saknas" : `Fg. år ${number.format(previousMargin)} %`}</small></Link><Link prefetch={false} href={kpiHref("review")}><span>Granska underlag</span><strong>Öppna</strong><small>Avvikelser och fördelning</small></Link><Link prefetch={false} href={kpiHref("review")}><span>Rader i beräkningen</span><strong>{number.format(validRows)}</strong><small>Importerade och beräknade rader</small></Link></section>
         <section className="metrics-grid">{metricCards.map(({label,value,icon:Icon,tone,detail})=><Link prefetch={false} className="metric-card overview-card" href={label==="Närvaro chaufförer"?`/kpi?${periodQuery}#narvaro`:label==="Genomsnittlig faktureringstid"?`/kpi/fakturering?${periodQuery}&invoice_customer=external`:label==="Faktureringstid · Elleholms Maskin"?`/kpi/fakturering?${periodQuery}&invoice_customer=internal`:analysisHref(periodQuery,label==="Kostnader"?{kind:"cost"}:label==="Omsättning"?{kind:"revenue"}:{})} key={label}><div className={`metric-icon ${tone}`}><Icon size={20}/></div><span>{label}</span><strong>{value}</strong><small>{detail??"Beräknat i Humla Hub"}</small></Link>)}</section><section className="panel"><div className="panel-head"><div><span className="section-kicker">Interna projekt · Elleholms Maskin AB</span><h2>Interna intäkter</h2></div></div><section className="metrics-grid">{[{label:'Internt · totalt',value:internal?.total,share:internal?.total_percent,category:undefined},{label:'Internt · grusmaterial',value:internal?.material,share:internal?.material_percent,category:'material'},{label:'Internt · deponi / tippavgifter',value:internal?.tipp_deponi,share:internal?.tipp_deponi_percent,category:'tipp_deponi'}].map(({label,value,share,category})=><Link prefetch={false} className="metric-card overview-card" href={internalHref(category)} key={label}><div className="metric-icon yellow"><Truck size={20}/></div><span>{label}</span><strong>{value==null?'–':currency.format(value)}</strong><small>{percentDisplay(share)} av omsättningen i valt urval</small></Link>)}</section><p>{internal?.basis??'Inväntar internt underlag från Hubben.'}</p>{!!internal?.review_rows&&<p>{internal.review_rows} interna rader om {currency.format(internal.review_amount)} behöver granskas och ingår inte i kortens belopp. <Link prefetch={false} href={internalHref()}>Öppna underlaget</Link></p>}</section>
+        <section className="panel" aria-label="Jämförelse externa och interna körningar">
+          <div className="panel-head"><div><span className="section-kicker">Avdelningens balans · samma period och urval</span><h2>Exklusive / inklusive interna körningar</h2></div></div>
+          {(() => {
+            const totalRevenue = currentRevenue;
+            const totalCosts = numeric(metrics.total_cost);
+            const internalRevenue = internal?.total;
+            const ready = internalRevenue != null && Number.isFinite(internalRevenue) && !internal?.review_rows;
+            const tracks = [
+              {title:"Exklusive interna körningar",revenue:ready?totalRevenue-internalRevenue!:null,description:"Externa intäkter minus redovisade kostnader (preliminärt: interna kostnader är ännu inte separerade)."},
+              {title:"Inklusive interna körningar",revenue:totalRevenue,description:"Samtliga intäkter enligt KPI. Interna kostnadsöverföringar behöver fortfarande verifieras."}
+            ];
+            return <div style={{display:"grid",gap:16}}>{tracks.map((track,index)=>{
+              const balance=track.revenue==null?null:track.revenue-totalCosts;
+              const positive=balance!=null&&balance>=0;
+              const span=balance==null?50:Math.max(0,Math.min(100,50+50*balance/Math.max(Math.abs(track.revenue??0),totalCosts,1)));
+              return <div key={track.title} style={{padding:16,border:"1px solid var(--border, #ddd)",borderRadius:12}}>
+                <strong style={{display:"block",marginBottom:8}}>{index+1}. {track.title}</strong>
+                <div style={{fontSize:28,fontWeight:700,color:balance==null?"inherit":positive?"#168448":"#c0392b"}}>{balance==null?"Saknar verifierat underlag":currency.format(balance)}</div>
+                <div style={{position:"relative",height:10,margin:"14px 0",borderRadius:10,background:"linear-gradient(to right, #f2aaaa 0%, #f2aaaa 50%, #a4e6b4 50%, #a4e6b4 100%)"}}>
+                  <span style={{position:"absolute",left:"50%",top:-4,height:18,width:2,background:"#777"}}/>
+                  {balance!=null&&<span style={{position:"absolute",left:`calc(${span}% - 2px)`,top:-4,height:18,width:4,background:"#1c2931",borderRadius:2}}/>}
+                </div>
+                <div style={{display:"flex",gap:24,flexWrap:"wrap"}}><span>Intäkter: <strong>{track.revenue==null?"–":currency.format(track.revenue)}</strong></span><span>Kostnader: <strong>{currency.format(totalCosts)}</strong></span></div>
+                <small style={{display:"block",marginTop:8}}>{track.description}</small>
+              </div>;
+            })}</div>;
+          })()}
+          <p style={{marginTop:12}}>Testvy: ingen av mätarna ska användas som fastställt avdelningsresultat förrän interna kostnadsfördelningar och internintäkternas ingående belopp är avstämda. Interna intäkter i öppna granskningsfall ingår inte i internsummeringen.</p>
+        </section>
         <KpiMonthChart points={overviewMonthly} query={periodQuery}/>
         {costBreakdown}
         {financeBasis}
