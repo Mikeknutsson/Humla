@@ -71,13 +71,18 @@ begin
  weeks as(select d::date week_from,least(d::date+6,p_to) week_to from generate_series(p_from,p_to,interval '7 days') d),
  week_stats as(select w.week_from,w.week_to,count(t.work_date) n,
  coalesce(sum(t.work_hours)filter(where t.vehicle_linked),0)/nullif(sum(t.work_hours),0) share
- from weeks w left join time_rows t on t.work_date between w.week_from and w.week_to group by 1,2)
+ from weeks w left join time_rows t on t.work_date between w.week_from and w.week_to group by 1,2),
+ day_stats as(select d::date date,
+ case when count(t.work_date)=0 then 'unknown' when count(*) filter(where t.report_status is null)>0 then 'unknown' when bool_and(t.report_status in ('approved','submitted')) then 'good' else 'attention' end reporting,
+ case when count(t.work_date)=0 then 'unknown' when bool_and(t.vehicle_linked) then 'good' else 'attention' end vehicle
+ from generate_series(p_from,p_to,interval '1 day') d left join time_rows t on t.work_date=d::date group by d)
  select jsonb_build_object('status','ready','name',(select coalesce(nullif(data->>'display_name',''),data->>'name','Chaufför') from public.hub_objects where id=person and tenant_id=p_tenant),
  'from',p_from,'to',p_to,'latest_work_date',latest,
  'reporting',case when n=0 then 'unknown' when pending>0 then 'attention' when unknown>0 then 'unknown' else 'good' end,
  'vehicle_link',case when n=0 then 'unknown' when share>=0.9 then 'good' when share>=0.5 then 'partial' else 'attention' end,
  'trend',case when hours is null or old_hours is null then 'unknown' when share-old_share>0.05 then 'up' when share-old_share< -0.05 then 'down' else 'steady' end,
  'weeks',(select coalesce(jsonb_agg(jsonb_build_object('from',week_from,'to',week_to,'band',case when n=0 then null when share>=0.9 then 4 when share>=0.75 then 3 when share>=0.5 then 2 else 1 end) order by week_from),'[]') from week_stats),
+ 'days',(select coalesce(jsonb_agg(jsonb_build_object('date',date,'reporting',reporting,'vehicle',vehicle) order by date desc),'[]') from day_stats),
  'vehicle_economy','unknown','fuel','unknown') into output from ratios;
  return output;
 end $$;
