@@ -83,7 +83,7 @@ begin
  'trend',case when hours is null or old_hours is null then 'unknown' when share-old_share>0.05 then 'up' when share-old_share< -0.05 then 'down' else 'steady' end,
  'weeks',(select coalesce(jsonb_agg(jsonb_build_object('from',week_from,'to',week_to,'band',case when n=0 then null when share>=0.9 then 4 when share>=0.75 then 3 when share>=0.5 then 2 else 1 end) order by week_from),'[]') from week_stats),
  'days',(select coalesce(jsonb_agg(jsonb_build_object('date',date,'reporting',reporting,'vehicle',vehicle) order by date desc),'[]') from day_stats),
- 'vehicle_economy','unknown','fuel','unknown') into output from ratios;
+ 'vehicle_context',private.hub_driver_vehicle_context_v1(p_tenant,person,p_from,p_to),'vehicle_economy','unknown','fuel','unknown') into output from ratios;
  return output;
 end $$;
 revoke all on function private.hub_driver_directory_v1(uuid) from public,anon;
