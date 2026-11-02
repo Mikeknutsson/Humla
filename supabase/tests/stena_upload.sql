@@ -11,9 +11,14 @@ do $$declare t uuid:=current_setting('test.stena_tenant')::uuid;r jsonb;rows jso
  if not (r->>'imported')::boolean then raise exception 'Not imported';end if;
  r:=public.hub_stena_upload_v1(t,h,'test.xlsx','settled',rows,'dGVzdA==','{}',true);
  if not (r->>'duplicate')::boolean then raise exception 'Duplicate not blocked';end if;
+ rows:=jsonb_set(rows,'{0,price}','100'::jsonb);
+ r:=public.hub_stena_upload_v1(t,h,'test.xlsx','history',rows,'dGVzdA==','{}',true);
+ if not (r->>'imported')::boolean then raise exception 'History sheet in the same workbook was blocked';end if;
+ r:=public.hub_stena_upload_v1(t,h,'test.xlsx','history',rows,'dGVzdA==','{}',true);
+ if not (r->>'duplicate')::boolean then raise exception 'Repeated history was not blocked';end if;
  perform set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
  begin perform public.hub_stena_upload_v1(t,h,'test.xlsx','settled',rows,'dGVzdA==','{}',false);raise exception 'Unauthorized import allowed';exception when insufficient_privilege then null;end;
 end $$;
 reset role;
-select 'PASS: preview amounts, atomic file ingestion, repeat-file protection and authorization; all changes rolled back' result;
+select 'PASS: preview amounts, atomic file ingestion, repeat-file protection, both source types in one workbook and authorization; all changes rolled back' result;
 rollback;

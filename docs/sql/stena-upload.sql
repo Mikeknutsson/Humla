@@ -7,7 +7,7 @@ alter table private.hub_stena_upload_originals_v1 enable row level security;
 revoke all on private.hub_stena_upload_originals_v1 from public,anon,authenticated;
 create or replace function private.hub_stena_upload_v1(p_tenant uuid,p_hash text,p_name text,p_kind text,p_rows jsonb,p_original text,p_mapping jsonb,p_commit boolean default false)
 returns jsonb language plpgsql security definer set search_path='' set statement_timeout='60s' as $$
-declare result jsonb;n int;existing private.hub_stena_files_v1;i int;part jsonb;
+declare source_hash text:=p_hash;result jsonb;n int;existing private.hub_stena_files_v1;i int;part jsonb;
 begin
  if auth.uid() is null or not public.hub_has_permission(p_tenant,'kpi.manage') then raise exception 'Access denied' using errcode='42501';end if;
  if p_kind not in ('history','settled') or p_kind is null or p_hash !~ '^[a-f0-9]{64}$' or p_hash is null or jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows) not between 1 and 20000 then raise exception 'Invalid file';end if;
@@ -18,6 +18,12 @@ begin
  if not p_commit then return result;end if;
  if length(p_original)>4500000 or p_original is null or p_original='' or length(p_name) not between 1 and 200 then raise exception 'Original file missing or too large';end if;
  if encode(extensions.digest(decode(p_original,'base64'),'sha256'),'hex')<>p_hash then raise exception 'Original hash mismatch';end if;
+ -- One workbook can contain both Historik and Avräknade. Keep source-specific
+ -- import identities while verifying and preserving the original byte hash.
+ if exists(select 1 from private.hub_stena_files_v1 where tenant_id=p_tenant and file_hash=p_hash and source_kind=p_kind and complete)then
+  return result||jsonb_build_object('duplicate',true,'imported',false);
+ end if;
+ p_hash:=encode(extensions.digest(p_hash||':'||p_kind,'sha256'),'hex');
  perform pg_advisory_xact_lock(hashtextextended('stena-import:'||p_tenant::text,0));
  select * into existing from private.hub_stena_files_v1 where tenant_id=p_tenant and file_hash=p_hash;
  if found then
@@ -25,7 +31,7 @@ begin
   raise exception 'File has an incomplete prior import; review before continuing';
  end if;
  insert into private.hub_stena_files_v1(tenant_id,file_hash,file_name,source_kind,expected_rows) values(p_tenant,p_hash,p_name,p_kind,jsonb_array_length(p_rows));
- insert into private.hub_stena_upload_originals_v1(tenant_id,file_hash,original_base64,uploaded_by,mapping)values(p_tenant,p_hash,p_original,auth.uid(),p_mapping);
+ insert into private.hub_stena_upload_originals_v1(tenant_id,file_hash,original_base64,uploaded_by,mapping)values(p_tenant,p_hash,p_original,auth.uid(),coalesce(p_mapping,'{}'::jsonb)||jsonb_build_object('original_sha256',source_hash));
  for i in 0..((jsonb_array_length(p_rows)-1)/500) loop
   select jsonb_agg(value order by ordinal) into part from jsonb_array_elements(p_rows)with ordinality a(value,ordinal)where ordinal>i*500 and ordinal<=(i+1)*500;
   perform private.hub_stena_ingest_v1(p_tenant,p_hash,part);
