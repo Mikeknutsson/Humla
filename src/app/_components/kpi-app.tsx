@@ -1,4 +1,5 @@
 "use client";
+import {requestImport,ImportConnectionError} from "@/lib/kpi/import-request";
 import {useKpiInternalSummary} from './use-kpi-internal-summary';
 import {InternalYearChange,useInternalYearComparison} from './internal-year-change';
 import {KpiOverhead} from './kpi-overhead';
@@ -177,7 +178,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
   const [preview, setPreview] = useState<Preview | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: "error" | "success"; text: string; reconnect?:boolean } | null>(null);
 
   useEffect(() => { if(view==='internal')return; localStorage.setItem("humla:kpi:period", JSON.stringify({ from, to })); document.cookie = `humla_kpi_from=${from}; Path=/; Max-Age=31536000; SameSite=Lax`; document.cookie = `humla_kpi_to=${to}; Path=/; Max-Age=31536000; SameSite=Lax`; }, [from, to, view]);
   const scopedOperationsUnavailable = Boolean(dashboard.scoped_operational_unavailable);
@@ -292,9 +293,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
     body.set("file", file);
     body.set("dataKind", automatic ? "auto" : dataKind);
     try {
-      const response = await fetch("/api/kpi/parse", { method: "POST", body, signal: AbortSignal.timeout(60_000) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Filen kunde inte analyseras.");
+      const result = await requestImport("/api/kpi/parse",body,{readOnly:true,timeout:60000});
       if(result.detectedSource==='stena'){setStenaFile(file);setStenaImport(true);setPreview(null);setMessage(null);return;}
       setStenaImport(false);
       setStenaFile(null);
@@ -308,7 +307,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
         setMessage({ type: "error", text: "Humla kunde inte avgöra datatypen säkert. Välj rätt datatyp för filen; oklara rader stoppar inte övriga rader." });
       }
     } catch (error) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Filen kunde inte analyseras." });
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Filen kunde inte analyseras.",reconnect:error instanceof ImportConnectionError&&error.reconnect });
     } finally {
       setBusy(false);
     }
@@ -323,9 +322,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
     body.set("dataKind", dataKind);
     body.set("mapping", JSON.stringify({ ...mapping, __vehicle_rules: vehicleRules }));
     try {
-      const response = await fetch("/api/kpi/import", { method: "POST", body, signal: AbortSignal.timeout(120_000) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Importen misslyckades.");
+      const result = await requestImport("/api/kpi/import",body,{timeout:120000});
       const importCounts = typeof result.duplicateRowsSkipped === 'number'
         ? `${result.insertedRows} nya rader sparades · ${result.duplicateRowsSkipped} redan importerade rader hoppades över · ${result.ignoredZeroRows} nollrader ignorerades. ${result.invalidRows} nya rader behöver granskas.`
         : `${result.validRows} giltiga och ${result.invalidRows} rader för granskning sparades.`;
@@ -337,7 +334,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       setVehicleRules("");
       setKindConfirmed(false);
     } catch (error) {
-      setMessage({ type: "error", text: error instanceof Error && error.name === "TimeoutError" ? "Svaret dröjde. Kontrollera Senaste importer innan du försöker igen; servern kan fortfarande ha sparat filen." : error instanceof Error ? error.message : "Importen misslyckades." });
+      setMessage({ type: "error", reconnect:error instanceof ImportConnectionError&&error.reconnect,text: error instanceof Error && error.name === "TimeoutError" ? "Svaret dröjde. Kontrollera Senaste importer innan du försöker igen; servern kan fortfarande ha sparat filen." : error instanceof Error ? error.message : "Importen misslyckades." });
     } finally {
       setBusy(false);
     }
@@ -437,7 +434,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
           {file&&<section className="panel"><h2>{preview?`Identifierat: ${selectedDefinition.label}`:'Kontrollera underlagstyp'}</h2><p>{file.name}{preview?` · ${preview.totalRows} rader`:''}</p><button className="secondary" disabled={busy} onClick={()=>void analyse()}>Läs om filen</button></section>}
           {preview && <section className="panel"><h2>Fordonskopplingar för denna import</h2><p>Koppla enhetsnummer eller projektnummer till regnummer. En regel per rad: <code>Kolumnnamn;exakt värde;regnummer</code>. Reglerna gäller endast denna import och sparas med dess underlag. Projekt som avser flera fordon ska inte kopplas till ett enda fordon.</p><textarea disabled={busy} aria-label="Fordonskopplingar" rows={6} style={{ width: "100%", fontFamily: "monospace" }} value={vehicleRules} onChange={(event) => setVehicleRules(event.target.value)} placeholder="Använd ett kolumnnamn från filen;enhetsnummer;regnummer"/><p>Kontrollerade svenska regnummer stöds. Andra beteckningar kräver granskning. Detta verifierar inte permanent Humla Object ID.</p>{batches.some((batch) => batch.column_mapping?.__vehicle_rules) && <label>Återanvänd från tidigare import <select defaultValue="" onChange={(event) => { const previous = batches.find((batch) => batch.id === event.target.value); if (previous) setVehicleRules(previous.column_mapping?.__vehicle_rules ?? ""); }}><option value="">Välj underlag och kontrollera giltigheten</option>{batches.filter((batch) => batch.column_mapping?.__vehicle_rules).map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>}{rulePreview.error && <p role="alert">{rulePreview.error}</p>}<div className="table-wrap"><table><thead><tr><th>Fordonsvärde i fil</th><th>Regnummer efter koppling</th><th>Kontroll (första 12 rader)</th></tr></thead><tbody>{rulePreview.rows.map((row, index) => <tr key={index}><td>{row.raw || "–"}</td><td>{row.registration || "Ej kopplad"}</td><td>{row.error ?? (row.registration ? "Entydig koppling" : "Ingen fordonsuppgift")}</td></tr>)}</tbody></table></div></section>}
           {preview && <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 3</span><h2>Kontrollera kolumnmappningen</h2></div><span className="row-count">{preview.totalRows} rader hittades</span></div><div className="mapping-grid">{selectedDefinition.fields.map((field) => <label key={field.key}><span>{field.label}{field.required && <b>*</b>}</span><select value={mapping[field.key] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Inte mappad</option>{preview.headers.map((header) => <option value={header} key={header}>{header}</option>)}</select></label>)}</div><div className="preview-table"><table><thead><tr>{preview.headers.slice(0,8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.rows.slice(0,6).map((row, index) => <tr key={index}>{preview.headers.slice(0,8).map((header) => <td key={header}>{row[header] || "–"}</td>)}</tr>)}</tbody></table></div><div className="import-confirm"><div><ShieldCheck size={19}/><p><strong>Fail-closed import</strong><span>Ogiltiga eller osäkert mappade rader påverkar inte nyckeltalen.</span></p></div><button className="primary" disabled={!requiredComplete || !kindConfirmed || !!rulePreview.error || busy} onClick={importFile}>{busy ? "Importerar…" : "Importera och spara"}</button></div></section>}
-          {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}</div>}
+          {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}{message.reconnect&&<a className="secondary" href="/kpi?view=import" target="_blank" rel="noopener noreferrer">Återanslut i ny flik</a>}</div>}
           </>}
         </>}
       </div>}

@@ -3,6 +3,8 @@ import {createClient} from '@/lib/supabase/server';
 import {stenaWorkbook,normalizeStena,detectStenaWorkbook,suggestStenaMapping} from '@/lib/hub/stena-import';
 export const runtime='nodejs';export const maxDuration=120;
 export async function POST(request:Request){
+ const requestId=request.headers.get('x-humla-import-request');
+ console.info('[import-request]',{route:new URL(request.url).pathname,requestId:requestId&&/^[a-f0-9-]{36}$/i.test(requestId)?requestId:null});
  if(request.headers.get('origin')!==new URL(request.url).origin)return Response.json({error:'Ogiltigt ursprung'},{status:403});
  const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return Response.json({error:'Logga in först'},{status:401});
  const {data:member}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').maybeSingle();

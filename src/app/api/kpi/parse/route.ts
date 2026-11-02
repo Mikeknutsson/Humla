@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+ const requestId=request.headers.get('x-humla-import-request');
+ console.info('[import-request]',{route:new URL(request.url).pathname,requestId:requestId&&/^[a-f0-9-]{36}$/i.test(requestId)?requestId:null});
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "Inloggning krävs." }, { status: 401 });
