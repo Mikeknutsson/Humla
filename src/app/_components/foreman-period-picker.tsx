@@ -8,14 +8,15 @@ import styles from './foreman-period-picker.module.css';
 export function ForemanPeriodPicker({period,userId,cutoffError=false,pathname='/kpi/mina-enheter',showRevenueShortcut=true}:{period:ForemanPeriod;userId?:string|null;cutoffError?:boolean;pathname?:string;showRevenueShortcut?:boolean}) {
  const router=useRouter(),[pending,start]=useTransition();
  function choose(mode:ForemanPeriod['mode'],month=period.month,year=period.fiscalYear){
-  const next={...period,mode:mode==='ytd'&&year>period.currentFiscalYear?'year' as const:mode,month,fiscalYear:year};
+  const next={...period,months:mode==='months'?period.months:[],mode:mode==='ytd'&&year>period.currentFiscalYear?'year' as const:mode,month,fiscalYear:year};
   start(()=>router.replace(pathname+'?'+foremanPeriodQuery(next,userId),{scroll:false}));
  }
+ function toggleMonth(m:number){const months=period.mode==='months'?period.months:period.mode==='month'?[period.month]:[];const nextMonths=months.includes(m)?months.filter(x=>x!==m):[...months,m].sort((a,b)=>((a+3)%12)-((b+3)%12));if(!nextMonths.length)return;start(()=>router.replace(pathname+'?'+foremanPeriodQuery({...period,mode:'months',months:nextMonths},userId),{scroll:false}));}
  const years=Array.from(new Set([period.fiscalYear,...Array.from({length:5},(_,i)=>period.currentFiscalYear-i)])).sort((a,b)=>b-a);
  return <div className={styles.picker} aria-label="Period" aria-busy={pending}>
  <div className={styles.top}><label className={styles.year}>Verksamhetsår<select aria-label="Verksamhetsår" value={period.fiscalYear} disabled={pending} onChange={e=>choose(period.mode,period.month,Number(e.target.value))}>{years.map(y=><option key={y} value={y}>{y}/{y+1}</option>)}</select></label>
  <div className={styles.shortcuts}>{([['ytd','YTD'],['revenue','Intäkter fram till'],['year','Helår']]as const).filter(([mode])=>showRevenueShortcut||mode!=='revenue').map(([mode,label])=><button key={mode} type="button" aria-pressed={period.mode===mode} disabled={pending||(mode==='revenue'&&(cutoffError||!period.revenueThrough))} title={mode==='revenue'?'Intäkter och kostnader till senaste datum med giltiga importerade intäkter':mode==='ytd'?'Från 1 september till dagens datum':'1 september–31 augusti'} onClick={()=>choose(mode)}>{label}</button>)}</div></div>
- <div className={styles.months} aria-label="Välj en månad">{fiscalMonths.map((m,i)=><button type="button" key={m} aria-pressed={period.mode==='month'&&period.month===m} disabled={pending} onClick={()=>choose('month',m)}>{monthLabels[i]}</button>)}</div>
+ <div className={styles.months} aria-label="Välj månader">{fiscalMonths.map((m,i)=><label key={m} style={{display:"inline-flex",alignItems:"center",gap:5,cursor:"pointer"}}><input type="checkbox" checked={period.mode==='months'?period.months.includes(m):period.mode==='month'&&period.month===m} disabled={pending} onChange={()=>toggleMonth(m)}/>{monthLabels[i]}</label>)}</div>
  <p className={styles.caption} aria-live="polite">{pending?'Hämtar underlag…':period.to?`${period.from} – ${period.to}`:'Intäktsunderlag saknas för verksamhetsåret.'}{!pending&&period.mode==='revenue'&&period.to?' · Samma slutdatum för intäkter och kostnader':''}{!pending&&period.mode!=='revenue'&&period.revenueThrough?` · Intäkter inlästa t.o.m. ${period.revenueThrough}`:''}{!pending&&cutoffError?' · Senaste intäktsdatum kunde inte hämtas.':''}</p>
  </div>;
 }
