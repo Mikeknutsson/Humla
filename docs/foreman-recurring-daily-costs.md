@@ -1,0 +1,9 @@
+# Recurring costs through the selected foreman date
+
+The foreman adapter now accrues registered monthly depreciation and explicitly marked monthly provisional costs per calendar day. It intersects the selected from/to dates with each calendar month and the depreciation register's published validity dates. February, leap years, credits and cent rounding are supported. Cumulative daily cent differences preserve each full active month's allocated amount exactly.
+
+`private.hub_foreman_recurring_fact_v1` is a pure, private projection helper. `private.hub_transport_leader_facts_v2` widens only the candidate search for these explicit monthly sources, then applies the existing authorization checks to the projected dates. Canonical unit IDs and published allocation shares are retained. Daily facts carry unique derived IDs and `_humla_recurring_period` provenance back to the source fact; originals and prepared tables are untouched.
+
+Already daily overhead, recorded invoices, TransPA/historical hourly estimates and all other dated costs continue using their recorded dates. No heuristic is based on cost category or supplier name. The shared foreman source feeds unit and area cards, categories, result, margin, trend, prior-year comparisons, time ratios and daily-revenue targets. Dashboard/monthly accounting projections keep their existing source contract.
+
+Implementation: docs/sql/foreman-recurring-daily-costs.sql. Tests: supabase/tests/foreman_recurring_daily_costs.sql. Verified on published Transport data in rollback transactions for 1–15 October and September, including equality of scorecard cost and latest trend cost, and unchanged actual/daily source amounts and row counts. October depreciation changed from 443790.94 for a whole month to 214737.55 for 15 of 31 days. No source import or report generation was modified.
