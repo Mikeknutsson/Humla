@@ -45,8 +45,10 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  if(owner&&!profileRows.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
  const todayText=`${today.year}-${String(today.month).padStart(2,'0')}-${String(today.day).padStart(2,'0')}`;
  const historyTo=to<todayText?to:todayText;
- const [current,old,trendResult,history]=await Promise.all([
-  db.rpc('hub_transport_leader_scorecard_v4',args),
+ // Load the primary report before optional comparisons compete for database CPU.
+ const current=await db.rpc('hub_transport_leader_scorecard_v4',args);
+ if(current.error)console.error('foreman_report_failed',{rpc:'hub_transport_leader_scorecard_v4',code:current.error.code,from,to});
+ const [old,trendResult,history]=current.error?[{data:null,error:null},{data:null,error:null},null]:await Promise.all([
   db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to)}),
   db.rpc('hub_foreman_result_trend_v1',args),
   to>todayText&&from<=historyTo?db.rpc('hub_transport_leader_scorecard_v4',{...args,p_to:historyTo}):Promise.resolve(null),
@@ -63,7 +65,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <header className="panel"><h1>{owner?name??'Arbetsledarvy':'Mina enheter'}</h1><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> Du ser profilens avgränsade underlag. <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
  {controls}</header>
- {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>Försök igen. Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
+ {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
  {trendAvailable?<ForemanResultTrend key={target+from+to+report.generation} trend={trend!}/>:<section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>}
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
