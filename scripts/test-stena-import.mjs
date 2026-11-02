@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import XLSX from 'xlsx';
-import {stenaWorkbook,normalizeStena,stenaNumber} from '../src/lib/hub/stena-import.ts';
-const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Bokning','Datum','Regnr','Pris'],['99999887',46326,'','123,45']]),'Avräknat');
+import {stenaWorkbook,normalizeStena,stenaNumber,detectStenaWorkbook,suggestStenaMapping} from '../src/lib/hub/stena-import.ts';
+const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Bokning','Datum','Regnr','Pris SEK'],['99999887',46326,'','123,45']]),'Avräknade');
 const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'}),table=stenaWorkbook(bytes);
 const rows=normalizeStena(table,{booking:'0',date:'1',registration:'2',settled_amount:'3'},'settled');
 assert.equal(rows[0].settled_amount,123.45);assert.equal(rows[0].registration,'');assert.equal(rows[0].row_number,2);assert.match(rows[0].date,/^2026-/);
@@ -10,3 +10,12 @@ assert.throws(()=>normalizeStena({...table,rows:[...table.rows,...table.rows]},{
 assert.throws(()=>normalizeStena(table,{booking:'0'},'history'),/Kolumn saknas/);
 assert.throws(()=>stenaWorkbook(bytes,'Saknas'));
 console.log('PASS: real workbook parsing, Swedish numbers, exact zero, Excel dates, row provenance, missing columns, missing sheet and duplicate booking rejection');
+
+const recognized=detectStenaWorkbook(bytes);
+assert.equal(recognized.kind,'settled');assert.equal(recognized.mapping.booking,'0');assert.equal(recognized.mapping.date,'1');
+const generic=XLSX.utils.book_new();XLSX.utils.book_append_sheet(generic,XLSX.utils.aoa_to_sheet([['Bokning','Datum','Pris SEK'],['99999887','2026-10-01',20]]),'Vanlig export');
+assert.equal(detectStenaWorkbook(XLSX.write(generic,{type:'buffer',bookType:'xlsx'})),null);
+assert.equal(suggestStenaMapping([{key:'0',label:'A – Datum'},{key:'1',label:'B – Transportdatum'}]).date,'');
+const offset=XLSX.utils.book_new();XLSX.utils.book_append_sheet(offset,XLSX.utils.aoa_to_sheet([['Stena export'],['Bokningsnummer','Transportdatum','Pris'],['99999887','2026-10-01',20]]),'Historik');
+assert.equal(detectStenaWorkbook(XLSX.write(offset,{type:'buffer',bookType:'xlsx'})).header,2);
+console.log('PASS: source detection, shifted header row, exact mapping, ambiguous columns and non-Stena rejection.');

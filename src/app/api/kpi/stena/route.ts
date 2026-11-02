@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {createClient} from '@/lib/supabase/server';
-import {stenaWorkbook,normalizeStena} from '@/lib/hub/stena-import';
+import {stenaWorkbook,normalizeStena,detectStenaWorkbook,suggestStenaMapping} from '@/lib/hub/stena-import';
 export const runtime='nodejs';export const maxDuration=120;
 export async function POST(request:Request){
  if(request.headers.get('origin')!==new URL(request.url).origin)return Response.json({error:'Ogiltigt ursprung'},{status:403});
@@ -12,8 +12,11 @@ export async function POST(request:Request){
  const form=await request.formData(),file=form.get('file'),action=String(form.get('action')??'columns');
  if(!(file instanceof File)||! /\.xlsx?$/i.test(file.name)||file.size>3*1024*1024)throw Error('Välj en Excel-fil (.xls eller .xlsx), max 3 MB');
  if(!['columns','preview','import'].includes(action))throw Error('Ogiltig åtgärd');
- const bytes=new Uint8Array(await file.arrayBuffer()),table=stenaWorkbook(bytes,String(form.get('sheet')??''),Number(form.get('header')??1));
- if(action==='columns')return Response.json({headers:table.headers,sheet:table.sheet,sheets:table.sheets,totalRows:table.rows.length});
+ const bytes=new Uint8Array(await file.arrayBuffer());
+ const detection=action==='columns'&&!form.get('sheet')?detectStenaWorkbook(bytes):null;
+ const header=detection?.header??Number(form.get('header')??1);
+ const table=stenaWorkbook(bytes,detection?.sheet??String(form.get('sheet')??''),header);
+ if(action==='columns')return Response.json({headers:table.headers,sheet:table.sheet,sheets:table.sheets,totalRows:table.rows.length,header,detectedKind:detection?.kind??(/^avräknade/i.test(table.sheet)?'settled':null),suggestedMapping:suggestStenaMapping(table.headers)});
  const mapping=JSON.parse(String(form.get('mapping')??'{}'));if(!mapping||Array.isArray(mapping)||typeof mapping!=='object'||Object.values(mapping).some(v=>typeof v!=='string'))throw Error('Ogiltig kolumnmappning');
  const kind=String(form.get('kind')??''),rows=normalizeStena(table,mapping,kind),hash=createHash('sha256').update(bytes).digest('hex');
  const {data,error}=await db.rpc('hub_stena_upload_v1',{p_tenant:member.tenant_id,p_hash:hash,p_name:file.name,p_kind:kind,p_rows:rows,p_original:action==='import'?Buffer.from(bytes).toString('base64'):'',p_mapping:{columns:mapping,sheet:table.sheet,header:Number(form.get('header')??1)},p_commit:action==='import'}).abortSignal(AbortSignal.timeout(90000));

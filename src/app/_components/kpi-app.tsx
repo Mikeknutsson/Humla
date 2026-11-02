@@ -166,6 +166,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
   }
   const [mobileMenu, setMobileMenu] = useState(false);
   const [stenaImport, setStenaImport] = useState(() => liveQuery.get("import_source") === "stena");
+  const [stenaFile, setStenaFile] = useState<File | null>(null);
   const [stenaBusy, setStenaBusy] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [automatic, setAutomatic] = useState(true);
@@ -265,7 +266,9 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
   }, [preview, vehicleRules, mapping]);
 
   function selectFiles(files: File[]) {
-    if (busy || !files.length) return;
+    if (busy || stenaBusy || !files.length) return;
+    setStenaImport(false);
+    setStenaFile(null);
     setFile(files[0]);
     setPendingFiles(files.slice(1));
     setPreview(null);
@@ -273,9 +276,11 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
     setVehicleRules("");
     setKindConfirmed(!automatic);
     setMessage(null);
+    void analyse(files[0]);
   }
 
-  async function analyse() {
+  async function analyse(selectedFile:File|null=file) {
+    const file=selectedFile;
     if (!file) return;
     if (file.size > 4 * 1024 * 1024) {
       setMessage({ type: "error", text: "Filen överstiger 4 MB. Dela upp filen före uppladdning." });
@@ -290,6 +295,9 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       const response = await fetch("/api/kpi/parse", { method: "POST", body, signal: AbortSignal.timeout(60_000) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Filen kunde inte analyseras.");
+      if(result.detectedSource==='stena'){setStenaFile(file);setStenaImport(true);setPreview(null);setMessage(null);return;}
+      setStenaImport(false);
+      setStenaFile(null);
       setPreview(result);
       setMapping(result.suggestedMapping);
       if (result.detectedKind) {
@@ -421,11 +429,12 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
 
       {view === "import" && <div className="content import-layout">
         {!canManage ? <section className="empty-state"><AlertTriangle size={28}/><div><h2>Du saknar importbehörighet</h2><p>Behörigheten <code>kpi.manage</code> krävs för att lägga in underlag.</p></div></section> : <>
-          {!stenaImport && <section className="panel"><h2>Gemensam import</h2><p>Släpp PDF, Excel eller CSV i samma inkorg. Filerna behandlas en i taget, med kontroll före sparande. Osäkra datatyper väljs manuellt.</p><p>Giltiga transaktioner räknas även om andra rader behöver granskas. Workify-orderexport fördelas enligt artikelregistret: angivet projekt får intäkten, annars utförande fordon. Okända artiklar läggs för granskning.</p><label><input type="checkbox" checked={automatic} disabled={busy} onChange={(event) => { setAutomatic(event.target.checked); setPreview(null); setKindConfirmed(!event.target.checked); }}/> Identifiera datatyp automatiskt</label>{file && <button className="secondary" disabled={busy} onClick={() => { setFile(pendingFiles[0] ?? null); setPendingFiles((current) => current.slice(1)); setPreview(null); setMapping({}); setVehicleRules(""); setKindConfirmed(false); }}>Hoppa över aktuell fil</button>}{pendingFiles.length > 0 && <p>{pendingFiles.length} filer väntar: {pendingFiles.map((item) => item.name).join(", ")}</p>}</section>}
-          {!stenaImport && <section className="import-steps"><span className="active">1. Datatyp</span><span className={file ? "active" : ""}>2. Fil</span><span className={preview ? "active" : ""}>3. Kolumnmappning</span><span>4. Import</span></section>}
-          <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 1</span><h2>Välj vilket underlag du importerar</h2></div></div><div className="kind-grid">{(Object.entries(DATA_KINDS) as [DataKind, typeof DATA_KINDS[DataKind]][]).map(([key, item]) => <button className={!stenaImport && dataKind === key ? "selected" : ""} key={key} disabled={busy || stenaBusy} onClick={() => chooseKind(key)}><span>{item.label}</span><small>{item.description}</small></button>)}<button type="button" className={stenaImport ? "selected" : ""} aria-pressed={stenaImport} disabled={busy || stenaBusy} onClick={() => setStenaImport(true)}><span>Stena</span><small>Historik och avräknade transporter från Stenas Excel-underlag</small></button></div></section>
-          {stenaImport ? <StenaImport onBusyChange={setStenaBusy}/> : <>
-          <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 2</span><h2>Ladda upp originalfil</h2></div><span className="file-types">PDF · XLSX · XLS · CSV</span></div><label className={`dropzone ${file ? "has-file" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); selectFiles(Array.from(event.dataTransfer.files)); }}><input type="file" multiple disabled={busy} accept=".pdf,.xlsx,.xls,.csv" onChange={(event) => selectFiles(Array.from(event.target.files ?? []))}/><UploadCloud size={30}/>{file ? <><strong>{file.name}</strong><span>{number.format(file.size / 1024)} kB</span></> : <><strong>Välj eller släpp en fil här</strong><span>Originalfilen sparas privat för full spårbarhet. Max 4 MB per fil.</span></>}</label><div className="actions"><button className="primary" disabled={!file || busy} onClick={analyse}>{busy ? "Analyserar…" : "Analysera fil"}</button></div></section>
+          <section className="panel"><h2>Släpp filen här</h2><p>Humla läser filen och försöker känna igen Workify, NEXT, Stena och övriga underlag. Du kontrollerar resultatet innan något sparas.</p><label className={`dropzone ${file ? "has-file" : ""}`} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(!busy&&!stenaBusy)selectFiles(Array.from(event.dataTransfer.files));}}><input type="file" multiple disabled={busy||stenaBusy} accept=".pdf,.xlsx,.xls,.csv" onChange={event=>selectFiles(Array.from(event.target.files??[]))}/><UploadCloud size={30}/><strong>{busy?'Läser filen…':file?file.name:'Dra in filer eller klicka för att välja'}</strong><span>PDF · Excel · CSV. Max 4 MB per fil, Stena max 3 MB.</span></label>{pendingFiles.length>0&&<p>{pendingFiles.length} filer väntar. Filerna granskas och sparas en i taget. <button className="secondary" disabled={busy||stenaBusy} onClick={()=>selectFiles(pendingFiles)}>Hoppa till nästa fil</button></p>}</section>
+          <details className="panel" open={Boolean(file&&!busy&&!stenaImport&&!kindConfirmed)}><summary>Ändra underlagstyp / fler importinställningar</summary><p>Vanligtvis känner Humla igen filen automatiskt. Välj manuellt om identifieringen är osäker.</p><label><input type="checkbox" checked={automatic} disabled={busy||stenaBusy} onChange={event=>{setAutomatic(event.target.checked);setKindConfirmed(!event.target.checked);}}/> Identifiera underlag automatiskt</label>
+          <p><label>Underlagstyp <select value={stenaImport?'stena':dataKind} disabled={busy||stenaBusy} onChange={event=>{if(event.target.value==='stena'){setStenaFile(file);setStenaImport(true);}else chooseKind(event.target.value as DataKind);}}><optgroup label="Ekonomi"><option value="revenue">Intäkter – Workify</option><option value="cost">Kostnader – NEXT</option><option value="stena">Stena – historik och avräkningar</option></optgroup><optgroup label="Kompletterande underlag">{(['fuel','vehicle_activity','driver_time','next_historical_time'] as DataKind[]).map(key=><option key={key} value={key}>{DATA_KINDS[key].label}</option>)}</optgroup></select></label></p>
+          </details>
+          {stenaImport ? <StenaImport key={stenaFile?`${stenaFile.name}:${stenaFile.lastModified}:${stenaFile.size}`:"manual"} initialFile={stenaFile??undefined} onBusyChange={setStenaBusy}/> : <>
+          {file&&<section className="panel"><h2>{preview?`Identifierat: ${selectedDefinition.label}`:'Kontrollera underlagstyp'}</h2><p>{file.name}{preview?` · ${preview.totalRows} rader`:''}</p><button className="secondary" disabled={busy} onClick={()=>void analyse()}>Läs om filen</button></section>}
           {preview && <section className="panel"><h2>Fordonskopplingar för denna import</h2><p>Koppla enhetsnummer eller projektnummer till regnummer. En regel per rad: <code>Kolumnnamn;exakt värde;regnummer</code>. Reglerna gäller endast denna import och sparas med dess underlag. Projekt som avser flera fordon ska inte kopplas till ett enda fordon.</p><textarea disabled={busy} aria-label="Fordonskopplingar" rows={6} style={{ width: "100%", fontFamily: "monospace" }} value={vehicleRules} onChange={(event) => setVehicleRules(event.target.value)} placeholder="Använd ett kolumnnamn från filen;enhetsnummer;regnummer"/><p>Kontrollerade svenska regnummer stöds. Andra beteckningar kräver granskning. Detta verifierar inte permanent Humla Object ID.</p>{batches.some((batch) => batch.column_mapping?.__vehicle_rules) && <label>Återanvänd från tidigare import <select defaultValue="" onChange={(event) => { const previous = batches.find((batch) => batch.id === event.target.value); if (previous) setVehicleRules(previous.column_mapping?.__vehicle_rules ?? ""); }}><option value="">Välj underlag och kontrollera giltigheten</option>{batches.filter((batch) => batch.column_mapping?.__vehicle_rules).map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>}{rulePreview.error && <p role="alert">{rulePreview.error}</p>}<div className="table-wrap"><table><thead><tr><th>Fordonsvärde i fil</th><th>Regnummer efter koppling</th><th>Kontroll (första 12 rader)</th></tr></thead><tbody>{rulePreview.rows.map((row, index) => <tr key={index}><td>{row.raw || "–"}</td><td>{row.registration || "Ej kopplad"}</td><td>{row.error ?? (row.registration ? "Entydig koppling" : "Ingen fordonsuppgift")}</td></tr>)}</tbody></table></div></section>}
           {preview && <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 3</span><h2>Kontrollera kolumnmappningen</h2></div><span className="row-count">{preview.totalRows} rader hittades</span></div><div className="mapping-grid">{selectedDefinition.fields.map((field) => <label key={field.key}><span>{field.label}{field.required && <b>*</b>}</span><select value={mapping[field.key] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Inte mappad</option>{preview.headers.map((header) => <option value={header} key={header}>{header}</option>)}</select></label>)}</div><div className="preview-table"><table><thead><tr>{preview.headers.slice(0,8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.rows.slice(0,6).map((row, index) => <tr key={index}>{preview.headers.slice(0,8).map((header) => <td key={header}>{row[header] || "–"}</td>)}</tr>)}</tbody></table></div><div className="import-confirm"><div><ShieldCheck size={19}/><p><strong>Fail-closed import</strong><span>Ogiltiga eller osäkert mappade rader påverkar inte nyckeltalen.</span></p></div><button className="primary" disabled={!requiredComplete || !kindConfirmed || !!rulePreview.error || busy} onClick={importFile}>{busy ? "Importerar…" : "Importera och spara"}</button></div></section>}
           {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}</div>}

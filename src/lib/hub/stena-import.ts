@@ -36,3 +36,35 @@ export function normalizeStena(table:ReturnType<typeof stenaWorkbook>,mapping:St
   }catch(e){throw Error(`Rad ${row_number}: ${e instanceof Error?e.message:'Ogiltig rad'}`);}
  });
 }
+
+const stenaAliases:Record<string,string[]>={
+ booking:['bokning','bokningsnummer','bokningsnr','boknings nr','transportordernummer'],
+ date:['transportdatum','utförd datum','utförtdatum','datum','date'],
+ registration:['regnr','reg nr','registreringsnummer','registreringsnr','fordon'],
+ price:['pris','pris sek','grundpris'],extra:['tillägg','tillagg','extra'],
+ load_count:['antal','antal lastbärare'],load_carrier_type:['lastbärartyp','lastbärare','typ av lastbärare'],
+ settled_amount:['pris sek','avräknat belopp']
+};
+export function suggestStenaMapping(headers:{key:string;label:string}[]){
+ const names=headers.map(h=>({...h,name:h.label.split(' – ').slice(1).join(' – ').toLocaleLowerCase('sv').replace(/[._-]+/g,' ').replace(/\s+/g,' ').trim()}));
+ return Object.fromEntries(Object.entries(stenaAliases).map(([field,aliases])=>{
+  const matches=names.filter(h=>aliases.includes(h.name));
+  return [field,matches.length===1?matches[0].key:''];
+ }));
+}
+/** A named portal sheet plus distinctive source columns is required; filenames never decide. */
+export function detectStenaWorkbook(bytes:Uint8Array){
+ const book=XLSX.read(bytes,{type:'array',cellDates:false});
+ for(const sheet of book.SheetNames){
+  const name=sheet.trim().toLocaleLowerCase('sv');
+  const kind=name==='historik'?'history':/^avräknade(?: transporter)?$/.test(name)?'settled':null;
+  if(!kind)continue;
+  const matrix=XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[sheet],{header:1,defval:'',raw:true});
+  for(let i=0;i<Math.min(10,matrix.length);i++){
+   const headers=(matrix[i]??[]).map((v,j)=>({key:String(j),label:`${XLSX.utils.encode_col(j)} – ${String(v)}`}));
+   const mapping=suggestStenaMapping(headers);
+   if(mapping.booking&&mapping.date&&mapping[kind==='settled'?'settled_amount':'price'])return {sheet,header:i+1,kind,mapping};
+  }
+ }
+ return null;
+}
