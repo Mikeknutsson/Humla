@@ -3,9 +3,11 @@ import {paymentForecast,type ForecastInput} from '@/lib/hub/payment-forecast';
 import {outcomeForecast,type OutcomeSource} from '@/lib/hub/payment-outcome-forecast';
 import {periodFingerprints,validatePeriodReviews,periodReviewBasis} from '@/lib/hub/payment-period-review';
 import type {PayrollSource} from '@/lib/hub/payment-payroll-forecast';
+import {paymentSourceSession,invalidatePaymentSourceSessions} from '@/lib/hub/payment-source-session';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 export const maxDuration=180;
+class ForecastSourceError extends Error{}
 export async function POST(req:Request){
  if(req.headers.get('origin')!==new URL(req.url).origin)return Response.json({error:'Ogiltigt ursprung'},{status:403});
  const db=await createClient();const {data:{user}}=await db.auth.getUser();
@@ -28,27 +30,36 @@ export async function POST(req:Request){
    }
    const {data,error}=await db.rpc('hub_payment_forecast_reviews_v2',{p_tenant:member.tenant_id,p_scope:body.scope,p_center:body.center,p_kind:body.kind,p_month:body.month,p_reviewed:body.reviewed,p_note:body.note??'',p_source_hash:fingerprint});
    if(error)return Response.json({error:'Avstämningen kunde inte sparas. Välj en avslutad månad och kontrollera underlaget.'},{status:400});
+   invalidatePaymentSourceSessions(member.tenant_id);
    return Response.json(data,{headers:{'Cache-Control':'no-store'}});
   }
   if(body.action==='set-one-off'){
    if(!member||!Array.isArray(body.rowIds)||!body.rowIds.length||body.rowIds.length>200||body.rowIds.some((id:unknown)=>typeof id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))||typeof body.excluded!=='boolean')return Response.json({error:'Ogiltigt radurval'},{status:400});
    const {data,error}=await db.rpc('hub_payment_forecast_set_exclusion_v1',{p_tenant_id:member.tenant_id,p_rows:body.rowIds,p_excluded:body.excluded,p_note:body.note??''});
    if(error)return Response.json({error:'Markeringen kunde inte sparas.'},{status:400});
+   invalidatePaymentSourceSessions(member.tenant_id);
    return Response.json(data,{headers:{'Cache-Control':'no-store'}});
   }
   if(body.mode==='automatic'){
    if(!member)throw Error('Arbetsyta saknas');
-   const [{data,error},salary,reviews]=await Promise.all([
-    db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf}),
-    db.rpc('hub_payment_payroll_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf}),
+   const [snapshot,reviews]=await Promise.all([
+    paymentSourceSession(`${member.tenant_id}:${user.id}:${body.asOf}`,body.reuseSource===true,async()=>{
+     const [{data,error},salary]=await Promise.all([
+      db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf}),
+      db.rpc('hub_payment_payroll_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf})
+     ]);
+     if(error||!data)throw new ForecastSourceError('Workify/NeXT-underlaget kunde inte hämtas från Hubben.');
+     if(salary.error||!salary.data)throw new ForecastSourceError('TransPA-löneunderlaget kunde inte hämtas från Hubben.');
+     if(data.controls?.scope!=='live_approved_imports'&&data.synced_at!==salary.data.synced_at)throw new ForecastSourceError('Hubben uppdaterades under hämtningen. Hämta underlaget igen.');
+     return {source:data as OutcomeSource,payroll:salary.data as PayrollSource};
+    }),
     db.rpc('hub_payment_forecast_reviews_v2',{p_tenant:member.tenant_id})
    ]);
-   if(error||!data)return Response.json({error:'Workify/NeXT-underlaget kunde inte hämtas från Hubben.'},{status:503});
-   if(salary.error||!salary.data)return Response.json({error:'TransPA-löneunderlaget kunde inte hämtas från Hubben.'},{status:503});
-   if(data.controls?.scope!=='live_approved_imports'&&data.synced_at!==salary.data.synced_at)return Response.json({error:'Hubben uppdaterades under hämtningen. Hämta underlaget igen.'},{status:503});
    if(reviews.error||!reviews.data)return Response.json({error:'Månadsavstämningarna kunde inte hämtas. Försök igen.'},{status:503});
-   return Response.json(outcomeForecast({...data,periodReviews:validatePeriodReviews(data.rows,reviews.data.reviews),reviewBasis:periodReviewBasis(data.rows,body.asOf)} as OutcomeSource,body.asOf,body.supplierDays??30,body.periodOffset??0,salary.data as PayrollSource),{headers:{'Cache-Control':'no-store'}});
+   const data=snapshot.source;
+   const forecast=outcomeForecast({...data,periodReviews:validatePeriodReviews(data.rows,reviews.data.reviews),reviewBasis:periodReviewBasis(data.rows,body.asOf)},body.asOf,body.supplierDays??30,body.periodOffset??0,snapshot.payroll);
+   return Response.json({...forecast,automatic:{...forecast.automatic,sourceFetchedAt:snapshot.fetchedAt,sourceReused:snapshot.reused}},{headers:{'Cache-Control':'no-store'}});
   }
   return Response.json(paymentForecast(body as ForecastInput),{headers:{'Cache-Control':'no-store'}});
- }catch(e){return Response.json({error:e instanceof Error?e.message:'Ogiltigt underlag'},{status:400})}
+ }catch(e){return Response.json({error:e instanceof Error?e.message:'Ogiltigt underlag'},{status:e instanceof ForecastSourceError?503:400})}
 }
