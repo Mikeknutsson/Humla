@@ -28,12 +28,13 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  catch{return <main className="content"><h1>Ogiltigt periodval</h1><Link href="/kpi/verkstad">Återställ</Link></main>;}
  const from=period.from,to=period.to!;
  // Always request the fixed workshop scope from Hub; URL filters cannot widen it.
- const query=new URLSearchParams({from,to,cost_center:'40'}).toString();
- const {data,error}=await access.db.rpc('hub_kpi_cost_center_dashboard_v1',{p_tenant_id:access.tenantId,p_from:from,p_to:to,p_cost_center:'40'}).abortSignal(AbortSignal.timeout(48_000));
+ const selection:Record<string,string>=period.mode==='months'?{fiscal_year:String(period.fiscalYear),months:period.months.join(',')}:{};
+ const query=new URLSearchParams({from,to,cost_center:'40',...selection}).toString();
+ const {data,error}=await (period.mode==='months'?access.db.rpc('hub_kpi_overview_months_v1',{p_tenant_id:access.tenantId,p_fiscal_year:period.fiscalYear,p_selected_months:period.months,p_cost_center:'40',p_filters:{}}):access.db.rpc('hub_kpi_cost_center_dashboard_v1',{p_tenant_id:access.tenantId,p_from:from,p_to:to,p_cost_center:'40'})).abortSignal(AbortSignal.timeout(48_000));
  const report=data as WorkshopReport|null;
  const valid=!error&&report?.cost_center_scope==='40';
  const previous=valid&&report.comparison_available!==false?report.previous?.metrics:undefined;
- const months=(report?.monthly??[]).filter(p=>p.period_start<=to&&p.period_end>=from);
+ const months=(report?.monthly??[]).filter(p=>p.period_start<=to&&p.period_end>=from&&(period.mode!=='months'||period.months.includes(Number(p.period_start.slice(5,7)))));
  const metric=(key:string)=>valid?report.metrics[key]:null;
  return <KpiDetailShell title="Verkstaden – arbetsledarvy" breadcrumb="Humla Dashboard / Verkstad / KST 40" query={query} extraNavigation={<Link prefetch={false} href="/kpi/mina-enheter">Arbetsledarvyer</Link>}>
  <div className="content"><section className="panel"><div className="panel-head"><div><h2>Verkstaden · KST 40</h2><p>Ekonomi, kostnadsfördelning och registrerad verkstadstid · Läsåtkomst</p></div><KpiPrint/></div><ForemanPeriodPicker period={period} pathname="/kpi/verkstad" showRevenueShortcut={false}/></section>
@@ -44,7 +45,7 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  {months.length>0&&<KpiMonthChart points={months} query={query}/>}
  <section className="panel"><h2>Kostnader – verkstaden</h2><div className="table-wrap"><table><thead><tr><th>Kostnadsslag</th><th>Belopp</th></tr></thead><tbody>{Object.entries(report.cost_categories??{}).map(([key,value])=><tr key={key}><td><Link prefetch={false} href={analysisHref(query,{kind:'cost',category:key})}>{costs[key]??key} →</Link></td><td>{money(value)}</td></tr>)}</tbody><tfoot><tr><th>Total kostnad</th><td>{money(metric('total_cost'))}</td></tr></tfoot></table></div><p>Beloppen ingår redan i totalen. {report.personnel_basis}</p></section>
  <section className="panel"><h2>Projekt och fordon i verkstadens ekonomi</h2><div className="table-wrap"><table><thead><tr><th>Objekt</th><th>Intäkter</th><th>Kostnader</th><th>Resultat</th></tr></thead><tbody>{(report.economic_units??[]).flatMap(u=>u.children.map(c=><tr key={u.key+':'+c.key}><td><Link prefetch={false} href={analysisHref(query,{unit:u.key,vehicle:c.vehicle,project:c.vehicle?null:c.project})}>{c.label} →</Link></td><td>{money(c.revenue)}</td><td>{money(c.cost)}</td><td>{money(c.result)}</td></tr>))}</tbody></table></div><p>Visar poster som hör till KST 40. Verkstadsarbete som redan belastar ett annat kostnadsställe flyttas inte tillbaka hit.</p></section>
- <section className="panel"><h2>Underlag</h2><p>{number.format(Number(report.quality?.valid_rows??0))} giltiga ekonomirader. Samma publicerade Hub-underlag som Dashboard, avgränsat till KST 40.</p><p>{report.sync?.synced_at?'Senast uppdaterat: '+new Intl.DateTimeFormat('sv-SE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Stockholm'}).format(new Date(report.sync.synced_at)):'Uppdateringstid saknas.'}</p><Link prefetch={false} href={analysisHref(query)}>Visa originalrader →</Link> · <Link prefetch={false} href={'/kpi/projekt?'+new URLSearchParams({from,to,center:'40'})}>Projektuppföljning →</Link></section>
+ <section className="panel"><h2>Underlag</h2><p>{number.format(Number(report.quality?.valid_rows??0))} giltiga ekonomirader. Samma publicerade Hub-underlag som Dashboard, avgränsat till KST 40.</p><p>{report.sync?.synced_at?'Senast uppdaterat: '+new Intl.DateTimeFormat('sv-SE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Stockholm'}).format(new Date(report.sync.synced_at)):'Uppdateringstid saknas.'}</p><Link prefetch={false} href={analysisHref(query)}>Visa originalrader →</Link> · <Link prefetch={false} href={'/kpi/projekt?'+new URLSearchParams({from,to,center:'40',...selection})}>Projektuppföljning →</Link></section>
  </>}
  </div></KpiDetailShell>;
 }
