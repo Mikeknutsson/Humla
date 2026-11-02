@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import XLSX from 'xlsx';
+import {stenaWorkbook,normalizeStena,stenaNumber} from '../src/lib/hub/stena-import.ts';
+const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Bokning','Datum','Regnr','Pris'],['99999887',46326,'','123,45']]),'Avräknat');
+const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'}),table=stenaWorkbook(bytes);
+const rows=normalizeStena(table,{booking:'0',date:'1',registration:'2',settled_amount:'3'},'settled');
+assert.equal(rows[0].settled_amount,123.45);assert.equal(rows[0].registration,'');assert.equal(rows[0].row_number,2);assert.match(rows[0].date,/^2026-/);
+assert.equal(stenaNumber('1 234,56'),1234.56);assert.equal(stenaNumber('0'),0);assert.equal(stenaNumber(''),null);assert.throws(()=>stenaNumber('abc'));
+assert.throws(()=>normalizeStena({...table,rows:[...table.rows,...table.rows]},{booking:'0',date:'1',settled_amount:'3'},'settled'),/flera gånger/);
+assert.throws(()=>normalizeStena(table,{booking:'0'},'history'),/Kolumn saknas/);
+assert.throws(()=>stenaWorkbook(bytes,'Saknas'));
+console.log('PASS: real workbook parsing, Swedish numbers, exact zero, Excel dates, row provenance, missing columns, missing sheet and duplicate booking rejection');

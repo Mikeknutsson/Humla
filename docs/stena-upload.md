@@ -1,0 +1,17 @@
+# Stena Excel import
+
+`/integrationer/projekt-order/stena-import` and Project & Order navigation provide original `.xls`/`.xlsx` upload, sheet/header selection, explicit column mapping, server preview and confirmation. Maximum 3 MB and 20,000 rows. Booking/date/price fields are validated; invalid rows and duplicate bookings in a workbook reject the file rather than silently dropping rows. Original row numbers retained.
+
+`/api/integrationer/projekt-order/stena-import` checks authenticated active membership and kpi.manage, reparses the original file for both preview and commit, computes SHA-256 and normalizes numeric/date values. Client preview is invalidated on input changes. Server amounts reuse private.hub_stena_amount_v2, including the current history row-total rule and settled Pris SEK. No new financial formulas in UI.
+
+`docs/sql/stena-upload.sql` exposes an invoker wrapper around a private checked implementation. Preview does not write. Commit retains the original workbook privately, verifies its hash, locks the tenant import, feeds the existing canonical Stena ingestion in 500-row chunks, verifies exact row count, marks complete and requests the existing report-sync queue in the same transaction. No partial import is visible. Existing complete file hashes return duplicate without updating source priority. Overlapping files use existing canonical booking identity and settled/history precedence. Source correction overrides and aliases are unchanged. Incomplete legacy files require review.
+
+Unresolved amounts remain explicitly unpriced; Workify fallback and projection are owned by the existing Stena pipeline. Imported totals are not presented as already-published KPI totals. Original files and financial data have no direct anonymous/authenticated table access.
+
+Tests: scripts/test-stena-import.mjs (workbook, locale numbers, Excel dates, missing fields, provenance and duplicate booking); supabase/tests/stena_upload.sql (authenticated preview/commit/repeat and denial, transaction rolled back). Existing Stena price/priority tests still apply.
+
+Payment forecast: docs/sql/stena-payment-forecast.sql adapts the same completed portal rows to the live outcome source. Canonical revenue identity selects one booking; settled wins over history, then newest file. Confirmed overrides win. Exact customer + booking references replace Workify once. Unpriced connected components preserve Workify. Zero settles remove matched Workify without creating revenue. Source/provenance and control totals travel through the audit UI and CSV; settlement is not paid status. Existing Stena month-end +45-day policy remains unchanged.
+
+Monthly report: verified private.hub_kpi_transport_period_report_v1 consumes prepared month facts without a Workify-only filter. Existing Stena projection supplies these facts, so no second additive path is introduced. Upload requests recomputation atomically; monthly report, PDF and Excel consume the published report after completion. Payment forecast consumes completed imports directly on refresh.
+
+Tests: supabase/tests/stena_payment_forecast.sql isolates the live source in a rollback transaction and verifies history-to-settlement replacement, exact match deduplication, other customer preservation and connected unpriced fallback. scripts/test-payment-outcome-forecast.cjs now reflects the selected 30/20/40 scope and tests Stena provenance and payment-date preservation.
