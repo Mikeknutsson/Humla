@@ -1,8 +1,9 @@
 import {dateValue,departments,costOnly,emptyIncoming,availableForecast,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
 import {payrollForecast,type PayrollSource} from './payment-payroll-forecast';
+import {reviewedTrend,broadWeeklyBaseline,stenaMonthlyEvidence,monthDate,type EvidenceRow,type PeriodReview,type StenaMonth} from './payment-evidence-model';
 export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean;oneOff?:boolean;id?:string;rowId?:string|null;reference?:string;description?:string;account?:string;project?:string;paymentDate?:string;source?:string;amountStatus?:'history'|'settled'|null};
-export type ForecastBreakdown={weekFrom:string;center:string;kind:'in'|'out';internal:boolean;baseline:number|null;factor:number|null;known:number;forecast:number|null;total:number|null;trendPrevious:number;trendCurrent:number;excludedBaseline:number;baselineRows:string[];knownRows:string[];trendPreviousRows:string[];trendCurrentRows:string[];spike:boolean};
-export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number;generation?:string;controls?:{scope:string;from:string;to:string;supplierRows:number;supplierAmount:number;excludedNonPayments:{reason:string;rows:number;amount:number}[];stena?:{rows:number;settledRows:number;settledAmount:number;historyRows:number;historyAmount:number;unresolvedRows:number;replacedWorkifyRows:number}}};
+export type ForecastBreakdown={weekFrom:string;center:string;kind:'in'|'out';internal:boolean;baseline:number|null;factor:number|null;known:number;forecast:number|null;total:number|null;trendPrevious:number;trendCurrent:number;excludedBaseline:number;baselineRows:string[];knownRows:string[];trendPreviousRows:string[];trendCurrentRows:string[];spike:boolean;scope:'ordinary'|'stena';method:'weekly_average_13'|'stena_month';baselineFrom:string;baselineTo:string;reviewedTrendMonths:string[];trendStatus:'reviewed'|'historical_only';periodReviewed?:boolean};
+export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number;generation?:string;periodReviews?:PeriodReview[];reviewBasis?:Record<string,string>;controls?:{scope:string;from:string;to:string;supplierRows:number;supplierAmount:number;excludedNonPayments:{reason:string;rows:number;amount:number}[];stena?:{rows:number;settledRows:number;settledAmount:number;historyRows:number;historyAmount:number;unresolvedRows:number;replacedWorkifyRows:number}}};
 const day=86400000,iso=(n:number)=>new Date(n).toISOString().slice(0,10),round=(n:number)=>Math.round(n*100)/100;
 const name=(s:string)=>s.toLocaleLowerCase('sv-SE').normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const calendarMonth=(n:number)=>{const d=new Date(n);return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)};
@@ -22,76 +23,72 @@ export function expectedPaymentDate(row:Outcome,supplierDays=30){
  const anchor=row.kind==='in'&&row.invoiceDate?dateValue(row.invoiceDate):delivery;
  return iso(anchor+(row.kind==='in'?term.days:supplierDays)*day);
 }
-export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;breakdown:ForecastBreakdown[];auditRows:Outcome[];controls?:OutcomeSource['controls'];payroll?:ReturnType<typeof payrollForecast>}};
+export type AutomaticForecast=PaymentForecast&{automatic:{syncedAt:string;trendFrom:string;trendTo:string;warnings:string[];reviewRows:number;reviewAmount:number;supplierDays:number;breakdown:ForecastBreakdown[];auditRows:Outcome[];controls?:OutcomeSource['controls'];periodReviews:PeriodReview[];reviewBasis:Record<string,string>;stenaMonths:StenaMonth[];transfer:TransferSummary;model:'evidence-v2';payroll?:ReturnType<typeof payrollForecast>}};
+export type TransferSummary={from:string;to:string;incoming:number|null;outgoing:number|null;net:number|null;registeredIncoming:number;registeredOutgoing:number;estimatedIncoming:number|null;estimatedOutgoing:number|null;registeredIncomingShare:number|null;registeredOutgoingShare:number|null;missing:{weekFrom:string;center:string;kind:'in'|'out'}[];currency:'SEK';vatBasis:'excluding_vat'};
+/** Expected activity-based payments; no ledger, bank balance or verified payment status is inferred. */
 export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0,payrollSource?:PayrollSource):AutomaticForecast{
  const now=dateValue(asOf);if(!Number.isInteger(supplierDays)||supplierDays<0||supplierDays>180)throw Error('Leverantörstid måste vara 0–180 dagar');
- const monthStart=Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),1),trendEnd=monthStart-day;
- const endDate=new Date(trendEnd),fyYear=endDate.getUTCMonth()>=8?endDate.getUTCFullYear():endDate.getUTCFullYear()-1;
- const trendStart=Date.UTC(fyYear,8,1),previous=(n:number)=>{const d=new Date(n);return Date.UTC(d.getUTCFullYear()-1,d.getUTCMonth(),d.getUTCDate())};
- const warnings=['Beloppen är enligt Workify/Stena/NeXT-underlaget, exklusive moms. Ingen verifierad reskontra eller faktisk betalningsstatus.','NeXT-kostnader flyttas med antagen betalningstid; detta är inte verifierade leverantörsförfallodatum.'];
- const syncedDate=source.synced_at?.slice(0,10);
- if(syncedDate&&now-dateValue(syncedDate)>2*day)warnings.push(`Underlaget är senast uppdaterat ${syncedDate}. Nyare importer kan saknas; prognosen är inte aktuell förrän Hubben har publicerat ett nytt underlag.`);
- if(source.controls?.stena)warnings.push('Stena: avräknat belopp prioriteras framför historik för samma bokning och ersätter exakt matchade Workify-rader. Avräknat betyder inte betalt. Betalningsdagen är fortfarande beräknad enligt kundvillkoret.');
- if(source.controls){warnings.push('Raderna följer Hubbens dubblettskydd på radnivå. Senaste uppladdade, godkända Workify- och NeXT-rader används. Egentanksförbrukning, registrerad lön på konto 7010 och intern tid/fördelning används inte som antagna leverantörsbetalningar. Importer som väntar på ekonomisk avstämning ingår inte.');}
- const rows=source.rows.map((r,i)=>({...r,id:'outcome:'+i,dateValue:dateValue(r.date),paymentDate:expectedPaymentDate(r,supplierDays)}));
- const external=rows.filter(r=>!r.internal);
- const toPayment=(r:typeof rows[number]):Payment=>({id:r.id,center:r.center,kind:r.kind,date:r.paymentDate,amount:Number(r.amount),internal:r.internal});
+ const reviews=source.periodReviews??[],warnings=[
+  'Beloppen är exklusive moms och bygger på Workify/Stena/NeXT. Betalningsdagar är antaganden; ingen öppen reskontra eller faktisk betalningsstatus har verifierats.',
+  'Netto är före löner och moms. Löner särredovisas; beloppet är ingen banksaldoprognos.',
+  'Vanliga betalningar använder snittet av 13 jämförbara historiska veckor. En ändrad veckobas flyttar aldrig redan registrerade belopp.',
+ ];
+ const rows:EvidenceRow[]=source.rows.map((r,i)=>({...r,amount:Number(r.amount),id:'outcome:'+i,dateValue:dateValue(r.date),paymentDate:expectedPaymentDate(r,supplierDays),stena:r.kind==='in'&&!r.internal&&customerTerm(r.party).code==='stena_month_end'})).filter(r=>r.dateValue<=now);
+ if(rows.some(r=>!Number.isFinite(r.amount)))throw Error('Ogiltigt belopp i prognosunderlaget');
  const result=paymentForecast({asOf,periodOffset,ledger:[],history:[],historyFrom:'',historyTo:''});
- const sum=(rs:typeof rows,a:number,b:number)=>round(rs.filter(r=>r.dateValue>=a&&r.dateValue<=b).reduce((s,r)=>s+Number(r.amount),0));
  const payroll=payrollSource?payrollForecast(payrollSource,asOf,result.weeks):undefined;
- const breakdown:ForecastBreakdown[]=[];const detailRows=new Map<string,Outcome>();
- for(const w of result.weeks){
-  const start=dateValue(w.from),end=dateValue(w.to);
-  for(const p of w.parts)for(const internalScope of [false,true])for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){
-   if(costOnly(p.center)&&kind==='in'){if(internalScope)p.internal.incoming=0;else p.incoming=emptyIncoming();continue;}
-   const group=rows.filter(r=>r.internal===internalScope&&r.center===p.center&&r.kind===kind);
-   const dates=group.map(r=>r.dateValue),min=dates.length?Math.min(...dates):Infinity,max=dates.length?Math.max(...dates):-Infinity;
-   const recurring=group.filter(r=>!r.oneOff);
-   const before=sum(recurring,previous(trendStart),previous(trendEnd)),current=sum(recurring,trendStart,trendEnd);
-   // This is monthly activity availability, not proof of import completeness.
-   // A department need not transact on the first/last calendar day of a month.
-   const enough=group.length>0&&calendarMonth(min)<=previous(trendStart)&&calendarMonth(max)>=calendarMonth(trendEnd);
-   const factor=enough&&before>0?current/before:null;
-   const allBaselineRows=group.filter(r=>{const n=dateValue(r.paymentDate);return n>=start-364*day&&n<=end-364*day});
-   const baselineRows=allBaselineRows.filter(r=>!r.oneOff);
-   // Earliest source coverage must reach the source months that can feed this payment week.
-   const paymentDates=group.map(r=>dateValue(r.paymentDate));
-   // Internal rows have their own actual assumed payment-date coverage, not the
-   // external Stena/customer lag envelope. Missing history is never treated as zero.
-   const baselineCovered=internalScope
-    ?paymentDates.length>0&&Math.min(...paymentDates)<=start-364*day&&Math.max(...paymentDates)>=end-364*day
-    :min<=start-364*day-(kind==='in'?80:supplierDays)*day&&max>=end-364*day;
-   const baseline=baselineCovered?round(baselineRows.reduce((s,r)=>s+Number(r.amount),0)):null;
-   const registered=group.filter(r=>r.dateValue<=now&&dateValue(r.paymentDate)>=start&&dateValue(r.paymentDate)<=end);
-   const known=round(registered.reduce((s,r)=>s+Number(r.amount),0));
-   const forecast=baseline!==null&&factor!==null?round(Math.max(0,baseline*factor-known)):null;
-   const total=forecast===null?null:round(known+forecast);
-   const plain=(r:typeof rows[number]):string=>{const {dateValue:_,...source}=r;detailRows.set(r.id,source);return r.id;};
-   const absolute=baselineRows.reduce((s,r)=>s+Math.abs(Number(r.amount)),0);
-   const parties=new Map<string,number>();for(const r of baselineRows)parties.set(r.party,(parties.get(r.party)??0)+Math.abs(Number(r.amount)));
-   breakdown.push({weekFrom:w.from,center:p.center,kind,internal:internalScope,baseline,factor,known,forecast,total,trendPrevious:before,trendCurrent:current,excludedBaseline:round(allBaselineRows.filter(r=>r.oneOff).reduce((s,r)=>s+Number(r.amount),0)),baselineRows:allBaselineRows.map(plain),knownRows:registered.map(plain),trendPreviousRows:group.filter(r=>r.dateValue>=previous(trendStart)&&r.dateValue<=previous(trendEnd)).map(plain),trendCurrentRows:group.filter(r=>r.dateValue>=trendStart&&r.dateValue<=trendEnd).map(plain),spike:kind==='out'&&absolute>=50000&&Array.from(parties.values()).some(amount=>amount>=absolute/2)});
-   if(internalScope)p.internal[key]=total;
-   else p[key]={known,forecast,total,baseline,factor};
-  }
-  for(const k of ['incoming','outgoing'] as const)w.internal[k]=w.parts.some(p=>p.internal[k]===null)?null:round(w.parts.reduce((s,p)=>s+p.internal[k]!,0));
-  if(payroll){const salaryWeek=payroll.weeks.find(s=>s.from===w.from)!;w.total.payroll=salaryWeek.total;
-   for(const p of w.parts){p.payroll=salaryWeek.parts.find(s=>s.center===p.center)?.amount??null;
+ const stenaMonths=stenaMonthlyEvidence(rows,reviews,asOf,result.weeks).filter(s=>Object.hasOwn(departments,s.center)&&!costOnly(s.center));
+ const audit=new Map<string,Outcome>(),lookup=new Map(rows.map(r=>[r.id,r]));
+ const record=(r:EvidenceRow)=>{const {dateValue:_,stena:__,...value}=r;audit.set(r.id,value);return r.id;};
+ const recordIds=(ids:string[])=>ids.map(id=>{const r=lookup.get(id);if(r)record(r);return id;});
+ const breakdown:ForecastBreakdown[]=[];
+ const sum=(rs:EvidenceRow[])=>round(rs.reduce((s,r)=>s+r.amount,0));
+ for(const week of result.weeks){
+  for(const part of week.parts)for(const internal of [false,true])for(const [key,kind]of[['incoming','in'],['outgoing','out']]as const){
+   if(costOnly(part.center)&&kind==='in'){if(internal)part.internal.incoming=0;else part.incoming=emptyIncoming();continue;}
+   const ordinary=rows.filter(r=>r.center===part.center&&r.kind===kind&&r.internal===internal&&!r.stena);
+   const base=broadWeeklyBaseline(ordinary,week.from),trend=reviewedTrend(ordinary,reviews,asOf,'ordinary',part.center,kind);
+   const factor=trend.factor??1;
+   const knownRows=ordinary.filter(r=>r.paymentDate>=week.from&&r.paymentDate<=week.to),known=sum(knownRows);
+   const remaining=base.amount===null?null:round(Math.max(0,base.amount*factor-known));
+   const parties=new Map<string,number>();for(const r of base.rows.filter(r=>!r.oneOff))parties.set(r.party,(parties.get(r.party)??0)+Math.abs(r.amount));
+   const absolute=Array.from(parties.values()).reduce((s,n)=>s+n,0);
+   const entry:ForecastBreakdown={weekFrom:week.from,center:part.center,kind,internal,baseline:base.amount,factor:base.amount===null?null:factor,known,forecast:remaining,total:remaining===null?null:round(known+remaining),trendPrevious:trend.previous,trendCurrent:trend.current,excludedBaseline:base.excluded,baselineRows:base.rows.map(record),knownRows:knownRows.map(record),trendPreviousRows:trend.previousRows.map(record),trendCurrentRows:trend.currentRows.map(record),spike:kind==='out'&&absolute/13>=50000&&Array.from(parties.values()).some(n=>n>=absolute/2),scope:'ordinary',method:'weekly_average_13',baselineFrom:base.from,baselineTo:base.to,reviewedTrendMonths:trend.months,trendStatus:trend.factor===null?'historical_only':'reviewed'};
+   const entries=[entry];breakdown.push(entry);
+   if(!internal&&kind==='in')for(const cohort of stenaMonths.filter(s=>s.center===part.center&&s.paymentDate>=week.from&&s.paymentDate<=week.to)){
+    const stenaRows=rows.filter(r=>r.stena&&r.center===part.center),stenaTrend=reviewedTrend(stenaRows,reviews,asOf,'stena',part.center,'in');
+    const priorYear=Number(cohort.deliveryMonth.slice(0,4))-1,priorMonth=`${priorYear}${cohort.deliveryMonth.slice(4)}`;
+    const priorEnd=new Date(dateValue(priorMonth));priorEnd.setUTCMonth(priorEnd.getUTCMonth()+1);priorEnd.setUTCDate(0);
+    const stenaEntry:ForecastBreakdown={...entry,scope:'stena',method:'stena_month',baseline:cohort.baseline,factor:cohort.factor,known:cohort.registered,forecast:cohort.remaining,total:cohort.total,trendPrevious:stenaTrend.previous,trendCurrent:stenaTrend.current,excludedBaseline:0,baselineRows:recordIds(cohort.baselineIds),knownRows:recordIds(cohort.knownIds),trendPreviousRows:stenaTrend.previousRows.map(record),trendCurrentRows:stenaTrend.currentRows.map(record),baselineFrom:priorMonth,baselineTo:priorEnd.toISOString().slice(0,10),reviewedTrendMonths:stenaTrend.months,trendStatus:stenaTrend.factor===null?'historical_only':'reviewed',periodReviewed:cohort.reviewed,spike:false};
+    entries.push(stenaEntry);breakdown.push(stenaEntry);
    }
+   const totalFor=(field:'forecast'|'total'|'baseline')=>entries.some(e=>e[field]===null)?null:round(entries.reduce((s,e)=>s+e[field]!,0));
+   if(internal)part.internal[key]=totalFor('total');
+   else part[key]={known:round(entries.reduce((s,e)=>s+e.known,0)),forecast:totalFor('forecast'),total:totalFor('total'),baseline:totalFor('baseline'),factor:entries.length===1?entry.factor:null};
   }
-  for(const p of w.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
-  for(const k of ['incoming','outgoing'] as const)w.total[k]={known:round(w.parts.reduce((s,p)=>s+p[k].known,0)),forecast:w.parts.some(p=>p[k].forecast===null)?null:round(w.parts.reduce((s,p)=>s+p[k].forecast!,0)),total:w.parts.some(p=>p[k].total===null)?null:round(w.parts.reduce((s,p)=>s+p[k].total!,0))};
-  w.total.net=w.parts.some(p=>p.net===null)?null:round(w.parts.reduce((s,p)=>s+p.net!,0));
-  w.available=availableForecast(w.parts);
+  for(const key of['incoming','outgoing']as const)week.internal[key]=week.parts.some(p=>p.internal[key]===null)?null:round(week.parts.reduce((s,p)=>s+p.internal[key]!,0));
+  if(payroll){const salary=payroll.weeks.find(s=>s.from===week.from)!;week.total.payroll=salary.total;for(const p of week.parts)p.payroll=salary.parts.find(s=>s.center===p.center)?.amount??null;}
+  for(const p of week.parts)p.net=p.incoming.total===null||p.outgoing.total===null?null:round(p.incoming.total-p.outgoing.total);
+  for(const key of['incoming','outgoing']as const)week.total[key]={known:round(week.parts.reduce((s,p)=>s+p[key].known,0)),forecast:week.parts.some(p=>p[key].forecast===null)?null:round(week.parts.reduce((s,p)=>s+p[key].forecast!,0)),total:week.parts.some(p=>p[key].total===null)?null:round(week.parts.reduce((s,p)=>s+p[key].total!,0))};
+  week.total.net=week.parts.some(p=>p.net===null)?null:round(week.parts.reduce((s,p)=>s+p.net!,0));week.available=availableForecast(week.parts);
  }
- result.internal={ledger:[],history:rows.filter(r=>r.internal).map(toPayment)};
- result.excludedInternal=result.internal.history.length;
- result.unknown=external.filter(r=>!Object.hasOwn(departments,r.center)||(costOnly(r.center)&&r.kind==='in')).map(toPayment);result.overdue=[];
- result.historyCoverage={from:source.rows.length?source.rows.reduce((a,r)=>a<r.date?a:r.date,source.rows[0].date):'',to:source.rows.length?source.rows.reduce((a,r)=>a>r.date?a:r.date,source.rows[0].date):''};
- result.method=`Workify- och Stena-intäkter samt NeXT-kostnader, exklusive moms. Föregående års beräknade betalningsvecka × årets verksamhetsårstrend ${iso(trendStart)}–${iso(trendEnd)} jämfört med samma datum förra året. Registrerade externa rader räknas av från prognosen. Standard kund 30 dagar, Linnestofta Maskin och Thomas Håkansson Entreprenad 45 dagar från fakturadatum (annars leveransdatum som antagande). Stena: 45 kalenderdagar från sista dagen i leveransmånaden. Leverantörer: ${supplierDays} dagar som antagande. Interna körningar prognostiseras separat med sin egen historik och trend och ingår inte i externa belopp eller netto. Banksaldo och momsprognos ingår inte.`;
- if(result.weeks.some(w=>w.parts.some(p=>p.net===null)))warnings.push('En eller flera avdelningar saknar tillräckligt jämförbart underlag. Sammanställningen visar då tillgängliga belopp som delprognos med saknade kostnadsställen angivna. Registrerade belopp ingår även när återstående prognos saknas.');
- for(const p of result.weeks[0].parts)for(const [key,kind] of [['incoming','in'],['outgoing','out']] as const){if(p[key].factor===null){const subset=external.filter(r=>r.center===p.center&&r.kind===kind),latest=subset.length?subset.reduce((a,r)=>a>r.date?a:r.date,subset[0].date):null;warnings.push(`${p.center} ${p.name}: ${kind==='in'?'intäkts':'kostnads'}trend saknar tillräckligt periodunderlag${latest?`; senaste registrerade datum ${latest}`:'. Inga externa rader finns'}.`);}}
- if(source.review_rows)warnings.push(`${source.review_rows} importrader för granskning ingår inte; belopp ${round(source.review_amount)} kr.`);
- if(payroll){warnings.push(...payroll.warnings);result.method+=' Löner: föregående månads TransPA-bruttolöneschablon betalas den 25:e; egen historik/trend eller tydligt märkt senaste-månad-reserv. Löneprognosen särredovisas och ingår inte i kostnader eller netto. PO-pålägg ingår inte i löneutbetalningen.';}
- if(source.rows.some(r=>r.oneOff))warnings.push('Markerade engångskostnader används inte i fjolårsbas eller trend. Registrerade kostnader ligger kvar i sin beräknade betalningsvecka.');
- return {...result,automatic:{syncedAt:source.synced_at,trendFrom:iso(trendStart),trendTo:iso(trendEnd),warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,breakdown,auditRows:Array.from(detailRows.values()),controls:source.controls,payroll}};
+ const aggregate=(key:'incoming'|'outgoing',field:'forecast'|'total')=>result.weeks.some(w=>w.total[key][field]===null)?null:round(result.weeks.reduce((s,w)=>s+w.total[key][field]!,0));
+ const incoming=aggregate('incoming','total'),outgoing=aggregate('outgoing','total');
+ const registeredIncoming=round(result.weeks.reduce((s,w)=>s+w.total.incoming.known,0)),registeredOutgoing=round(result.weeks.reduce((s,w)=>s+w.total.outgoing.known,0));
+ const share=(known:number,total:number|null)=>total!==null&&total>0?round(Math.min(100,Math.max(0,known/total*100))):null;
+ const transfer:TransferSummary={from:result.weeks[0].from,to:result.weeks.at(-1)!.to,incoming,outgoing,net:incoming===null||outgoing===null?null:round(incoming-outgoing),registeredIncoming,registeredOutgoing,estimatedIncoming:aggregate('incoming','forecast'),estimatedOutgoing:aggregate('outgoing','forecast'),registeredIncomingShare:share(registeredIncoming,incoming),registeredOutgoingShare:share(registeredOutgoing,outgoing),missing:breakdown.filter(d=>!d.internal&&d.total===null).map(d=>({weekFrom:d.weekFrom,center:d.center,kind:d.kind})),currency:'SEK',vatBasis:'excluding_vat'};
+ const toPayment=(r:EvidenceRow):Payment=>({id:r.id,center:r.center,kind:r.kind,date:r.paymentDate,amount:r.amount,internal:r.internal});
+ result.internal={ledger:[],history:rows.filter(r=>r.internal).map(toPayment)};result.excludedInternal=result.internal.history.length;
+ result.unknown=rows.filter(r=>!r.internal&&(!Object.hasOwn(departments,r.center)||(costOnly(r.center)&&r.kind==='in'))).map(toPayment);result.overdue=[];
+ result.historyCoverage={from:rows.length?rows.reduce((v,r)=>v<r.date?v:r.date,rows[0].date):'',to:rows.length?rows.reduce((v,r)=>v>r.date?v:r.date,rows[0].date):''};
+ if(breakdown.some(d=>!d.internal&&d.trendStatus==='historical_only'&&d.forecast!==null))warnings.push('Historikreserv används utan tillväxtpåslag där färre än tre avstämda månadspar finns. Varken kalenderns månadsskifte eller ett nytt verksamhetsår skapar automatiskt en ny trend.');
+ if(transfer.missing.length)warnings.push('Komplett total saknas för delar av perioden. Registrerade belopp och delprognoser visas; inget ofullständigt nettobelopp får föras över som komplett prognos.');
+ if(source.synced_at&&now-dateValue(source.synced_at.slice(0,10))>2*day)warnings.push(`Underlaget uppdaterades senast ${source.synced_at.slice(0,10)}. Nyare importer kan saknas.`);
+ if(reviews.some(r=>r.reviewed&&r.stale))warnings.push('Underlag har ändrats efter en månadsavstämning. Den månaden används inte som avstämd förrän den har kontrollerats igen.');
+ if(source.review_rows)warnings.push(`${source.review_rows} rader väntar på granskning och ingår inte.`);
+ if(payroll)warnings.push(...payroll.warnings);
+ if(stenaMonths.length)warnings.push('Stena följs per leveransmånad med betalning 45 dagar efter månadens slut. Avräknat är en beloppsgrund, inte bevis på betalning. En uttryckligen avstämd leveransmånad får ingen extra historikreserv.');
+ result.method='Registrerat + återstående uppskattning. Ordinarie betalningar: snitt av 13 jämförbara veckor 52 veckor bakåt. Trend: högst sex par av uttryckligen avstämda månader inom senaste året; minst tre par krävs. Annars används historik utan tillväxtpåslag. Stena: egen leveransmånad och samma månad föregående år, separat trend; avstämd månad använder endast registrerat belopp. Registrerat räknas av en gång inom respektive del. Alla betalningsdatum är antagna. Exklusive moms; löner särredovisas utanför kostnader och netto.';
+ const trendEnd=new Date(Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),0)).toISOString().slice(0,10),trendFrom=new Date(Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth()-12,1)).toISOString().slice(0,10);
+ return {...result,automatic:{model:'evidence-v2',syncedAt:source.synced_at,trendFrom,trendTo:trendEnd,warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,breakdown,auditRows:Array.from(audit.values()),controls:source.controls,payroll,periodReviews:reviews,reviewBasis:source.reviewBasis??{},stenaMonths,transfer}};
 }

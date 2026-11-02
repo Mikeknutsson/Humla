@@ -1,4 +1,18 @@
-# Avdelningens betalningsprognos – första version
+# Avdelningens betalningsprognos
+
+## Current model: period total and separate Stena cohorts (2026-11-02)
+
+Automatic mode uses evidence-v2. The previous YTD/single-week descriptions below are retained history, not the current automatic contract. Manual ledger mode keeps its existing method.
+
+The main result is one four-week period total for Transport 30, Sortergården 20 and cost-only Verkstad 40. Incoming, outgoing and net reconcile exactly to visible weekly totals. The compact CSV export has one transfer row; net is also copyable. SEK excluding VAT, before payroll/VAT; no bank balance or verified ledger status. Missing components block a complete transfer total instead of silently exporting a partial net. Registered shares describe amounts, not probabilities.
+
+Ordinary future payments use the average of 13 same-season historical payment weeks (52 weeks back, centered ±6 weeks). Known amounts stay on their assumed dates and reduce only their own ordinary forecast. Stena is excluded from this weekly averaging and uses one delivery month → month-end +45 days, with separate settled, history, Workify reserve and remaining forecast columns. An explicitly reviewed completed Stena month has no historical top-up. An inactive customer in unrelated old months does not create a phantom future cohort; a cohort with current evidence but insufficient history remains incomplete.
+
+Growth requires at least three matching pairs of reviewed source months, both current and prior year, using up to six pairs from the rolling preceding twelve months. There is no fiscal-year reset. Without reviewed pairs the displayed fallback is unscaled historical expectation, never a claim of verified trend. Reviews are per tenant, source scope, cost center, direction and month, require kpi.manage and explicit user acknowledgement, and retain reversible audit history. No months are automatically certified. Reviews are bound to the displayed source hash; concurrent changes are rejected before saving. Server-side SHA-256 source fingerprints invalidate only reviews whose normalized source month changed; ordering or unrelated imports do not invalidate them.
+
+Business calculation lives in src/lib/hub/payment-evidence-model.ts and payment-outcome-forecast.ts. Payment-date policy remains unchanged. UI/CSV display the same model, source IDs, comparison windows and missing components. Internal movements and marked one-offs retain separate existing treatment. Source imports, canonical booking priority and actual cost facts are untouched.
+
+Tests: scripts/test-payment-outcome-forecast.cjs and test-payment-evidence-model.cjs cover totals/weekly reconciliation, unchanged overlap across a month boundary, isolated monthly Stena, explicit closure, source fingerprints, reviewed-pair threshold, leap-year payment terms, missing components, one-offs, credits and internal exclusions. supabase/tests/payment_forecast_period_reviews.sql covers permissions, source-hash requirement, valid completed months and reversible audit.
 
 ## Monthly availability and explicit partial summary (2026-10-19)
 
