@@ -15,7 +15,7 @@ export async function cachedKpiReport<T>(userId:string,tenantId:string,scope:unk
    const result=await load();
    if(result.error||!result.data)throw Object.assign(new Error(result.error?.message??'Hub report unavailable'),{code:result.error?.code??'HUB_REPORT_UNAVAILABLE'});
    return result.data;
-  },cacheKey,{revalidate:86400,tags:[`kpi-report:${userId}`]})();
+  },cacheKey,{revalidate:86400,tags:[`kpi-report:${userId}`,`kpi-tenant-report:${tenantId}`]})();
   let pending=inFlight.get(requestKey) as Promise<T>|undefined;
   if(!pending){pending=run();inFlight.set(requestKey,pending);void pending.finally(()=>{if(inFlight.get(requestKey)===pending)inFlight.delete(requestKey);}).catch(()=>{});}
   const data=await pending;

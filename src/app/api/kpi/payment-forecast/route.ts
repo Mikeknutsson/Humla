@@ -1,3 +1,5 @@
+import {getKpiReportStatus} from '@/lib/kpi/report-sync';
+import {kpiReportVersion} from '@/lib/kpi/report-updates';
 import {createClient} from '@/lib/supabase/server';
 import {paymentForecast,type ForecastInput} from '@/lib/hub/payment-forecast';
 import {outcomeForecast,type OutcomeSource} from '@/lib/hub/payment-outcome-forecast';
@@ -42,8 +44,11 @@ export async function POST(req:Request){
   }
   if(body.mode==='automatic'){
    if(!member)throw Error('Arbetsyta saknas');
+   const publication=await getKpiReportStatus(member.tenant_id);
+   if(publication.error||!publication.data)throw new ForecastSourceError('Rapportversionen kunde inte kontrolleras. Tidigare prognos återanvänds inte.');
+   const sourceVersion=kpiReportVersion(publication.data)+':'+(publication.data.requested_at??'');
    const [snapshot,reviews]=await Promise.all([
-    paymentSourceSession(`${member.tenant_id}:${user.id}:${body.asOf}`,body.reuseSource===true,async()=>{
+    paymentSourceSession(`${member.tenant_id}:${user.id}:${body.asOf}:${sourceVersion}`,body.reuseSource===true&&publication.data.status==='ready',async()=>{
      const [{data,error},salary]=await Promise.all([
       db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf}),
       db.rpc('hub_payment_payroll_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf})

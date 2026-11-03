@@ -23,5 +23,6 @@ export async function requestImport(url:string,body:FormData,{readOnly=false,tim
  let result;
  try{result=await response.json();}catch{throw new ImportConnectionError(`Importsvaret avbröts eller kunde inte läsas. Filen ligger kvar. Försök läsa filen igen. Om sparandet hade börjat, kontrollera senaste importer först. Referens: ${requestId}`,true);}
  if(!response.ok)throw new Error(result.error??`Importanropet misslyckades (HTTP ${response.status}). Referens: ${requestId}`);
+ if(!readOnly&&typeof window!=='undefined')window.dispatchEvent(new Event('humla:kpi-imported'));
  return result;
 }

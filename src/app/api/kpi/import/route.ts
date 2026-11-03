@@ -1,3 +1,4 @@
+import {queueImportedKpiData} from '@/lib/kpi/import-publication';
 import { allocateWorkify, isWorkify } from "@/lib/kpi/workify";
 import { createHash, randomUUID } from "node:crypto";
 import { parseImportFile, normalizeRows, mimeForFile } from "@/lib/kpi/parser";
@@ -24,6 +25,10 @@ export async function POST(request: Request) {
   if (!member) return Response.json({ error: "Aktivt företag saknas." }, { status: 403 });
   const { data: allowed } = await supabase.rpc("hub_has_permission", { p_tenant_id: member.tenant_id, p_permission: "kpi.manage" });
   if (!allowed) return Response.json({ error: "Behörigheten kpi.manage krävs." }, { status: 403 });
+  async function completedImport(payload:Record<string,unknown>,newRows:number){
+    const publication=newRows>0?await queueImportedKpiData(supabase,member!.tenant_id,user!.id):{};
+    return Response.json({...payload,...publication},{status:201});
+  }
 
   let batchId: string | null = null;
   try {
@@ -177,7 +182,7 @@ export async function POST(request: Request) {
         p_tenant_id:member.tenant_id,p_batch_id:batchId,
       }):{data:{},error:null};
       if(resolved.error)throw resolved.error;
-      return Response.json({batchId,rows:ingested.insertedRows,...ingested,...resolved.data},{status:201});
+      return completedImport({batchId,rows:ingested.insertedRows,...ingested,...resolved.data},ingested.insertedRows);
     }
 
     if (kind === 'cost') {
@@ -187,7 +192,7 @@ export async function POST(request: Request) {
         p_tenant_id:member.tenant_id,p_batch_id:batchId,p_rows:normalized,
       });
       if(ingestError)throw ingestError;
-      return Response.json({batchId,rows:ingested.insertedRows,...ingested},{status:201});
+      return completedImport({batchId,rows:ingested.insertedRows,...ingested},ingested.insertedRows);
     }
 
     for (let offset = 0; offset < normalized.length; offset += 500) {
@@ -229,10 +234,10 @@ export async function POST(request: Request) {
         p_tenant_id: member.tenant_id, p_batch_id: batchId,
       });
       if (resolveError) throw resolveError;
-      return Response.json({ batchId, rows: normalized.length, ...resolved }, { status: 201 });
+      return completedImport({ batchId, rows: normalized.length, ...resolved },validRows.length);
     }
 
-    return Response.json({ batchId, status, rows: normalized.length, validRows: validRows.length, invalidRows: normalized.length - validRows.length }, { status: 201 });
+    return completedImport({ batchId, status, rows: normalized.length, validRows: validRows.length, invalidRows: normalized.length - validRows.length },validRows.length);
   } catch (error) {
     if (batchId) await supabase.from("kpi_import_batches").update({ status: "failed", error_summary: [{ message: error instanceof Error ? error.message : "Importen misslyckades" }] }).eq("id", batchId);
     return Response.json({ error: error instanceof Error ? error.message : "Importen misslyckades." }, { status: 500 });

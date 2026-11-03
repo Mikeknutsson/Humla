@@ -1,3 +1,4 @@
+import {queueImportedKpiData} from '@/lib/kpi/import-publication';
 import {createHash} from 'node:crypto';
 import {createClient} from '@/lib/supabase/server';
 import {stenaWorkbook,normalizeStena,detectStenaWorkbook,suggestStenaMapping} from '@/lib/hub/stena-import';
@@ -23,6 +24,6 @@ export async function POST(request:Request){
  const kind=String(form.get('kind')??''),rows=normalizeStena(table,mapping,kind),hash=createHash('sha256').update(bytes).digest('hex');
  const {data,error}=await db.rpc('hub_stena_upload_v1',{p_tenant:member.tenant_id,p_hash:hash,p_name:file.name,p_kind:kind,p_rows:rows,p_original:action==='import'?Buffer.from(bytes).toString('base64'):'',p_mapping:{columns:mapping,sheet:table.sheet,header:Number(form.get('header')??1)},p_commit:action==='import'}).abortSignal(AbortSignal.timeout(90000));
  if(error){console.error('[stena-import]',{code:error.code,message:error.message});throw Error('Stena-importen kunde inte slutföras. Ingen ofullständig fil publiceras. Kontrollera filen eller försök igen.');}
- return Response.json(data);
+ return Response.json({...data,...(action==='import'&&!data?.duplicate?await queueImportedKpiData(db,member.tenant_id,user.id):{})});
  }catch(e){return Response.json({error:e instanceof Error?e.message:'Filen kunde inte läsas'},{status:422});}
 }

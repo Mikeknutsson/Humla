@@ -326,7 +326,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       const importCounts = typeof result.duplicateRowsSkipped === 'number'
         ? `${result.insertedRows} nya rader sparades · ${result.duplicateRowsSkipped} redan importerade rader hoppades över · ${result.ignoredZeroRows} nollrader ignorerades. ${result.invalidRows} nya rader behöver granskas.`
         : `${result.validRows} giltiga och ${result.invalidRows} rader för granskning sparades.`;
-      setMessage({ type: "success", text: `${file.name}: ${importCounts} ${pendingFiles.length ? "Nästa fil ligger redo för analys." : "Klart. Öppna Översikt för uppdaterade nyckeltal."}` });
+      setMessage({ type: "success", text: `${file.name}: ${importCounts} ${result.reportSyncWarning??""} ${pendingFiles.length ? "Nästa fil ligger redo för analys." : "Omräkning begärs för alla rapportvyer. Senaste publicerade underlag visas tills den är klar."}` });
       setFile(pendingFiles[0] ?? null);
       setPendingFiles((current) => current.slice(1));
       setPreview(null);
