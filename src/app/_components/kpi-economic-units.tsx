@@ -6,6 +6,7 @@ import {KpiGroupFilter} from './kpi-cost-center-filter';
 import {analysisHref} from '@/lib/kpi/analysis';
 import {useRouter} from 'next/navigation';
 import {useKpiReportSelection} from './kpi-report-selection';
+import styles from './kpi-economic-units.module.css';
 import type {MaterialRow} from '@/lib/hub/material-reconciliation';
 export type EconomicUnit={key:string;label:string;revenue:number;cost:number;result:number;rows:number;is_fallback?:boolean;
  cost_categories?:Record<string,number|null>;margin_pct?:number|null;worked_hours?:number|null;productive_hours?:number|null;
@@ -26,19 +27,58 @@ function EconomicGroupFilter({query,groups}:{query:string;groups:string[]}){
  return <KpiGroupFilter value={selectedGroup} groups={groups} disabled={pending} onChange={change}/>;
 }
 export function economicUnitHref(query:string,unit:string){const p=new URLSearchParams(query);p.set('unit',unit);for(const k of ['vehicle','project','category','kind','source','page','view','level','grain'])p.delete(k);return '/kpi/enhet?'+p;}
+const costColumns=[
+ {key:'personnel',label:'Personal',color:'59,130,246'},
+ {key:'fuel',label:'Bränsle',color:'217,119,6'},
+ {key:'service_repair',label:'Service/Rep',color:'168,85,247'},
+ {key:'fixed',label:'Fasta',color:'100,116,139'},
+ {key:'depreciation',label:'Avskrivning',color:'20,140,140'},
+ {key:'management',label:'Arbetsledning',color:'99,102,241'},
+ {key:'overhead',label:'Overhead',color:'107,114,128'},
+ {key:'other',label:'Övrigt',color:'148,105,69'},
+ {key:'material',label:'Material',color:'22,163,74'},
+ {key:'tipp_deponi',label:'Tipp/Deponi',color:'180,83,9'},
+ {key:'hired',label:'Inhyrda',color:'219,39,119'},
+] as const;
+function finite(n:unknown):number|null{return typeof n==='number'&&Number.isFinite(n)?n:null;}
+function costShare(amount:number|null,revenue:number){return amount!==null&&revenue>0?amount/revenue*100:null;}
+function costShade(color:string,share:number|null){return share===null||share===0?'transparent':share<0?'#f1f5f9':'rgba('+color+','+(0.04+Math.min(share,100)/100*0.32)+')';}
+const compact=new Intl.NumberFormat('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1});
 export function KpiEconomicUnits({units,query,totals,canManage,groups=[]}:{units:EconomicUnit[];query:string;totals:{revenue:number;cost:number;result:number};canManage:boolean;groups:string[]}){
  const [sort,setSort]=useState('label'),[direction,setDirection]=useState<'asc'|'desc'>('asc');
- const columns=[['label','Kostnadsbärare'],['revenue','Omsättning'],['cost','Kostnad'],['result','Resultat'],['margin_pct','Marginal %'],['personnel','Personal'],['worked_hours','Timmar'],['distance_mil','Mil']] as const;
+ const [showAllCosts,setShowAllCosts]=useState(false),[display,setDisplay]=useState<'share'|'amount'>('share'),[lossOnly,setLossOnly]=useState(false);
+ const shownCosts=showAllCosts?costColumns:costColumns.slice(0,5);
+ const columns=[{key:'label',label:'Enhet'},{key:'revenue',label:'Intäkt'},{key:'cost',label:'Kostnad'},{key:'result',label:'Resultat'},{key:'margin_pct',label:'Marginal'},...shownCosts.map(c=>({key:'category:'+c.key,label:c.label,color:c.color})),{key:'worked_hours',label:'Timmar'},{key:'distance_mil',label:'Mil'},{key:'revenue_per_hour',label:'Intäkt/h'},{key:'cost_per_mil',label:'Kostnad/mil'}];
  function changeSort(key:string){if(sort===key)setDirection(d=>d==='asc'?'desc':'asc');else{setSort(key);setDirection(key==='label'?'asc':'desc');}}
- function sortValue(unit:EconomicUnit){const v=sort==='personnel'?unit.cost_categories?.personnel:unit[sort as keyof EconomicUnit];return typeof v==='number'&&Number.isFinite(v)?v:null;}
+ function sortValue(unit:EconomicUnit){if(sort.startsWith('category:')){const amount=finite(unit.cost_categories?.[sort.slice(9)]);return display==='share'?costShare(amount,unit.revenue):amount;}return finite(unit[sort as keyof EconomicUnit]);}
  const selection=useKpiReportSelection(),router=useRouter();
  function showAll(){const p=new URLSearchParams(selection?.query??query);for(const key of ['cost_center','group','unit','vehicle','project','category','kind','source','page'])p.delete(key);p.set('view','kpi');if(selection)selection.change(p.toString());else router.push('/kpi?'+p);}
  const visibleUnits=units.filter(u=>Number.isFinite(u.revenue)&&u.revenue>0);
- const ordered=[...visibleUnits].sort((a,b)=>{const names=a.label.localeCompare(b.label,'sv',{numeric:true});if(sort==='label')return direction==='asc'?names:-names;const av=sortValue(a),bv=sortValue(b);if(av===null||bv===null)return av===bv?names:av===null?1:-1;return (direction==='asc'?av-bv:bv-av)||names;});
- const header=(interactive:boolean)=><thead><tr>{columns.map(([key,label])=>{const active=sort===key,arrow=active?(direction==='asc'?'↑':'↓'):'↕',next=active?(direction==='asc'?'desc':'asc'):(key==='label'?'asc':'desc');return <th scope="col" key={key} aria-sort={active?(direction==='asc'?'ascending':'descending'):'none'}>{interactive?<button type="button" onClick={()=>changeSort(key)} aria-label={label+': sortera '+(key==='label'?(next==='asc'?'A till Ö':'Ö till A'):(next==='asc'?'lägst först':'högst först'))} style={{background:'none',border:0,padding:0,minHeight:0,color:'inherit',font:'inherit',textTransform:'inherit',letterSpacing:'inherit',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>{label}<span aria-hidden="true">{arrow}</span></button>:<>{label} <span aria-hidden="true">{arrow}</span></>}</th>;})}</tr></thead>;
- const head=header(true);
- return <article className="panel economic-units"><h2>Ekonomiska enheter</h2><div className="unit-table-controls"><EconomicGroupFilter query={query} groups={groups}/><span>{visibleUnits.filter(u=>!u.is_fallback).length} mappade ekonomiska enheter{visibleUnits.some(u=>u.is_fallback)?' + Övrigt':''}</span></div><p>Här visas era mappade ekonomiska enheter med positiva intäkter i valt urval. Enheternas egna kostnader finns kvar i totalsumman även när enheten döljs. Övrigt samlar de enheter ni valt att lägga där samt poster som ännu saknar en säker enhetskoppling. Välj en enhet för detaljer.</p>
- <p>Klicka på en kolumnrubrik för att sortera. Klicka igen för att vända ordningen. Saknade värden visas sist.</p><KpiTableFrame head={head} interactiveHead><table>{header(false)}<tbody>{ordered.length===0&&<tr><td colSpan={8}>Inga enheter har positiva intäkter i det valda urvalet.</td></tr>}{ordered.map(u=><tr className="economic-parent" key={u.key}><td><Link prefetch={false} href={economicUnitHref(query,u.key)}><strong>{u.label.toLocaleLowerCase('sv').includes('grusmaterial')?'Grusmaterial':u.label} →</strong></Link><small>{u.children.length} ingående objekt · {u.rows} transaktioner</small></td><td><Link prefetch={false} href={analysisHref(query,{unit:u.key,vehicle:null,project:null,category:null,kind:'revenue',level:'transaction'})}>{money.format(u.revenue)}</Link></td><td><Link prefetch={false} href={analysisHref(query,{unit:u.key,vehicle:null,project:null,category:null,kind:'cost',level:'project'})}>{money.format(u.cost)}</Link></td><td><strong>{money.format(u.result)}</strong></td><td>{value(u.margin_pct,'%')}</td><td>{u.cost_categories?.personnel==null?'–':money.format(u.cost_categories.personnel)}</td><td>{value(u.worked_hours,'h')}</td><td>{u.distance_basis==='main_vehicle_interpolated_period'?'≈ ':''}{value(u.distance_mil,'mil')}</td></tr>)}</tbody><tfoot><tr><th>Totalt för urvalet</th><td>{money.format(totals.revenue)}</td><td>{money.format(totals.cost)}</td><td>{money.format(totals.result)}</td><td>{totals.revenue===0?'–':value(totals.result/totals.revenue*100,'%')}</td><td>–</td><td>–</td><td>–</td></tr></tfoot></table></KpiTableFrame><p>Poster under Övrigt behåller kostnadsställe, period och källunderlag och kan fördelas efter granskning. Personal avser kostnad i aktuellt underlag. Timmar kommer från TransPA. ≈ markerar beräknad körsträcka mellan mätningar. – betyder att tillräckligt verifierat underlag saknas.</p>
+ const lossCount=visibleUnits.filter(u=>u.result<0).length;
+ const filteredUnits=lossOnly?visibleUnits.filter(u=>u.result<0):visibleUnits;
+ const ordered=[...filteredUnits].sort((a,b)=>{const names=a.label.localeCompare(b.label,'sv',{numeric:true});if(sort==='label')return direction==='asc'?names:-names;const av=sortValue(a),bv=sortValue(b);if(av===null||bv===null)return av===bv?names:av===null?1:-1;return (direction==='asc'?av-bv:bv-av)||names;});
+ const header=(interactive:boolean)=><thead><tr>{columns.map(c=>{const {key,label}=c,active=sort===key,arrow=active?(direction==='asc'?'↑':'↓'):'↕';return <th scope="col" key={key} className={styles.headingCell} style={{borderTop:'3px solid '+('color'in c?'rgb('+c.color+')':'#cbd5e1')}} aria-sort={active?(direction==='asc'?'ascending':'descending'):'none'}>{interactive?<button type="button" className={styles.sort} onClick={()=>changeSort(key)} aria-label={label+': sortera '+(active&&direction==='desc'?'stigande':'fallande')}>{label} <span aria-hidden="true">{arrow}</span></button>:<>{label} {arrow}</>}</th>;})}</tr></thead>;
+ function costCell(amount:number|null,revenue:number,color:string,href?:string){
+  const share=costShare(amount,revenue),amountText=amount===null?'–':compact.format(amount/1000)+' tkr',shareText=value(share,'%');
+  const content=<><strong>{display==='share'?shareText:amountText}</strong><small>{display==='share'?amountText:shareText}{share!==null&&share>=100?' · ≥ intäkt':share!==null&&share<0?' · kredit':''}</small></>;
+  return <div className={styles.costCell} style={{background:costShade(color,share)}} title={amount===null?'Underlag saknas':money.format(amount)+' · '+shareText+' av intäkterna'}>{href?<Link prefetch={false} href={href}>{content}</Link>:content}</div>;
+ }
+ function categoryTotal(category:string){const values=units.map(u=>finite(u.cost_categories?.[category]));return values.some(v=>v===null)?null:values.reduce<number>((sum,v)=>sum+(v??0),0);}
+ function drill(unit:EconomicUnit,kind:string,category:string|null=null){return analysisHref(query,{unit:unit.key,vehicle:null,project:null,category,kind,level:'transaction'});}
+ return <article className={'panel economic-units '+styles.panel}><h2>Ekonomiska enheter</h2>
+ <div className="unit-table-controls"><EconomicGroupFilter query={query} groups={groups}/><div className={styles.switch} role="group" aria-label="Visning av kostnader"><button type="button" aria-pressed={display==='share'} onClick={()=>setDisplay('share')}>Andel %</button><button type="button" aria-pressed={display==='amount'} onClick={()=>setDisplay('amount')}>Belopp</button></div><label className={styles.check}><input type="checkbox" checked={showAllCosts} onChange={e=>{setShowAllCosts(e.target.checked);if(!e.target.checked&&costColumns.slice(5).some(c=>sort==='category:'+c.key))setSort('label');}}/>Alla kostnadsslag</label><label className={styles.check}><input type="checkbox" checked={lossOnly} onChange={e=>setLossOnly(e.target.checked)}/>Bara förlust ({lossCount})</label></div>
+ <div className={styles.legend}><span><i style={{background:'#e9b9b9'}}/>Rött resultat = förlust</span><span><i style={{background:'#d8e3ff'}}/>Starkare kostnadsfärg = större andel av intäkt</span><span>Belopp i tkr · 1 tkr = 1 000 kr</span></div>
+ <p className={styles.caption}>Sortera på valfri kolumn för att hitta höga kostnadsandelar. Kostnadsfärgerna visar storlek, inte avvikelse mot mål. Klicka på en kostnadsruta för dess transaktioner.</p>
+ <KpiTableFrame head={header(true)} interactiveHead><table className={styles.table}>{header(false)}<tbody>{ordered.length===0&&<tr><td colSpan={columns.length}>Inga enheter matchar urvalet.</td></tr>}{ordered.map(u=><tr className="economic-parent" key={u.key}>
+ <td className={styles.name}><Link prefetch={false} href={economicUnitHref(query,u.key)}><strong>{u.label.toLocaleLowerCase('sv').includes('grusmaterial')?'Grusmaterial':u.label} →</strong></Link><small>{u.children.length} objekt · {u.rows} rader</small></td>
+ <td><Link prefetch={false} href={drill(u,'revenue')} title={money.format(u.revenue)}>{compact.format(u.revenue/1000)}</Link></td>
+ <td><Link prefetch={false} href={drill(u,'cost')} title={money.format(u.cost)}>{compact.format(u.cost/1000)}</Link></td>
+ <td className={u.result<0?styles.negative:styles.positive}><strong title={money.format(u.result)}>{compact.format(u.result/1000)}</strong><small>{u.result<0?'Förlust':'Överskott'}</small></td>
+ <td className={u.result<0?styles.negative:styles.positive}><strong>{value(u.margin_pct,'%')}</strong></td>
+ {shownCosts.map(c=><td key={c.key} className={styles.cost}>{costCell(finite(u.cost_categories?.[c.key]),u.revenue,c.color,drill(u,'cost',c.key))}</td>)}
+ <td>{value(u.worked_hours,'h')}</td><td>{u.distance_basis==='main_vehicle_interpolated_period'&&u.distance_mil!=null?'≈ ':''}{value(u.distance_mil,'mil')}</td><td>{value(u.revenue_per_hour,'kr')}</td><td>{u.distance_basis==='main_vehicle_interpolated_period'&&u.cost_per_mil!=null?'≈ ':''}{value(u.cost_per_mil,'kr')}</td>
+ </tr>)}</tbody><tfoot><tr><th scope="row">Hela urvalet</th><td title={money.format(totals.revenue)}>{compact.format(totals.revenue/1000)}</td><td title={money.format(totals.cost)}>{compact.format(totals.cost/1000)}</td><td title={money.format(totals.result)}>{compact.format(totals.result/1000)}</td><td>{totals.revenue===0?'–':value(totals.result/totals.revenue*100,'%')}</td>{shownCosts.map(c=><td key={c.key} className={styles.cost}>{costCell(categoryTotal(c.key),totals.revenue,c.color)}</td>)}<td>–</td><td>–</td><td>–</td><td>–</td></tr></tfoot></table></KpiTableFrame>
+ <p className={styles.caption}>{ordered.length} av {visibleUnits.length} enheter med positiva intäkter visas. Totalraden gäller hela urvalet, även dolda enheter. Alla kostnadsslag visar även arbetsledning, overhead, övrigt, material, tipp/deponi och inhyrda. Personal är kostnad enligt underlaget. Timmar kommer från TransPA. ≈ är beräknad körsträcka. – betyder saknat underlag.</p>
  <div className="dashboard-report-actions"><Link prefetch={false} href="/kpi/ekonomiska-enheter">Alla mappade ekonomiska enheter →</Link><Link prefetch={false} href="/kpi/arbetskostnader">Arbetskostnad och NEXT-timmar →</Link><button type="button" className="secondary" disabled={selection?.pending} onClick={showAll}>Visa mappade enheter i alla kostnadsställen</button>{canManage&&<><Link prefetch={false} className="secondary" href={'/kpi/kontrollpanel?'+new URLSearchParams({...Object.fromEntries(new URLSearchParams(query)),section:'allocation'})}>Fördela kostnader →</Link><Link prefetch={false} href={'/kpi/kontrollpanel?'+new URLSearchParams({...Object.fromEntries(new URLSearchParams(query)),section:'units'})}>Hantera kostnadsbärare</Link></>}</div></article>;
 }
 
