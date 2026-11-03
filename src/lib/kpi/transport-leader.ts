@@ -4,7 +4,8 @@ export type TransportMetrics = {
  missing_targets:number; rows:number;
 };
 export type TransportCostBreakdown = {category:string;amount:number;rows:number};
-export type TransportUnit = TransportMetrics & {unit_id:string|null;unit_name:string|null;cost_breakdown?:TransportCostBreakdown[]};
+export type TransportMileage={source:string;generation:string;distance_mil:number|null;cost_per_mil:number|null;fuel_cost_per_mil:number|null;matched_cost:number|null;matched_fuel_cost:number|null;from:string|null;to:string|null;covered_days:number;selected_days:number;complete:boolean;estimated:boolean;status:'complete'|'partial'|'missing'|'zero_distance';reason:string|null;segments:Array<{from:string;to:string;vehicle:string;mil:number;basis:string}>};
+export type TransportUnit = TransportMetrics & {unit_id:string|null;unit_name:string|null;cost_breakdown?:TransportCostBreakdown[];mileage?:TransportMileage};
 export type TransportGroup = TransportMetrics & {business_group:string};
 export type TransportBreakdown = {kind:'revenue'|'cost';category:string;amount:number;rows:number;share_of_revenue:number|null};
 export type TransportAnalysisInput = {unit_id:string;unit_name:string|null;business_group:string;revenue:number;personnel:number;service_repair:number;fuel:number;worked_hours:number|null};
