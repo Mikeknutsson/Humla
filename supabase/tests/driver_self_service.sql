@@ -16,7 +16,7 @@ do $$ declare t uuid:=current_setting('test.driver_tenant')::uuid; p uuid:=curre
  perform public.hub_driver_bind_account_v1(t,w,p); -- idempotent
  perform set_config('request.jwt.claim.sub',w::text,true);
  r:=public.hub_driver_self_v1(t,current_date-27,current_date);
- if jsonb_array_length(r->'vehicle_context')<>0 then raise exception 'Rolling partial months exposed goal coaching';end if;
+ if exists(select 1 from jsonb_array_elements(r->'vehicle_context') v where v->>'goal_gap_pp' is not null) then raise exception 'Current day assessment bypassed shared source cutoff';end if;
  if jsonb_array_length(r->'days')<>28 then raise exception 'Expected one status per date';end if;
  if exists(select 1 from jsonb_array_elements(r->'days') d where d->>'reporting' not in ('good','attention','unknown') or d ?| array['hours','amount','employee_id']) then raise exception 'Invalid day payload';end if;
  if exists(select 1 from jsonb_array_elements(r->'vehicle_context') v where v ?| array['amount','revenue','cost','salary','hours','transactions','unit_id']) then raise exception 'Vehicle financial detail exposed';end if;

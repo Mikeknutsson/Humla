@@ -22,3 +22,9 @@ assert.match(render({...base,goal_gap_pp:0}),/På målet/);
 assert.match(render({...base,goal_gap_pp:null,actions:[]}),/Inväntar underlag/);
 assert.doesNotMatch(render({...base,goal_gap_pp:null,actions:[]}),/Det här kan hjälpa/);
 console.log('PASS: binary colors, centered goal, no extreme percentages, hidden incomplete comparisons, unknown state');
+
+assert.match(render({...base,coverage_status:'registered'}),/Preliminärt/);
+assert.doesNotMatch(render({...base,coverage_status:'registered'}),/bekräftat komplett/);
+assert.match(render({...base,goal_gap_pp:null,coverage_status:'missing_components',actions:[]}),/Någon del/);
+assert.doesNotMatch(render({...base,goal_gap_pp:null,coverage_status:'missing_components',actions:[]}),/#d16c70|#69bc91/);
+console.log('PASS: imported availability labeled preliminary; missing component remains visible and neutral');
