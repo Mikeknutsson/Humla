@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
-import {parseMonthPeriod} from '@/lib/kpi/period';
+import {parseMonthPeriod,periodFilters} from '@/lib/kpi/period';
 import {filterKeys,analysisHref} from '@/lib/kpi/analysis';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
 export const dynamic='force-dynamic';
@@ -12,7 +12,7 @@ export default async function InvoicePage({searchParams}:{searchParams:Promise<R
  const raw=await searchParams;
  const params=new URLSearchParams(Object.entries(raw).filter((entry):entry is [string,string]=>entry[1]!==undefined));
  let period:ReturnType<typeof parseMonthPeriod>;
- try {period=parseMonthPeriod(raw.fiscal_year,raw.months);} catch {return <main>Ogiltig rapportperiod. <Link href="/kpi">Till Översikt</Link></main>;}
+ try {period=parseMonthPeriod(raw.fiscal_year,raw.months,new Date(),raw.period_mode);} catch {return <main>Ogiltig rapportperiod. <Link href="/kpi">Till Översikt</Link></main>;}
  const customer=raw.invoice_customer;
  if(customer!==undefined&&customer!=='external'&&customer!=='internal')return <main>Ogiltigt kundurval.</main>;
  const internal=customer==='internal';
@@ -21,7 +21,7 @@ export default async function InvoicePage({searchParams}:{searchParams:Promise<R
  const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)redirect('/kpi/login');
  const {data:member}=await db.from('hub_tenant_members').select('tenant_id').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();
  if(!member)return <main>Arbetsyta saknas.</main>;
- const filters=Object.fromEntries(filterKeys.filter(key=>params.has(key)).map(key=>[key,params.get(key)!]));
+ const filters=periodFilters(period,Object.fromEntries(filterKeys.filter(key=>params.has(key)).map(key=>[key,params.get(key)!])));
  if(customer)filters.invoice_customer=customer;
  const {data,error}=await db.rpc('hub_kpi_invoice_lead_time_v1',{p_tenant_id:member.tenant_id,p_year:period.fiscalYear,p_months:period.months,p_filters:filters,p_page:page});
  const report=data as InvoiceReport|null;

@@ -3,6 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import {readSavedSelection,restoreSelection,selectionCookie,selectionFromQuery} from '@/lib/kpi/selection';
 
 export async function proxy(request: NextRequest) {
+  // Support Auth's configured site-URL fallback without loading a report first.
+  if (request.method === 'GET' && request.nextUrl.searchParams.has('code') && ['/', '/kpi', '/kpi/login'].includes(request.nextUrl.pathname)) {
+    const target = request.nextUrl.clone();
+    target.pathname = '/kpi/login/confirm';
+    target.search = '';
+    target.searchParams.set('code', request.nextUrl.searchParams.get('code')!);
+    const response = NextResponse.redirect(target);
+    response.headers.set('Cache-Control', 'no-store');
+    response.headers.set('Referrer-Policy', 'no-referrer');
+    return response;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) return NextResponse.next({ request });

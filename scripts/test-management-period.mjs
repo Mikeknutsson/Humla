@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import fs from 'node:fs';
+import ts from 'typescript';
+const require=createRequire(import.meta.url);
+function load(file,custom=require){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(custom,m,m.exports);return m.exports;}
+const dates=load('src/lib/kpi/period.ts');
+const {managementRange,managementPreset,managementPeriod,previousManagementPeriod}=load('src/lib/kpi/management-period.ts',n=>n==='./period'?dates:require(n));
+const now=new Date('2026-11-06T07:00:00Z');
+assert.deepEqual(managementPreset('q2',2023,9,now).months,[12,1,2]);
+assert.equal(managementPreset('q2',2023,9,now).to,'2024-02-29');
+assert.equal(previousManagementPeriod(managementRange('2024-02-01','2024-02-29')).to,'2023-02-28');
+assert.equal(managementPreset('year',2025,9,now).to,'2026-08-31');
+assert.equal(managementPreset('ytd',2026,9,now).to,'2026-11-06');
+assert.equal(managementPeriod(new URLSearchParams(),now).from,'2026-10-01');
+assert.equal(managementPeriod(new URLSearchParams('fiscal_year=2026&months=9,10'),now).to,'2026-10-31');
+assert.equal(managementPeriod(new URLSearchParams('report_from=2026-10-12&report_to=2026-10-23'),now).from,'2026-10-12');
+assert.throws(()=>managementRange('2026-02-30','2026-03-01'));
+assert.throws(()=>managementRange('2026-08-01','2026-09-01'));
+assert.throws(()=>managementRange('2026-10-02','2026-10-01'));
+assert.throws(()=>managementPeriod(new URLSearchParams('fiscal_year=2026&months=9,11'),now));
+console.log('PASS: fiscal quarters, leap dates, custom intervals, legacy links, YTD and invalid period rejection.');

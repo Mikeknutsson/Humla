@@ -1,4 +1,5 @@
 import {createClient} from "@/lib/supabase/server";
+import {repairFinancialScope} from "@/lib/hub/repair-financial-scope";
 export async function GET(){
  const db=await createClient();const {data:{user}}=await db.auth.getUser();
  if(!user)return Response.json({error:"Inloggning krävs"},{status:401});
@@ -12,8 +13,8 @@ export async function GET(){
  const remaining=500-(pending?.length??0);
  const {data:reviewed,error:reviewedError}=remaining>0?await db.from("hub_fordonskontrollen_cost_outbox").select(fields).eq("tenant_id",member.tenant_id).neq("status","pending_review").order("occurred_on",{ascending:false}).limit(remaining):{data:[],error:null};
  if(reviewedError)return Response.json({error:reviewedError.message},{status:500});
- const data=[...(pending??[]),...(reviewed??[])];
- const ids=[...new Set((data??[]).map(x=>x.vehicle_object_id))];const {data:vehicles,error:vehicleError}=ids.length?await db.from("hub_objects").select("id,data").eq("tenant_id",member.tenant_id).in("id",ids):{data:[],error:null};if(vehicleError)return Response.json({error:vehicleError.message},{status:500});const names=new Map((vehicles??[]).map(v=>[v.id,{registration:v.data?.registration_number??"",name:v.data?.vehicle_name??v.data?.name??v.data?.model??""}]));return Response.json({rows:(data??[]).map(row=>({...row,vehicle:names.get(row.vehicle_object_id)??null}))});
+ const data=[...(pending??[]),...(reviewed??[])]; let scope:Awaited<ReturnType<typeof repairFinancialScope>>;try{scope=await repairFinancialScope(db,member.tenant_id,data.map(row=>row.id));}catch{return Response.json({error:"Källkopplingarna kunde inte verifieras."},{status:503});}
+ const ids=[...new Set((data??[]).map(x=>x.vehicle_object_id))];const {data:vehicles,error:vehicleError}=ids.length?await db.from("hub_objects").select("id,data").eq("tenant_id",member.tenant_id).in("id",ids):{data:[],error:null};if(vehicleError)return Response.json({error:vehicleError.message},{status:500});const names=new Map((vehicles??[]).map(v=>[v.id,{registration:v.data?.registration_number??"",name:v.data?.vehicle_name??v.data?.name??v.data?.model??""}]));return Response.json({rows:(data??[]).map(row=>({...row,financialScope:scope.get(row.id)??null,vehicle:names.get(row.vehicle_object_id)??null}))});
 }
 export async function POST(req:Request){
  const db=await createClient();const {data:{user}}=await db.auth.getUser();
@@ -25,6 +26,12 @@ export async function POST(req:Request){
  const body=await req.json();
  if(!Array.isArray(body.ids)||body.ids.length<1||body.ids.length>100||!body.ids.every((x:unknown)=>typeof x==="string"&&/^[0-9a-f-]{36}$/i.test(x)))return Response.json({error:"Ogiltiga rader"},{status:400});
  if(!["approved","excluded"].includes(body.status))return Response.json({error:"Ogiltig status"},{status:400});
+ if(body.status==="approved"){
+  try{
+   const scope=await repairFinancialScope(db,member.tenant_id,body.ids);
+   if(body.ids.some((id:string)=>!scope.get(id)?.published))return Response.json({error:"Godkännande stoppat: urvalet innehåller poster utan verifierad koppling till aktuellt KPI-underlag. Historiken finns kvar."},{status:409});
+  }catch{return Response.json({error:"Källkopplingarna kunde inte verifieras."},{status:503});}
+ }
  const {data,error}=await db.from("hub_fordonskontrollen_cost_outbox").update({status:body.status,approved_by:user.id,approved_at:new Date().toISOString()}).eq("tenant_id",member.tenant_id).eq("status","pending_review").in("id",body.ids).select("id");
  if(error)return Response.json({error:error.message},{status:500});
  return Response.json({updated:data?.length??0,note:"Godkända rader ligger i kö. Ingen överföring till Fordonskontrollen sker förrän skriv-API har verifierats."});

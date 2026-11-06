@@ -10,6 +10,7 @@ import {ProjectCostCenterSelect} from '@/app/_components/project-cost-center-sel
 import {ProjectReportExport} from '@/app/_components/project-report-export';
 import {ProjectList} from '@/app/_components/project-list';
 import {ProjectReportLoading} from '@/app/_components/project-report-loading';
+import {ProjectCumulativeRevenue} from '@/app/_components/project-cumulative-revenue';
 import type {ProjectReport} from '@/lib/hub/project-report';
 import styles from './project-report.module.css';
 export const dynamic='force-dynamic';
@@ -37,6 +38,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Record<s
  return <KpiDetailShell query="" title="Projektuppföljning" breadcrumb="Humla Dashboard / Projekt" extraNavigation={<><Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanel</Link><Link href="/kpi?view=internal" prefetch={false}>Interna körningar</Link></>}>
   {selection.custom&&<p className="panel">Eget datumintervall: {selection.from}–{selection.to}. Månadsval nedan ersätter intervallet med hela månader.</p>}
   <KpiMonthPeriod period={selection.period} costCenter="" costCenters={[]} pathname="/kpi/projekt" showFilters={false}/>
+  {project&&<Suspense fallback={null}><ProjectCumulativeRevenue tenant={member.tenant_id} project={project}/></Suspense>}
   <Suspense key={query.toString()+':'+page} fallback={<ProjectReportLoading monthHref={monthHref}/>}>
    <ProjectReportBody db={db} tenant={member.tenant_id} selection={selection} query={query.toString()} q={q} groups={groups} center={center} manager={manager} project={project} page={page} kind={kind}/>
   </Suspense>
