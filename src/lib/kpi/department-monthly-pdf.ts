@@ -10,6 +10,7 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
  const line=(at:number)=>page.drawLine({start:{x:left,y:at},end:{x:right,y:at},thickness:.7,color:rgb(.82,.84,.86)});
  const newPage=()=>{page=doc.addPage([595,842]);y=790;};
  const room=(h:number)=>{if(y-h<48)newPage();};
+ const paragraph=(s:string)=>{let row='';for(const word of safe(s).split(/\s+/)){const next=row?row+' '+word:word;if(row&&regular.widthOfTextAtSize(next,8)>right-left){room(14);text(row,left,y,8,false,muted);y-=12;row=word;}else row=next;}if(row){room(14);text(row,left,y,8,false,muted);y-=12;}y-=10;};
  const heading=(s:string)=>{room(65);text(s,left,y,14,true);y-=20;line(y);y-=18;};
  const headers=()=>{text('Nyckeltal',left,y,8,true,muted);['Period','YTD','Period fg. år','YTD fg. år'].forEach((s,i)=>text(s,columns[i],y,8,true,muted));y-=23;};
  function rows(title:string,items:MonthlyComparisonRow[]){
@@ -42,9 +43,10 @@ export async function departmentMonthlyPdf(departments:Department[],variant:'led
    for(const s of d.report.month.accounting_basis.stena_timing){room(50);text(s.delivery_month.slice(0,7)+' | Intäkt '+monthlyValue(s.amount,'kr'),left,y,9);y-=16;text('Antagen faktura '+s.invoice_date_assumed+' | Betalning '+s.payment_date_assumed,left,y,8.5,false,muted);y-=16;text('Faktiskt fakturadatum: '+s.actual_invoice_date_rows+' av '+s.rows+' rader. Ingen bokföringsförskjutning görs automatiskt.',left,y,8,false,muted);y-=22;}
   }
   for(const section of monthlyComparisonSections(d.report)){
-   if(variant==='ledning'&&!['accounting','metrics','time'].includes(section.key))continue;
+   if(variant==='ledning'&&!['accounting','personnel','metrics','time'].includes(section.key))continue;
    const selected=variant==='ledning'&&section.key==='time'?section.rows.filter(r=>['Arbetad tid – TransPA','Arbetad projekttid – NEXT','Verkstadstid – NEXT (Rep)'].includes(r.label)):section.rows;
    rows(section.title,selected);
+   if(section.note)paragraph(section.note);
   }
  }
  room(96);text('NEXT-projekttid och verkstadstid visas separat från TransPA.',left,y,8.5,false,muted);y-=20;text('Intern debitering är en varav-post och ingår redan i fakturerade intäkter.',left,y,8.5,false,muted);y-=20;line(y);y-=16;text('Underlag: Humla Hub. Schablonkostnader och tidsindikatorer är preliminära.',left,y,8.5,false,muted);

@@ -23,7 +23,7 @@ export async function GET(request:Request){
  const filters=Object.fromEntries(['group','unit','vehicle','project'].filter(k=>params.get(k)).map(k=>[k,params.get(k)!]));
  if(JSON.stringify(filters).length>2000)return Response.json({error:'För stort urval.'},{status:400});
  const loadComparable=async(code:string,selectedFilters:Record<string,string>)=>{
-  const load=(p:ManagementPeriod)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'management-period-v3-stena-timing',from:p.from,to:p.to,costCenter:code,filters:selectedFilters},async()=>db.rpc('hub_kpi_management_report_v1',{p_tenant_id:member.tenant_id,p_from:p.from,p_to:p.to,p_cost_center:code,p_filters:selectedFilters}));
+  const load=(p:ManagementPeriod)=>cachedKpiReport<MonthlyTransportReport>(userId,member.tenant_id,{report:'management-period-v4-personnel-comparison',from:p.from,to:p.to,costCenter:code,filters:selectedFilters},async()=>db.rpc('hub_kpi_management_report_v1',{p_tenant_id:member.tenant_id,p_from:p.from,p_to:p.to,p_cost_center:code,p_filters:selectedFilters}));
   const [current,previous]=await Promise.all([load(period),load(previousManagementPeriod(period))]);
   if(current.data&&previous.data&&current.data.generation!==previous.data.generation)return {data:null,error:{code:'GENERATION_CHANGED',message:'Underlaget uppdaterades under hämtningen. Hämta rapporten igen.'}};
   return current.data?{...current,data:{...current.data,previous:previous.data?{period:previous.data.period,month:previous.data.month,ytd:previous.data.ytd}:null,previous_available:!!previous.data}}:current;
