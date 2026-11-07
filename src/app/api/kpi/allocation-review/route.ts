@@ -42,14 +42,16 @@ export async function POST(request: Request) {
   if (error) return Response.json({error: error.message}, {status: error.code === '42501' ? 403 : 409});
   return Response.json(data);
  }
- if (typeof body.unit !== 'string' || typeof body.remember !== 'boolean') {
+ if (typeof body.unit !== 'string' || typeof body.costCenter !== 'string' ||
+     typeof body.remember !== 'boolean' || (!body.unit && !body.costCenter)) {
   return Response.json({error: 'Välj en ekonomisk enhet'}, {status: 400});
  }
- const {data, error} = await ctx.db.rpc('hub_kpi_confirm_review_unit_v1', {
+ const {data, error} = await ctx.db.rpc('hub_kpi_confirm_review_mapping_v1', {
   p_tenant_id: ctx.tenant,
   p_generation: body.generation,
   p_fact_id: body.fact,
-  p_unit_id: body.unit,
+  p_unit_id: body.unit || null,
+  p_cost_center: body.costCenter || null,
   p_remember_project: body.remember,
  });
  if (error) return Response.json({error: error.message}, {status: error.code === '42501' ? 403 : 409});

@@ -14,16 +14,19 @@ type ReviewRow = {
  unit_name: string | null;
  cost_center: string | null;
  description: string | null;
- allocation_state: 'probable' | 'unallocated';
+ allocation_state: 'allocated' | 'probable' | 'unallocated';
  probability: {decision?: string; support?: number} | null;
  raw_id: string | null;
  reusable_project: string | null;
  saved_target: string | null;
+ saved_cost_center: string | null;
 };
 type Candidate = {unit_id: string; support: number; signals: string[] | null};
 type Review = {
  generation: string;
  review_count: number;
+ unclassified_center_count: number;
+ cost_centers: {code: string; name: string | null}[];
  items: ReviewRow[];
  units: {id: string; name: string}[];
  totals: {allocation_state: string; kind: string; rows: number; amount: number}[];
@@ -92,6 +95,7 @@ export function KpiAllocationReview() {
   if (!data) return;
   const form = new FormData(event.currentTarget);
   const unit = String(form.get('unit') ?? '');
+  const costCenter = String(form.get('costCenter') ?? '');
   setBusy(true);
   setError('');
   setMessage('');
@@ -99,12 +103,13 @@ export function KpiAllocationReview() {
    const response = await fetch('/api/kpi/allocation-review', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({generation: data.generation, fact: row.fact_id, unit, remember: form.has('remember')}),
+    body: JSON.stringify({generation: data.generation, fact: row.fact_id, unit, costCenter, remember: form.has('remember')}),
    });
    const result = await response.json();
    if (!response.ok) throw new Error(result.error);
    setData(current => current && {...current, items: current.items.map(item =>
-    item.fact_id === row.fact_id ? {...item, saved_target: unit} : item)});
+    item.fact_id === row.fact_id ? {...item, saved_target: unit || item.saved_target,
+     saved_cost_center: costCenter || item.saved_cost_center} : item)});
    setMessage(result.queued
     ? 'Mappningen är sparad. Rapportunderlaget har köats för uppdatering.'
     : 'Mappningen är sparad och används vid nästa uppdatering av rapportunderlaget.');
@@ -133,11 +138,16 @@ export function KpiAllocationReview() {
     </tr>)}</tbody>
    </table></div>
    <h3>{data.review_count} poster att granska</h3>
+   <p>{data.unclassified_center_count} poster saknar kostnadsställe i den publicerade versionen.</p>
    <div className="table-wrap"><table>
-    <thead><tr><th>Post</th><th>Fördelning</th><th>Bekräfta enhet</th></tr></thead>
-    <tbody>{data.items.map(row => <tr key={row.fact_id}>
+    <thead><tr><th>Post</th><th>Fördelning</th><th>Bekräfta mappning</th></tr></thead>
+    <tbody>{data.items.map(row => {
+     const missingCenter = !row.cost_center || row.cost_center === 'unclassified';
+     const canSetCenter = missingCenter && !row.saved_cost_center;
+     const canSetUnit = row.allocation_state !== 'allocated' && !row.saved_target;
+     return <tr key={row.fact_id}>
      <td><strong>{money.format(row.amount)}</strong><br/>{row.occurred_on} · {row.source} · {row.kind === 'cost' ? 'Kostnad' : 'Intäkt'}
-      <br/>{[row.description, row.project && 'Projekt ' + row.project, row.vehicle, row.cost_center && 'KST ' + row.cost_center].filter(Boolean).join(' · ')}
+      <br/>{[row.description, row.project && 'Projekt ' + row.project, row.vehicle, missingCenter ? 'Kostnadsställe saknas' : 'KST ' + row.cost_center].filter(Boolean).join(' · ')}
      </td>
      <td>{states[row.allocation_state]}{row.unit_name && <><br/>{row.unit_name}</>}
       {row.probability?.support != null && <><br/>Evidenspoäng {Math.round(row.probability.support * 100)} / 100</>}
@@ -148,17 +158,25 @@ export function KpiAllocationReview() {
        <br/>{candidate.signals?.map(signal => signals[signal] ?? signal).join(', ')}
       </p>)}
      </td>
-     <td>{row.saved_target ? <span>Sparad koppling till {data.units.find(unit => unit.id === row.saved_target)?.name ?? 'vald enhet'}</span>
-      : row.raw_id && ['NEXT', 'Workify'].includes(row.source) ? <form onSubmit={event => void confirm(event, row)}>
-       <label>Ekonomisk enhet<select name="unit" required defaultValue="" disabled={busy}>
-        <option value="">Välj enhet</option>
-        {data.units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-       </select></label>
-       {row.reusable_project && <label><input type="checkbox" name="remember" disabled={busy}/>
-        Kom ihåg för NeXT-projekt {row.reusable_project} och samma typ av post från {row.occurred_on}</label>}
-       <button type="submit" disabled={busy}>Spara mappning</button>
-      </form> : <span>Granskas via källan eller ordinarie matchning.</span>}</td>
-    </tr>)}</tbody>
+     <td>
+      {row.saved_target && <p>Sparad enhet: {data.units.find(unit => unit.id === row.saved_target)?.name ?? 'vald enhet'}</p>}
+      {row.saved_cost_center && <p>Sparat kostnadsställe: {row.saved_cost_center}</p>}
+      {(canSetUnit || canSetCenter) && (row.raw_id && ['NEXT', 'Workify'].includes(row.source)
+       ? <form onSubmit={event => void confirm(event, row)}>
+        {canSetUnit && <label>Ekonomisk enhet<select name="unit" required={!canSetCenter} defaultValue="" disabled={busy}>
+         <option value="">Välj enhet</option>
+         {data.units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+        </select></label>}
+        {canSetCenter && <label>Kostnadsställe<select name="costCenter" required={!canSetUnit} defaultValue="" disabled={busy}>
+         <option value="">Välj kostnadsställe</option>
+         {data.cost_centers.map(center => <option key={center.code} value={center.code}>{center.code} {center.name}</option>)}
+        </select></label>}
+        {canSetUnit && row.reusable_project && <label><input type="checkbox" name="remember" disabled={busy}/>
+         Återanvänd enheten för NeXT-projekt {row.reusable_project} och samma typ av post från {row.occurred_on}</label>}
+        <button type="submit" disabled={busy}>Spara mappning</button>
+       </form> : <span>Granskas via källan eller ordinarie matchning.</span>)}
+     </td>
+    </tr>})}</tbody>
    </table></div>
    <nav aria-label="Granskningssidor">
     <button type="button" disabled={busy || page === 0} onClick={() => void load(page - 1)}>Föregående</button>
