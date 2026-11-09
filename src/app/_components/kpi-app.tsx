@@ -361,12 +361,11 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
             <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>Enhetsuppföljning</Link>
             <Link prefetch={false} href="/chauffor" onClick={() => setMobileMenu(false)}><Truck size={18}/>Chaufförsvy</Link>
             <Link prefetch={false} href="/kpi/mina-enheter" onClick={() => setMobileMenu(false)}><Truck size={18}/>Arbetsledarvyer</Link>
+            <Link prefetch={false} href="/kpi/verkstad" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Verkstaden</Link>
+            <Link prefetch={false} href="/kpi/fordon" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Fordon &amp; TCO</Link>
+            <Link prefetch={false} href="/kpi/projekt" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Projektuppföljning</Link>
           </div>
         </details>
-        <Link prefetch={false} href="/kpi/verkstad" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Verkstaden</Link>
-        
-        <Link prefetch={false} href="/kpi/fordon" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Fordon &amp; TCO</Link>
-        <Link prefetch={false} href="/kpi/projekt" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Projektuppföljning</Link>
         <details className="report-nav-group" open={view === "internal" || view === "monthly"} style={{margin:"4px 0"}}>
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><FileSpreadsheet size={18}/>Rapporter <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>
@@ -375,9 +374,14 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
           {canManage&&<Link prefetch={false} href="/kpi/betalningsprognos" onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Betalningsprognos</Link>}
           </div>
         </details>
-        <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
-        <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
-        <Link href={`/kpi/avstamning?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Avstämning &amp; regler</Link>
+        <details className="report-nav-group" open={view === "import" || view === "review"} style={{margin:"4px 0"}}>
+          <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><Settings2 size={18}/>Administration <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
+          <div style={{paddingLeft:18,display:"grid"}}>
+            <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
+            <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
+            <Link href={`/kpi/avstamning?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Avstämning &amp; regler</Link>
+          </div>
+        </details>
         {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
           <Link href={`/kpi/kontrollpanel?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontrollpanel</Link>
           <Link className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} prefetch={false} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</Link>
