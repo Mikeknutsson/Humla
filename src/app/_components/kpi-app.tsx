@@ -355,9 +355,14 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
         <Link prefetch={false} className={view === "overview" ? "active" : ""} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
-        <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>Enhetsuppföljning</Link>
-        <Link prefetch={false} href="/chauffor" onClick={() => setMobileMenu(false)}><Truck size={18}/>Chaufförsvy</Link>
-        <Link prefetch={false} href="/kpi/mina-enheter" onClick={() => setMobileMenu(false)}><Truck size={18}/>Arbetsledarvyer</Link>
+        <details className="report-nav-group" open={view === "kpi"} style={{margin:"4px 0"}}>
+          <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><BarChart3 size={18}/>Uppföljning <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
+          <div style={{paddingLeft:18,display:"grid"}}>
+            <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>Enhetsuppföljning</Link>
+            <Link prefetch={false} href="/chauffor" onClick={() => setMobileMenu(false)}><Truck size={18}/>Chaufförsvy</Link>
+            <Link prefetch={false} href="/kpi/mina-enheter" onClick={() => setMobileMenu(false)}><Truck size={18}/>Arbetsledarvyer</Link>
+          </div>
+        </details>
         <Link prefetch={false} href="/kpi/verkstad" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Verkstaden</Link>
         
         <Link prefetch={false} href="/kpi/fordon" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Fordon &amp; TCO</Link>
