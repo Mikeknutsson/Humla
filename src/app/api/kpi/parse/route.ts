@@ -1,6 +1,6 @@
 import {detectStenaWorkbook} from "@/lib/hub/stena-import";
 import { parseImportFile } from "@/lib/kpi/parser";
-import { DATA_KINDS, detectDataKind, suggestMapping, type DataKind } from "@/lib/kpi/schema";
+import { DATA_KINDS, detectDataKind, isNextRevenue, suggestMapping, type DataKind } from "@/lib/kpi/schema";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -24,7 +24,8 @@ export async function POST(request: Request) {
       if(stena)return Response.json({detectedSource:'stena',stena});
     }
     const table = await parseImportFile(file);
-    const kind = requestedKind === "auto" ? detectDataKind(table.headers) : requestedKind as DataKind;
+    const detectedKind = isNextRevenue(table) ? "next_revenue" : detectDataKind(table.headers);
+    const kind = requestedKind === "auto" ? detectedKind : requestedKind as DataKind;
     return Response.json({
       file: { name: file.name, size: file.size, type: file.type },
       headers: table.headers,

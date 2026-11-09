@@ -2,7 +2,7 @@ import {queueImportedKpiData} from '@/lib/kpi/import-publication';
 import { allocateWorkify, isWorkify } from "@/lib/kpi/workify";
 import { createHash, randomUUID } from "node:crypto";
 import { parseImportFile, normalizeRows, mimeForFile } from "@/lib/kpi/parser";
-import { DATA_KINDS, type DataKind } from "@/lib/kpi/schema";
+import { DATA_KINDS, isNextLedger, isNextRevenue, suggestMapping, type DataKind } from "@/lib/kpi/schema";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -46,7 +46,20 @@ export async function POST(request: Request) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const table = await parseImportFile(new File([bytes], file.name, { type: file.type }));
-    let normalized = normalizeRows(table, kind, mapping);
+    const nextRevenue = kind === "next_revenue" || (kind === "revenue" && isNextLedger(table));
+    const storedKind = nextRevenue ? "revenue" : kind;
+    if (nextRevenue && !isNextRevenue(table)) {
+      return Response.json({error: "Välj NeXT-exporten Intäkter. Filen måste innehålla bokföringsdatum, nettobelopp, projekt, verifikation och intäktskonton (3xxx)."}, {status: 422});
+    }
+    const appliedMapping = nextRevenue ? suggestMapping(table.headers, "next_revenue") : mapping;
+    let normalized = normalizeRows(table, nextRevenue ? "next_revenue" : kind, appliedMapping);
+    if (nextRevenue) {
+      normalized = normalized.map(row => ({...row, data_kind: "revenue"}));
+      const invalid = normalized.find(row => !row.is_valid || !row.source_data["Verifikation nr"]?.trim());
+      if (invalid) {
+        return Response.json({error: `Datarad ${invalid.row_number} saknar giltigt datum, nettobelopp, projekt, konto eller verifikation. Kontrollera NeXT-exporten.`}, {status: 422});
+      }
+    }
     // NEXT costs and historical hours are separate measures. Never derive
     // a second wage cost from imported hours or count cost-file hours as time.
     if (kind === "next_historical_time") {
@@ -137,7 +150,7 @@ export async function POST(request: Request) {
       id: batchId,
       tenant_id: member.tenant_id,
       source_type: sourceType,
-      data_kind: kind,
+      data_kind: storedKind,
       file_name: file.name,
       file_type: mimeForFile(file),
       file_size: file.size,
@@ -149,13 +162,13 @@ export async function POST(request: Request) {
       invalid_row_count: normalized.length - validRows.length,
       period_start: dates.at(0) ?? null,
       period_end: dates.at(-1) ?? null,
-      column_mapping: mapping,
+      column_mapping: appliedMapping,
       provenance: { channel: "manual_upload", original_preserved: true, parser: "humla-kpi/1.0" },
       created_by: user.id,
     });
     if (batchError?.code === "23505") {
-      if(kind==='revenue'&&isWorkify(table)){
-        const {data:previous}=await supabase.from('kpi_import_batches').select('id,status,provenance').eq('tenant_id',member.tenant_id).eq('data_kind',kind).eq('file_hash',fileHash).maybeSingle();
+      if(nextRevenue || (kind==='revenue'&&isWorkify(table))){
+        const {data:previous}=await supabase.from('kpi_import_batches').select('id,status,provenance').eq('tenant_id',member.tenant_id).eq('data_kind',storedKind).eq('file_hash',fileHash).maybeSingle();
         if(previous&&['completed','needs_review'].includes(previous.status)&&previous.provenance?.workify_import_result?.status!=='blocked_changes'){
           const ignoredZeroRows=normalized.filter(r=>r.amount===0).length;
           return Response.json({batchId:previous.id,status:previous.status,rows:0,insertedRows:0,duplicateRowsSkipped:normalized.length-ignoredZeroRows,ignoredZeroRows,validRows:0,invalidRows:0},{status:200});
@@ -183,6 +196,16 @@ export async function POST(request: Request) {
       }):{data:{},error:null};
       if(resolved.error)throw resolved.error;
       return completedImport({batchId,rows:ingested.insertedRows,...ingested,...resolved.data},ingested.insertedRows);
+    }
+
+    if (nextRevenue) {
+      const {data: ingested, error: ingestError} = await supabase.rpc("hub_kpi_ingest_next_revenue_file_v1", {
+        p_tenant_id: member.tenant_id,
+        p_batch_id: batchId,
+        p_rows: normalized,
+      });
+      if (ingestError) throw new Error(ingestError.message);
+      return completedImport({batchId, rows: ingested.insertedRows, ...ingested}, ingested.insertedRows);
     }
 
     if (kind === 'cost') {
@@ -239,7 +262,7 @@ export async function POST(request: Request) {
 
     return completedImport({ batchId, status, rows: normalized.length, validRows: validRows.length, invalidRows: normalized.length - validRows.length },validRows.length);
   } catch (error) {
-    if (batchId) await supabase.from("kpi_import_batches").update({ status: "failed", error_summary: [{ message: error instanceof Error ? error.message : "Importen misslyckades" }] }).eq("id", batchId);
+    if (batchId) await supabase.from("kpi_import_batches").update({ status: "failed", error_summary: [{ message: error instanceof Error ? error.message : "Importen misslyckades" }] }).eq("id", batchId).eq("status", "processing");
     return Response.json({ error: error instanceof Error ? error.message : "Importen misslyckades." }, { status: 500 });
   }
 }
