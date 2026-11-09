@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const table = await parseImportFile(new File([bytes], file.name, { type: file.type }));
-    let normalized = normalizeRows(table, kind, mapping);
+    let normalized: Array<ReturnType<typeof normalizeRows>[number] & {allocation?:Record<string,unknown>;vehicle_object_id?:string|null}> = normalizeRows(table, kind, mapping);
     // NEXT costs and historical hours are separate measures. Never derive
     // a second wage cost from imported hours or count cost-file hours as time.
     if (kind === "next_historical_time") {
@@ -110,15 +110,7 @@ export async function POST(request: Request) {
     }
     // A NEXT project reference is not evidence of a vehicle allocation.
     // Keep unassigned cost rows in review until explicitly classified.
-    if (kind === "cost") normalized = normalized.map((row) => {
-      const errors = row.validation_errors.filter((error) => error !== "Fordonsbeteckning saknar verifierad regnummerkoppling");
-      const verifiedVehicle = row.vehicle_registration && /^[A-Z]{3}[0-9]{2}[A-Z0-9]$/.test(row.vehicle_registration);
-      return { ...row, vehicle_registration: verifiedVehicle ? row.vehicle_registration : null,
-        validation_errors: verifiedVehicle ? errors : [...errors, "Kostnadsfördelning behöver granskas"],
-        is_valid: Boolean(verifiedVehicle) && errors.length === 0,
-        allocation: { allocation_status: verifiedVehicle ? "vehicle_direct" : "unallocated_review",
-          allocation_type: verifiedVehicle ? "vehicle" : null } };
-    });
+    // Hub owns economic validity and allocation state; the upload client forwards parser evidence.
     // NEXT cost exports frequently map "Verifikationstext" to the vehicle field.
     // That is a description, not a registration. Unmapped rows stay in review,
     // while verified project mappings above release their corresponding rows.
@@ -222,15 +214,6 @@ export async function POST(request: Request) {
     }).eq("id", batchId);
     if (updateError) throw updateError;
 
-    // Hub reuses confirmed, dated project/allocation rules for each new file.
-    // Unknown recipients and invalid evidence stay in review.
-    if (kind === "cost" || (kind === "revenue" && isWorkify(table))) {
-      const { data: resolved, error: resolveError } = await supabase.rpc(kind === "cost" ? "hub_kpi_resolve_import_allocations_v1" : "hub_kpi_resolve_workify_import_v1", {
-        p_tenant_id: member.tenant_id, p_batch_id: batchId,
-      });
-      if (resolveError) throw resolveError;
-      return Response.json({ batchId, rows: normalized.length, ...resolved }, { status: 201 });
-    }
 
     return Response.json({ batchId, status, rows: normalized.length, validRows: validRows.length, invalidRows: normalized.length - validRows.length }, { status: 201 });
   } catch (error) {
