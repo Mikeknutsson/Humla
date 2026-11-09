@@ -354,7 +354,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       <div className="brand-wrap"><div className="brand-mark">H</div><div><div className="brand">Humla</div><div className="brand-sub">DASHBOARD</div></div><button className="icon-button close-nav" onClick={() => setMobileMenu(false)} aria-label="Stäng meny"><X size={18}/></button></div>
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
-        <Link prefetch={false} className={view === "overview" ? "active" : ""} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
+        <Link prefetch={false} className={view === "overview" ? "nav-overview active" : "nav-overview"} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
         <details className="report-nav-group" open={view === "kpi"} style={{margin:"4px 0"}}>
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><BarChart3 size={18}/>Uppföljning <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>
@@ -382,11 +382,14 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
             <Link href={`/kpi/avstamning?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Avstämning &amp; regler</Link>
           </div>
         </details>
-        {canManage&&<div className="nav-group"><span className="nav-group-title"><Settings2 size={15}/>Inställningar</span>
-          <Link href={`/kpi/kontrollpanel?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontrollpanel</Link>
-          <Link className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} prefetch={false} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</Link>
-          <Link className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} prefetch={false} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-guide</Link>
-        </div>}
+        {canManage&&<details className="report-nav-group" open={view === "transpa" || view === "definitions"} style={{margin:"4px 0"}}>
+          <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><Settings2 size={18}/>Inställningar <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
+          <div style={{paddingLeft:18,display:"grid"}}>
+            <Link href={`/kpi/kontrollpanel?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ListTree size={17}/>Kontrollpanel</Link>
+            <Link className={view === "transpa" ? "active" : ""} href={kpiHref("transpa")} prefetch={false} onClick={() => setMobileMenu(false)}><Database size={17}/>TransPA-underlag</Link>
+            <Link className={view === "definitions" ? "active" : ""} href={kpiHref("definitions")} prefetch={false} onClick={() => setMobileMenu(false)}><Settings2 size={17}/>KPI-guide</Link>
+          </div>
+        </details>}
       </nav>
       <div className="sidebar-status"><div className="status-icon"><Database size={17}/></div><div><strong>Datamotor</strong><span>Ansluten</span></div><span className="live-dot"/></div>
       <div className="user-block"><div className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0,2)}</div><div><strong>{userName}</strong><span>KPI-användare</span></div><form action={logout}><button className="logout-button" type="submit">Logga ut</button></form></div>
