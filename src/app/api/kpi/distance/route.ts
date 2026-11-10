@@ -1,3 +1,4 @@
+import {queueImportedKpiData} from '@/lib/kpi/import-publication';
 import {createClient} from '@/lib/supabase/server';
 import {createHash} from 'node:crypto';
 import * as XLSX from 'xlsx';
@@ -22,6 +23,6 @@ export async function POST(req:Request){
  const rows=records.map(r=>({registration:String(r.Regnummer??''),from:dateText(r['Från']),to:dateText(r.Till),distance:String(r['Körsträcka']??''),unit:String(r.Enhet??'').trim().toLowerCase(),original:r}));
  const {data,error}=await s.rpc('hub_kpi_import_distance_v1',{p_tenant_id:member.tenant_id,p_rows:rows,p_file_name:file.name,p_file_hash:createHash('sha256').update(bytes).digest('hex'),p_source:source});
  if(error)return Response.json({error:'Importen kunde inte sparas i Hubben'},{status:400});
- return Response.json(data);
+ return Response.json({...data,...await queueImportedKpiData(s,member.tenant_id,user.id)});
  }catch{return Response.json({error:'Filen kunde inte läsas. Kontrollera format och rubriker.'},{status:400});}
 }

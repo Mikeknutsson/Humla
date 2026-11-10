@@ -1,0 +1,117 @@
+import {ForemanTime} from './foreman-time';
+import {ForemanMileage} from './foreman-mileage';
+import Link from 'next/link';
+import type {DailyRevenueTarget} from '@/lib/hub/daily-revenue-target';
+import type {TransportScorecard, TransportMetrics, TransportBreakdown, TransportCardAnalysis, TransportCostBreakdown, TransportMileage, TransportTime} from '@/lib/kpi/transport-leader';
+import {KpiMarginGauge} from './kpi-margin-gauge';
+import styles from './kpi-margin-gauge.module.css';
+
+const currency = new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0});
+const number = new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1});
+const money = (n:number|null|undefined) => n == null ? 'Underlag saknas' : currency.format(n);
+const pct = (n:number|null|undefined) => n == null ? '–' : `${number.format(n)} %`;
+const labels:Record<string,string> = {management:'Arbetsledning',overhead:'Övrig overhead',transport:'Transport',material:'Material / ballast',tipp:'Tippavgifter',tipp_deponi:'Tippavgifter / deponi',other:'Övrigt',unclassified:'Ej klassificerat',personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',depreciation:'Avskrivning',hired:'Inhyrda resurser'};
+
+const costCategories=['personnel','fuel','service_repair','fixed','depreciation','hired','management','overhead','material','tipp_deponi','other','unclassified'];
+const costCategoryOrder=(category:string)=>{const index=costCategories.indexOf(category);return index<0?costCategories.length:index;};
+
+function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foremanMode=false,dailyTarget,mileage,timeMetrics}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis;costBreakdown?:TransportCostBreakdown[];foremanMode?:boolean;dailyTarget?:DailyRevenueTarget;mileage?:TransportMileage;timeMetrics?:TransportTime}) {
+ return <article className={styles.card}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
+ <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
+ <dl className={styles.facts}>
+ <dt>Intäkter</dt><dd>{money(metrics.revenue)}</dd><dt>Kostnader</dt><dd>{money(metrics.cost)}</dd>
+ {foremanMode && (costBreakdown == null ? <><dt>Kostnadsfördelning</dt><dd>Underlag saknas</dd></> : [...costBreakdown].sort((a,b)=>costCategoryOrder(a.category)-costCategoryOrder(b.category)||a.category.localeCompare(b.category,'sv')).map(row=><div key={row.category} className={styles.costRow}><dt>{labels[row.category]??row.category}</dt><dd>{money(row.amount)}</dd></div>))}
+ <dt>Resultat</dt><dd><strong>{money(metrics.result)}</strong></dd>
+ <dt>Målmarginal</dt><dd>{metrics.target_margin_percent==null?'Mål saknas':pct(metrics.target_margin_percent)}</dd>
+ {foremanMode&&dailyTarget&&<><dt>Intäkt som krävs / arbetsdag</dt><dd><strong>{dailyTarget.required==null?dailyTarget.reason:money(dailyTarget.required)}</strong></dd><dt>Snittintäkt / arbetsdag (schablon)</dt><dd>{money(dailyTarget.actual)}</dd><dt>Över / under dagsbehov</dt><dd>{dailyTarget.gap==null?'–':(dailyTarget.gap>=0?'+':'')+money(dailyTarget.gap)}</dd></>}
+ <dt>Avvikelse mot mål</dt><dd>{metrics.deviation_pp==null?'Mål saknas':`${number.format(metrics.deviation_pp)} pp`}</dd>
+ <dt>Marginal fg. år</dt><dd>{pct(previous?.margin_percent)}</dd>
+ <dt>Resultat fg. år</dt><dd>{money(previous?.result)}</dd>
+ </dl>
+ {foremanMode&&<><ForemanMileage value={mileage}/><ForemanTime value={timeMetrics}/></>}
+ {analysis&&analysis.insights.length>0&&<aside className={styles.analysis} aria-label={`Avvikelse – ${label}`} data-status="warning">
+ <strong>{analysis.insights[0].title}</strong>
+ <details><summary>Visa jämförelse</summary>{analysis.insights[0].evidence.map(e=><p key={e}>{e}</p>)}</details>
+ </aside>}
+ {!foremanMode&&<details className={styles.explanation}><summary>Om siffrorna</summary>
+ <p>Resultat = intäkter minus kostnader, inklusive fördelad overhead. Marginal = resultatets andel av intäkterna. Avvikelse mot mål anges i procentenheter. Fg. år avser samma period föregående år.</p>
+ <p>Endast tydliga avvikelser visas. Jämförelsen gäller egen historik eller minst två andra enheter i samma verksamhetsområde. Timanalys kräver tillförlitlig TransPA-tid. Engångskostnader och olika uppdrag kan påverka jämförelsen.</p>
+ </details>}</article>;
+}
+
+export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false,foremanMode=false,groupUnits=false,dailyTargets,dailyPeriod}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean;foremanMode?:boolean;groupUnits?:boolean;dailyTargets?:Record<string,DailyRevenueTarget>;dailyPeriod?:{from:string;to:string;days:number;workdays:number;vacationDays:number}}) {
+ const link = (key:string,value:string) => {const p=new URLSearchParams(base);p.set(key,value);return '/kpi/transportledare?'+p;};
+ const all=new URLSearchParams(base);all.delete('group');
+ const unitGroups=new Map<string,TransportScorecard['units']>();
+ if(groupUnits){
+  const memberships=new Map<string,Set<string>>();
+  for(const {unit_id,business_group} of report.analysis_inputs??[]){
+   const group=business_group.trim();
+   if(!group||group==='Ej klassificerat')continue;
+   const groups=memberships.get(unit_id)??new Set<string>();
+   groups.add(group);
+   memberships.set(unit_id,groups);
+  }
+  for(const unit of report.units){
+   const groups=memberships.get(unit.unit_id??'');
+   const group=groups?.size===1?Array.from(groups)[0]:groups?.size?'Flera verksamhetsområden':'Utan verksamhetsområde';
+   const units=unitGroups.get(group)??[];
+   units.push(unit);
+   unitGroups.set(group,units);
+  }
+ }
+ const renderUnit=(u:TransportScorecard['units'][number])=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} dailyTarget={dailyTargets?.[u.unit_id??'']} costBreakdown={u.cost_breakdown} mileage={u.mileage} timeMetrics={u.time_metrics} foremanMode={foremanMode} href={!foremanMode&&u.unit_id?link('unit',u.unit_id):undefined}/>;
+ return <>
+ {!hideGroups&&<section className="panel"><h2>{selectedGroup??'Verksamhetsområden'}</h2>
+ {selectedGroup&&<Link href={'/kpi/transportledare?'+all}>← Alla verksamhetsområden</Link>}
+ <p>Marginal efter samtliga kostnader i urvalet. Rött visar negativt resultat, gult positiv marginal under mål och grönt uppnått mål. Grått fält betyder att mål saknas.</p>
+ <p>Period: {report.from}–{report.to}. Klicka på ett verksamhetsområde eller en enhet för att se underlaget. Förklaringar finns i varje ruta under ”Om siffrorna”.</p>
+ <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} analysis={analyses?.groups[g.business_group]} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
+ </section>}
+ <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Dagsbehov och snittintäkt avser {dailyPeriod.from}–{dailyPeriod.to} · {number.format(dailyPeriod.days)} arbetsdagar efter semesteravdrag (schablon).</p>}{foremanMode&&dailyPeriod&&<details><summary>Så räknas dagsbehovet</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<p>Dagsbehovets historiska underlag kunde inte hämtas.</p>}{groupUnits?<div className={styles.areaList}>
+ <label className={styles.areaFilter}><input type="checkbox"/> Visa bara områden under mål</label>
+ <p className={styles.areaFilterEmpty}>Inga områden ligger under mål i perioden.</p>
+ {Array.from(unitGroups,([group,units])=>{
+  const totals=report.groups.find(area=>area.business_group===(group==='Utan verksamhetsområde'?'Ej klassificerat':group));
+  const deviation=totals?.deviation_pp;
+  const underTarget=deviation!=null&&deviation<0;
+  return <details key={group} className={styles.area} data-under-target={underTarget}>
+   <summary className={styles.card+' '+styles.areaSummary}>
+    <div>
+     <h3>{group}</h3>
+     {deviation!=null&&<p className={styles.areaStatus} data-under-target={underTarget}>{deviation===0?'På mål':(underTarget?'Under mål':'Över mål')+' · '+(deviation>0?'+':'')+number.format(deviation)+' procentenheter'}</p>}
+     {totals?<dl className={styles.facts}>
+      <dt>Intäkter</dt><dd>{money(totals.revenue)}</dd>
+      <dt>Kostnader</dt><dd>{money(totals.cost)}</dd>
+      <dt><strong>Resultat</strong></dt><dd><strong>{money(totals.result)}</strong></dd>
+      <dt><strong>Marginal</strong></dt><dd><strong>{pct(totals.margin_percent)}</strong></dd>
+     </dl>:group==='Flera verksamhetsområden'?<p>Intäkter och kostnader redovisas i respektive område.</p>:null}
+     <span className={styles.areaAction}>
+      <span className={styles.areaOpen}>▸ Visa enheter ({units.length})</span>
+      <span className={styles.areaClose}>▾ Dölj enheter</span>
+     </span>
+    </div>
+    {totals&&<KpiMarginGauge label={group} margin={totals.margin_percent} target={totals.target_margin_percent}/>}
+   </summary>
+   <div className={styles.cards}>{units.map(renderUnit)}</div>
+  </details>;
+ })}</div>:<div className={styles.cards}>{report.units.map(renderUnit)}</div>}</section>
+ </>;
+}
+
+export function TransportBreakdowns({report,prior}:{report:TransportScorecard;prior:TransportScorecard|null}) {
+ const currentAvailable=report.summary.rows>0;
+ const previousAvailable=prior!=null&&prior.summary.rows>0;
+ const find=(rows:TransportBreakdown[]|undefined,kind:string,category:string)=>rows?.find(r=>r.kind===kind&&r.category===category);
+ return <section className="panel"><h2>Intäkter och kostnader – avvikelser</h2><p>Samma period föregående år. Andel avser respektive post i förhållande till omsättningen. Förändring i andel visas i procentenheter (pp).</p>
+ <div className={styles.breakdowns}>{(['revenue','cost']as const).map(kind=>{
+ const categories=[...new Set([...report.breakdown,...(prior?.breakdown??[])].filter(r=>r.kind===kind).map(r=>r.category))];
+ return <div key={kind}><h3>{kind==='revenue'?'Intäkter':'Kostnader'}</h3><div className="monthly-scroll"><table><thead><tr><th>Post</th><th>Utfall</th><th>Fg. år</th><th>Skillnad kr</th><th>Andel</th><th>Δ andel</th></tr></thead><tbody>{categories.map(category=>{
+ const c=find(report.breakdown,kind,category),p=find(prior?.breakdown,kind,category);
+ const value=currentAvailable?(c?.amount??0):null,old=previousAvailable?(p?.amount??0):null;
+ const share=currentAvailable&&report.summary.revenue!=null&&report.summary.revenue>0?(c?.share_of_revenue??0):null;
+ const oldShare=previousAvailable&&prior?.summary.revenue!=null&&prior.summary.revenue>0?(p?.share_of_revenue??0):null;
+ return <tr key={category}><th scope="row">{labels[category]??category}</th><td>{money(value)}</td><td>{money(old)}</td><td>{value!=null&&old!=null?money(value-old):'–'}</td><td>{pct(share)}</td><td>{share!=null&&oldShare!=null?`${number.format(share-oldShare)} pp`:'–'}</td></tr>;
+ })}</tbody><tfoot><tr><th>Totalt</th><td>{money(report.summary[kind==='revenue'?'revenue':'cost'])}</td><td>{money(prior?.summary[kind==='revenue'?'revenue':'cost'])}</td><td colSpan={3}/></tr></tfoot></table></div></div>;
+ })}</div></section>;
+}

@@ -1,4 +1,4 @@
-import {dateValue,departments} from './payment-forecast';
+import {dateValue,payrollDepartments as departments} from './payment-forecast';
 export type PayrollMonth={center:string;month:string;gross:number;days:number;reports:number;firstDate:string;lastDate:string};
 export type PayrollSource={synced_at:string;settings_match:boolean;rows:PayrollMonth[];reason?:string;settings?:{monthly_salary:number;weekly_hours:number;overtime_multiplier:number;removed_load:number}};
 export type PayrollEstimate={center:string;payDate:string;workMonth:string;amount:number|null;method:'registered'|'historical_trend'|'latest_month'|'missing';sourceMonth:string|null;baseline:number|null;factor:number|null};

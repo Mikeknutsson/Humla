@@ -1,0 +1,10 @@
+'use client';
+import {useEffect,useState} from 'react';
+type Summary={status?:string;material_margin?:{billed:number|null;purchase_cost:number|null;difference:number|null;margin_percent:number|null;rows:number;fallback_rows:number;fallback_billed:number;fallback_purchase:number;bundled_billed:number;details:{source_row:string;date:string;order_number:string|null;article:string|null;billed:number;purchase_cost:number|null;difference:number|null;fallback:boolean;bundled:boolean;evidence:{status?:string;rate?:number;quantity?:number;unit?:string;price_source?:string;note?:string}}[];matched_rows:number;estimated_rows:number;missing_rows:number;missing_billed:number;bundled_rows:number;bundled_material_component:number;basis:string};remaining?:number|null;remaining_percent?:number|null;total_percent:number|null;material_percent:number|null;tipp_deponi_percent:number|null;revenue_basis:number|null;total:number|null;material:number|null;tipp_deponi:number|null;transport:number|null;rows:number;review_rows:number;review_amount:number;review_included?:boolean;pending_rows?:number;pending_amount?:number;basis:string};
+export function useKpiInternalSummary(initial:Summary|undefined,query:string,enabled:boolean){
+ const [loaded,setLoaded]=useState<{query:string;data:Summary}|null>(null);
+ useEffect(()=>{if(!enabled||initial?.status!=='deferred')return;const controller=new AbortController();let active=true;
+ fetch('/api/kpi/internal-summary?'+query,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(35000)])}).then(async r=>{if(!r.ok)throw Error();const data=await r.json();if(active)setLoaded({query,data});}).catch(()=>{if(active)setLoaded({query,data:{...initial,basis:'Internt underlag kunde inte hämtas. Övriga KPI visas; öppna internöverföringar för detaljer.'}});});
+ return()=>{active=false;controller.abort();};},[initial,query,enabled]);
+ return initial?.status==='deferred'&&loaded?.query===query?loaded.data:initial;
+}

@@ -1,5 +1,6 @@
 export type DataKind =
   | "revenue"
+  | "next_revenue"
   | "cost"
   | "fuel"
   | "vehicle_activity"
@@ -36,6 +37,18 @@ export const DATA_KINDS: Record<DataKind, { label: string; description: string; 
     label: "Omsättning",
     description: "Fakturor, orderintäkter eller utfört värde per fordon.",
     fields: [...shared, { key: "amount", label: "Intäktsbelopp", required: true, aliases: ["belopp", "summa", "netto", "intäkt", "omsättning", "amount"] }],
+  },
+  next_revenue: {
+    label: "Intäkter – NeXT",
+    description: "Bokförda projektintäkter från NeXT, inklusive krediter. Använder bokföringsdatum och nettobelopp.",
+    fields: [
+      { key: "occurred_on", label: "Bokföringsdatum", required: true, aliases: ["bokf datum"] },
+      { key: "amount", label: "Nettobelopp", required: true, aliases: ["nettobelopp"] },
+      { key: "project_reference", label: "Projektnr", required: true, aliases: ["projektnr"] },
+      { key: "account", label: "Intäktskonto", required: true, aliases: ["konto"] },
+      { key: "cost_center", label: "Kostnadsställe", aliases: ["kostnadsställe", "kst"] },
+      { key: "description", label: "Verifikationstext", aliases: ["verifikationstext", "notering"] },
+    ],
   },
   cost: {
     label: "Övriga kostnader",
@@ -102,4 +115,15 @@ export function detectDataKind(headers: string[]): DataKind | null {
   const workify = ["ordernummer", "orderstatus", "artikeldatum", "artikelnummer", "kundpris", "summa", "fakturerad"].every((name) => h.includes(name));
   if (has("intäkt", "omsättning", "intäktsbelopp") || workify) candidates.push("revenue");
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+export function isNextLedger(table: ParsedTable) {
+  return ["Konto", "Projektnr", "Verifikation nr", "Bokf datum", "Nettobelopp"].every(
+    header => table.headers.includes(header),
+  ) && !table.headers.includes("Ordernummer");
+}
+
+export function isNextRevenue(table: ParsedTable) {
+  return isNextLedger(table) && table.rows.length > 0 &&
+    table.rows.every(row => /^3[0-9]{3}$/.test(row.Konto?.trim() ?? ""));
 }

@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+const require=createRequire(import.meta.url);
+const load=(path,custom=require)=>{const m={exports:{}};new Function('require','module','exports',ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(custom,m,m.exports);return m.exports;};
+const dates=load('src/lib/kpi/period.ts'),periods=load('src/lib/kpi/management-period.ts',n=>n==='./period'?dates:require(n));
+const calls=[];let exported;
+const db={auth:{getClaims:async()=>({data:{claims:{sub:'owner'}}})},from:()=>({select:()=>({eq:()=>({eq:()=>({limit:()=>({maybeSingle:async()=>({data:{tenant_id:'tenant'}})})})})})}),rpc:async(name,args)=>{
+ if(name==='hub_has_permission')return {data:true};
+ assert.equal(name,'hub_kpi_management_report_v1');calls.push(args);
+ return {data:{period:{from:args.p_from,to:args.p_to},month:{metrics:[]},ytd:{metrics:[]},generation:'same',title:'Test'}};
+}};
+const {GET}=load('src/app/api/kpi/monthly-report/route.ts',n=>n==='@/lib/supabase/server'?{createClient:async()=>db}:n==='@/lib/kpi/report-cache'?{cachedKpiReport:async(_u,_t,_s,fn)=>fn()}:n==='@/lib/kpi/management-period'?periods:n==='@/lib/kpi/monthly-report-export'?{monthlyExcel:()=>Buffer.from('xlsx')}:n==='@/lib/kpi/department-monthly-pdf'?{departmentMonthlyPdf:async rows=>{exported=rows;return Buffer.from('pdf');}}:require(n));
+const url='https://humla-humla.vercel.app/api/kpi/monthly-report?report_from=2024-02-10&report_to=2024-02-29&cost_center=20,40&group=group-id';
+const response=await GET(new Request(url));assert.equal(response.status,200);
+assert.equal(calls[0].p_from,'2024-02-10');assert.equal(calls[1].p_to,'2023-02-28');assert.equal(calls[0].p_filters.group,'group-id');
+calls.length=0;assert.equal((await GET(new Request(url+'&format=pdf'))).status,200);
+assert.deepEqual(exported.map(d=>d.code),['20,40','20','40']);assert.ok(calls.every(c=>c.p_filters.group==='group-id'));
+assert.equal((await GET(new Request(url.replace('2024-02-29','2024-02-30')))).status,400);
+assert.equal((await GET(new Request(url.replace('20,40','20,invalid')))).status,400);
+console.log('PASS: API date boundaries, leap-year comparison, PDF department/filter parity and invalid input rejection.');

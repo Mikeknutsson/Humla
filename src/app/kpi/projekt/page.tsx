@@ -10,6 +10,7 @@ import {ProjectCostCenterSelect} from '@/app/_components/project-cost-center-sel
 import {ProjectReportExport} from '@/app/_components/project-report-export';
 import {ProjectList} from '@/app/_components/project-list';
 import {ProjectReportLoading} from '@/app/_components/project-report-loading';
+import {ProjectCumulativeRevenue} from '@/app/_components/project-cumulative-revenue';
 import type {ProjectReport} from '@/lib/hub/project-report';
 import styles from './project-report.module.css';
 export const dynamic='force-dynamic';
@@ -37,6 +38,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Record<s
  return <KpiDetailShell query="" title="Projektuppföljning" breadcrumb="Humla Dashboard / Projekt" extraNavigation={<><Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanel</Link><Link href="/kpi?view=internal" prefetch={false}>Interna körningar</Link></>}>
   {selection.custom&&<p className="panel">Eget datumintervall: {selection.from}–{selection.to}. Månadsval nedan ersätter intervallet med hela månader.</p>}
   <KpiMonthPeriod period={selection.period} costCenter="" costCenters={[]} pathname="/kpi/projekt" showFilters={false}/>
+  {project&&<Suspense fallback={null}><ProjectCumulativeRevenue tenant={member.tenant_id} project={project}/></Suspense>}
   <Suspense key={query.toString()+':'+page} fallback={<ProjectReportLoading monthHref={monthHref}/>}>
    <ProjectReportBody db={db} tenant={member.tenant_id} selection={selection} query={query.toString()} q={q} groups={groups} center={center} manager={manager} project={project} page={page} kind={kind}/>
   </Suspense>
@@ -48,6 +50,7 @@ async function ProjectReportBody({db,tenant,selection,query,q,groups,center,mana
  const href=(changes:Record<string,string|null>)=>projectReportHref(new URLSearchParams(query),changes);
  if(error||!data)return <section className="panel" role="alert"><h2>Projektunderlaget kunde inte hämtas</h2><p>Inga belopp visas när underlaget inte kan läsas. Välj en kortare period ovan eller försök igen.</p><Link prefetch={false} href={href({})}>Försök igen</Link></section>;
  const report=data as ProjectReport,selected=report.projects.find(p=>p.id===project),visible=report.projects.filter(p=>p.rows>0&&(!q.search||[p.project_number,p.project_name,p.project_manager,p.business_group].join(' ').toLocaleLowerCase('sv-SE').includes(q.search.toLocaleLowerCase('sv-SE'))));
+ const company=report.company_transport;
  const groupOptions=report.available_groups;
  const inactiveGroups=groups.filter(g=>!groupOptions.includes(g));
  const maxCost=Math.max(1,...report.months.map(m=>Math.max(Math.abs(m.revenue),Math.abs(m.cost))));
@@ -56,6 +59,26 @@ async function ProjectReportBody({db,tenant,selection,query,q,groups,center,mana
    <form className={styles.filters} key={JSON.stringify([from,to,months,center,manager,groups,project])}>{Array.from(projectPeriodParams(selection)).map(([key,value])=><input type="hidden" key={key} name={key} value={value}/>)} <ProjectCostCenterSelect value={center}/><label>Projektledare<select name="manager" defaultValue={manager??''}><option value="">Alla projektledare</option>{report.managers.map(m=><option key={m} value={m}>{m}</option>)}</select></label><fieldset className={styles.groupFilter}><legend>Verksamhetsgrupper</legend><div className={styles.groupChoices}>{groupOptions.map(g=><label key={g}><input type="checkbox" name="group" value={g} defaultChecked={groups.includes(g)}/>{g}</label>)}</div>{!groupOptions.length&&<p>Inga verksamhetsgrupper har belopp i urvalet.</p>}{inactiveGroups.length>0&&<p>Valda grupper utan belopp i urvalet: {inactiveGroups.join(', ')}.{inactiveGroups.map(g=><input type="hidden" key={g} name="group" value={g}/>)}</p>}<small>Visar grupper med intäkter eller kostnader i valt KST, period och projektledarurval. Inga kryss = alla grupper.</small> <Link prefetch={false} href={href({group:null,project:null,kind:null})}>Visa alla grupper</Link></fieldset><label>Sök i projektlistan<input name="search" defaultValue={q.search??''} placeholder="Projektnummer, namn eller grupp"/></label>{project&&<input type="hidden" name="project" value={project}/>}<button className="primary">Visa urval</button><Link prefetch={false} href={href({project:null,kind:null})}>Alla projekt i urvalet</Link></form>
    <p className={styles.note}>Senaste NeXT-bokföringsdatum i underlaget: {report.latest_source_date??'Underlag saknas'}. {report.excluded_rows} felaktiga poster undantagna. {report.summary.vehicle_allocation_pending??0} poster väntar på fordonsfördelning men ingår på säkert identifierat projekt. {report.hub_unmapped_rows} Workify/TransPA-rader saknar entydigt registerprojekt och är undantagna. {report.summary.unclassified_rows??0} kostnadsrader saknar kategori men ingår i kostnaden.</p><ProjectReportExport report={report}/>
   </section>
+  {company&&<section className="panel">
+   <h2>Bolagstotal för projekt efter internavräkning</h2>
+   <dl>
+    <dt>Intäkter</dt><dd>{money(company.revenue)}</dd>
+    <dt>Kostnader</dt><dd>{money(company.cost)}</dd>
+    <dt>Resultat</dt><dd>{money(company.result)}</dd>
+   </dl>
+   <p>{money(company.eliminated)} har räknats av på båda sidor för {company.matched_groups} matchade grupper, varav {company.adjacent_groups} över ett månadsskifte. Projekt- och månadsbeloppen nedan visas före internavräkning.</p>
+   {company.review.length>0&&<details>
+    <summary>{company.review.length} poster att stämma av</summary>
+    <div className={styles.scroll}><table className={styles.table}>
+     <thead><tr><th>Projekt</th><th>Månad</th><th>Intern intäkt i Workify</th><th>Intern AO på 4600</th><th>Skillnad</th></tr></thead>
+     <tbody>{company.review.map(row=><tr key={[row.project_number,row.period,row.direction].join(':')}>
+      <td>{row.project_number}</td><td>{row.period.slice(0,7)}</td>
+      <td>{money(row.workify_amount)}</td><td>{money(row.next_amount)}</td>
+      <td>{money((row.workify_amount??0)-(row.next_amount??0))}</td>
+     </tr>)}</tbody>
+    </table></div>
+   </details>}
+  </section>}
   <div className={styles.cards}>{[['Intäkter',money(report.summary.revenue)],['Kostnader',money(report.summary.cost)],['Resultat',money(report.summary.result)],['Projektmarginal',percent(report.summary.margin)],['Personal (ingår i kostnad)',money(report.summary.personnel)]].map(([label,value])=><a className={styles.card} key={label} href={project?'#underlag':'#projektlista'}><small>{label}</small><strong>{value}</strong></a>)}</div>
   <section className="panel"><h2>Avstämning mot underlag</h2><p className={styles.note}>Källornas belopp nedan ingår i valt projekturval. Intern Workify-kostnad visar endast tillägget efter avräkning mot 4600. Alla belopp är exklusive moms.</p><div className={styles.scroll}><table className={styles.table}><thead><tr><th>Källa</th><th>Typ</th><th>Rader</th><th>Belopp som ingår</th></tr></thead><tbody>{report.reconciliation.sources.map(t=><tr key={`${t.source}:${t.kind}`}><th>{t.source}</th><td>{t.kind==='cost'?'Kostnad':'Intäkt'}</td><td>{t.rows}</td><td>{money(t.amount)}</td></tr>)}</tbody></table></div>
    {(report.reconciliation.unassigned_next.rows>0||report.reconciliation.unassigned_hub.rows>0)&&<div role="note"><h3>Underlaget är inte komplett projektfördelat</h3><p>NeXT: {report.reconciliation.unassigned_next.rows} rader på {report.reconciliation.unassigned_next.projects} projekt saknar säker koppling i det aktiva projektregistret. Kostnader {money(report.reconciliation.unassigned_next.cost)}, intäkter {money(report.reconciliation.unassigned_next.revenue)}. Gäller hela arbetsytan i vald period, även om ett KST eller projekt är valt. Beloppen ingår inte i totalsummorna.</p><p>Workify/TransPA inom aktuellt KST- och projektledarurval: {report.reconciliation.unassigned_hub.rows} rader kan inte hänföras till ett entydigt registerprojekt. Kostnader {money(report.reconciliation.unassigned_hub.cost)}, intäkter {money(report.reconciliation.unassigned_hub.revenue)}. Ingår inte heller i totalsummorna.</p><details><summary>Visa upp till 20 största NeXT-projekt som saknas</summary><div className={styles.scroll}><table className={styles.table}><thead><tr><th>Projekt i underlaget</th><th>Rader</th><th>Kostnader (ingår inte)</th><th>Intäkter (ingår inte)</th></tr></thead><tbody>{report.reconciliation.unassigned_next.details.map(t=><tr key={t.project_number??'missing'}><th>{t.project_number||'Saknas'}</th><td>{t.rows}</td><td>{money(t.cost)}</td><td>{money(t.revenue)}</td></tr>)}</tbody></table></div></details><p>Komplettera projektregistret eller verifiera kopplingarna i <Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanelen</Link>. Resultatet avser de kopplade projekten, inte ett komplett företagsresultat.</p></div>}

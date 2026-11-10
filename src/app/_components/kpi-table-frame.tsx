@@ -3,7 +3,7 @@ import {useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import styles from './kpi-table-frame.module.css';
 
 /** Keep a page-sticky heading and scrollbar outside the table's overflow container. */
-export function KpiTableFrame({head,children}:{head:ReactNode;children:ReactNode}) {
+export function KpiTableFrame({head,children,interactiveHead=false}:{head:ReactNode;children:ReactNode;interactiveHead?:boolean}) {
  const body=useRef<HTMLDivElement>(null),heading=useRef<HTMLDivElement>(null),bar=useRef<HTMLDivElement>(null);
  const [widths,setWidths]=useState<number[]>([]),[top,setTop]=useState(132);
  const width=widths.reduce((sum,w)=>sum+w,0);
@@ -20,7 +20,7 @@ export function KpiTableFrame({head,children}:{head:ReactNode;children:ReactNode
  function sync(left:number){for(const ref of [body,heading,bar])if(ref.current&&Math.abs(ref.current.scrollLeft-left)>.5)ref.current.scrollLeft=left;}
  return <div className={styles.frame}>
   <div className={styles.sticky} style={{top}}>
-   <div ref={heading} className={styles.heading} aria-hidden="true"><table style={{width:width||2600,tableLayout:'fixed'}}><colgroup>{widths.map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>{head}</table></div>
+   <div ref={heading} className={styles.heading} aria-hidden={!interactiveHead}><table style={{width:width||2600,tableLayout:'fixed'}}><colgroup>{widths.map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>{head}</table></div>
    <div ref={bar} className={styles.bar} role="region" aria-label="Rulla KPI-tabellen i sidled" tabIndex={0} onScroll={e=>sync(e.currentTarget.scrollLeft)}><div style={{width:width||2600,height:1}}/></div>
   </div>
   <div ref={body} className={`table-wrap unit-metrics-table ${styles.body}`} onScroll={e=>sync(e.currentTarget.scrollLeft)}>{children}</div>

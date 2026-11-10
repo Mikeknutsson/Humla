@@ -5,7 +5,8 @@ const iso=(date:Date)=>date.toISOString().slice(0,10);
 const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&iso(new Date(value+'T00:00:00Z'))===value;
 
 export function parseProjectPeriod(q:Record<string,string|undefined>,now=new Date()):ProjectPeriod {
- let period=parseMonthPeriod(q.fiscal_year,q.months,now);
+ let period=parseMonthPeriod(q.fiscal_year,q.months,now,q.period_mode);
+ if(period.mode==='ytd')return {period,from:`${period.fiscalYear}-09-01`,to:period.to!,months:period.months,custom:false};
  if(q.fiscal_year===undefined&&q.months===undefined&&(q.from||q.to)){
   const from=q.from??`${period.fiscalYear}-09-01`,to=q.to??`${period.fiscalYear+1}-08-31`;
   if(!validDate(from)||!validDate(to)||to<from||(Date.parse(to)-Date.parse(from))/86400000>1096)throw Error('Ogiltig period.');
@@ -28,7 +29,7 @@ export function projectPeriodParams(selection:ProjectPeriod){
 
 export function projectReportHref(query:URLSearchParams,changes:Record<string,string|null>){
  const p=new URLSearchParams(query);
- if('from' in changes||'to' in changes){p.delete('fiscal_year');p.delete('months');}
+ if('from' in changes||'to' in changes){p.delete('fiscal_year');p.delete('months');p.delete('period_mode');p.delete('date_from');p.delete('date_to');}
  for(const [key,value] of Object.entries(changes)){p.delete(key);if(value)p.set(key,value);}
  if(!('page' in changes))p.delete('page');
  return '/kpi/projekt?'+p;
