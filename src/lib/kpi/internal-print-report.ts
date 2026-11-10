@@ -48,12 +48,12 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
 
   cover.drawImage(logo, { x: 24, y: 537, width: 173, height: 47 });
   text('Internöverföring - underlag till ekonomi', 230, 565, bold, dark, 15);
-  text('Sammanställning per avdelning', 230, 546, bold);
+  text('Överföringsunderlag - netto per kostnadsställe', 230, 546, bold);
   text(`${economy.period.from} - ${economy.period.to} | SEK exklusive moms`, 230, 530, font, dark, 8);
   band(516, 3, rgb(1, .82, .05));
   text('Från (belastas)', 36, 488, bold);
   text('Till (krediteras)', 300, 488, bold);
-  right('Belopp exkl. moms', 714, 488);
+  right('Netto exkl. moms', 714, 488);
   text('Underlag', 751, 488, bold);
 
   let y = 468;
@@ -63,6 +63,7 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
     text(section.title, 36, y, bold, white);
     const headerY = y;
     const amounts: (number | null)[] = [];
+    const netPairs = new Map<string, { from: string; to: string; cents: number; missing: boolean; pages: number[] }>();
     y -= 18;
     if (!section.pairs.length) {
       text('Inga överföringar i vald period', 36, y);
@@ -81,15 +82,16 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
         }));
       if (!rows.length) throw new Error('Ekonomirader saknas för ett överföringspar');
       const subtotals = summarize(rows);
-      amounts.push(subtotals.total);
-      allAmounts.push(subtotals.total);
-      band(y - 6, 18, gray);
       const from = pair.fromCenter + ' ' + pair.fromName, to = pair.toCenter + ' ' + pair.toName;
-      text(from, 36, y);
-      text(to, 300, y);
-      right(money(subtotals.total), 714, y);
-      text('Sida ' + (pdf.getPageCount() + 1), 751, y);
-      y -= 18;
+      const forward = pair.fromCenter < pair.toCenter;
+      const key = [pair.fromCenter, pair.toCenter].sort().join('-');
+      const net = netPairs.get(key) ?? {
+        from: forward ? from : to, to: forward ? to : from, cents: 0, missing: false, pages: [],
+      };
+      net.cents += (forward ? 1 : -1) * Math.round((subtotals.total ?? 0) * 100);
+      net.missing ||= subtotals.total === null;
+      net.pages.push(pdf.getPageCount() + 1);
+      netPairs.set(key, net);
 
       const byProject = new Map<string, EconomyRow[]>();
       for (const row of rows) {
@@ -111,14 +113,30 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
       }));
       for (const page of await pdf.copyPages(detail, detail.getPageIndices())) pdf.addPage(page);
     }
+    for (const net of netPairs.values()) {
+      const amount = net.missing ? null : Math.abs(net.cents) / 100;
+      amounts.push(amount);
+      allAmounts.push(amount);
+      band(y - 6, 18, gray);
+      if (amount === null || amount === 0) {
+        text(net.from + ' / ' + net.to, 36, y);
+      } else {
+        text(net.cents > 0 ? net.from : net.to, 36, y);
+        text(net.cents > 0 ? net.to : net.from, 300, y);
+      }
+      right(amount === 0 ? 'Ingen överföring' : money(amount), 714, y);
+      text((net.pages.length > 1 ? 'S. ' : 'Sida ') + net.pages.join(', '), 751, y);
+      y -= 18;
+    }
     if (section.id === 'workshop' && amounts.length) {
       right(money(amounts.some(v => v === null) ? null : total(amounts as number[])), 714, headerY, white);
     }
     y -= 6;
   }
   band(y - 7, 22, yellow);
-  text('Totalt att överföra', 36, y, bold);
+  text('Totalt att överföra efter kvittning', 36, y, bold);
   right(money(allAmounts.some(v => v === null) ? null : total(allAmounts as number[])), 714, y);
+  text('Belopp i motsatta riktningar kvittas per kostnadsställepar. Detaljsidorna visar bruttobelopp per riktning.', 24, y - 28, font, dark, 9);
   text('Elleholms Maskin AB | Underlag för ekonomi', 24, 22, font, dark, 8);
   for (const [index, page] of pdf.getPages().entries()) {
     page.drawText(`Sida ${index + 1} / ${pdf.getPageCount()}`, { x: 748, y: 22, size: 7, font });
