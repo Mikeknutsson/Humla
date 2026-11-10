@@ -33,32 +33,42 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
 
   const pdf = await PDFDocument.create();
   const cover = pdf.addPage([842, 595]);
+  const gross = pdf.addPage([842, 595]);
+  let summaryPage = cover;
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const logo = await pdf.embedJpg('data:image/jpeg;base64,' + elleholmsLogoJpeg);
   const dark = rgb(.08, .09, .1), white = rgb(1, 1, 1), yellow = rgb(1, .94, .72), gray = rgb(.95, .96, .96);
   const currency = new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const money = (amount: number | null) => amount === null ? 'Pris saknas' : currency.format(amount) + ' kr';
+  const money = (amount: number | null) => amount === null ? 'Pris saknas' : currency.format(amount).replace('−', '-') + ' kr';
   const text = (value: string, x: number, y: number, face = font, color = dark, size = 10) =>
-    cover.drawText(value, { x, y, font: face, color, size });
+    summaryPage.drawText(value, { x, y, font: face, color, size });
   const right = (value: string, x: number, y: number, color = dark) =>
     text(value, x - bold.widthOfTextAtSize(value, 10), y, bold, color);
   const band = (y: number, height: number, color: typeof dark) =>
-    cover.drawRectangle({ x: 24, y, width: 794, height, color });
+    summaryPage.drawRectangle({ x: 24, y, width: 794, height, color });
 
-  cover.drawImage(logo, { x: 24, y: 537, width: 173, height: 47 });
-  text('Internöverföring - underlag till ekonomi', 230, 565, bold, dark, 15);
-  text('Överföringsunderlag - netto per kostnadsställe', 230, 546, bold);
-  text(`${economy.period.from} - ${economy.period.to} | SEK exklusive moms`, 230, 530, font, dark, 8);
-  band(516, 3, rgb(1, .82, .05));
-  text('Från (belastas)', 36, 488, bold);
-  text('Till (krediteras)', 300, 488, bold);
-  right('Netto exkl. moms', 714, 488);
-  text('Underlag', 751, 488, bold);
+  function summaryHeader(title: string, amountLabel: string) {
+    summaryPage.drawImage(logo, { x: 24, y: 537, width: 173, height: 47 });
+    text('Internöverföring - underlag till ekonomi', 230, 565, bold, dark, 15);
+    text(title, 230, 546, bold);
+    text(`${economy.period.from} - ${economy.period.to} | SEK exklusive moms`, 230, 530, font, dark, 8);
+    band(516, 3, rgb(1, .82, .05));
+    text('Från (belastas)', 36, 488, bold);
+    text('Till (krediteras)', 300, 488, bold);
+    right(amountLabel, 714, 488);
+    text('Underlag', 751, 488, bold);
+  }
+
+  summaryHeader('Överföringsunderlag - netto per kostnadsställe', 'Netto exkl. moms');
+  const grossSections = sections.map(section => ({
+    title: section.title,
+    rows: [] as { from: string; to: string; amount: number | null; page: number }[],
+  }));
 
   let y = 468;
   const allAmounts: (number | null)[] = [];
-  for (const section of sections) {
+  for (const [index, section] of sections.entries()) {
     band(y - 6, 18, dark);
     text(section.title, 36, y, bold, white);
     const headerY = y;
@@ -90,7 +100,9 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
       };
       net.cents += (forward ? 1 : -1) * Math.round((subtotals.total ?? 0) * 100);
       net.missing ||= subtotals.total === null;
-      net.pages.push(pdf.getPageCount() + 1);
+      const detailPage = pdf.getPageCount() + 1;
+      net.pages.push(detailPage);
+      grossSections[index].rows.push({ from, to, amount: subtotals.total, page: detailPage });
       netPairs.set(key, net);
 
       const byProject = new Map<string, EconomyRow[]>();
@@ -136,7 +148,35 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
   band(y - 7, 22, yellow);
   text('Totalt att överföra efter kvittning', 36, y, bold);
   right(money(allAmounts.some(v => v === null) ? null : total(allAmounts as number[])), 714, y);
-  text('Belopp i motsatta riktningar kvittas per kostnadsställepar. Detaljsidorna visar bruttobelopp per riktning.', 24, y - 28, font, dark, 9);
+  text('Belopp i motsatta riktningar kvittas per kostnadsställepar. Se sida 2 för beloppen före kvittning.', 24, y - 28, font, dark, 9);
+  text('Elleholms Maskin AB | Underlag för ekonomi', 24, 22, font, dark, 8);
+  summaryPage = gross;
+  summaryHeader('Sammanställning före kvittning - brutto per riktning', 'Brutto exkl. moms');
+  y = 468;
+  const grossAmounts: (number | null)[] = [];
+  for (const section of grossSections) {
+    band(y - 6, 18, dark);
+    text(section.title, 36, y, bold, white);
+    y -= 18;
+    if (!section.rows.length) {
+      text('Inga överföringar i vald period', 36, y);
+      y -= 18;
+    }
+    for (const row of section.rows) {
+      grossAmounts.push(row.amount);
+      band(y - 6, 18, gray);
+      text(row.from, 36, y);
+      text(row.to, 300, y);
+      right(money(row.amount), 714, y);
+      text('Sida ' + row.page, 751, y);
+      y -= 18;
+    }
+    y -= 6;
+  }
+  band(y - 7, 22, yellow);
+  text('Totalt före kvittning', 36, y, bold);
+  right(money(grossAmounts.some(v => v === null) ? null : total(grossAmounts as number[])), 714, y);
+  text('Se sida 1 för nettobeloppen som ska föras över.', 24, y - 28, font, dark, 9);
   text('Elleholms Maskin AB | Underlag för ekonomi', 24, 22, font, dark, 8);
   for (const [index, page] of pdf.getPages().entries()) {
     page.drawText(`Sida ${index + 1} / ${pdf.getPageCount()}`, { x: 748, y: 22, size: 7, font });

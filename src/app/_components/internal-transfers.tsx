@@ -47,7 +47,7 @@ export function InternalTransfers({query}:{query:string;canManage:boolean}){
   {report&&<>
    <section aria-label="Utskrift av internöverföringar">
     <h3>Skriv ut internöverföringar</h3>
-    <p>PDF för vald period. Första sidan visar en nettoöverföring per par av kostnadsställen. Detaljsidorna visar bruttobelopp, projekt och orderrader.</p>
+    <p>PDF för vald period. Första sidan visar en nettoöverföring per par av kostnadsställen. Sida 2 visar bruttobeloppen före kvittning. Därefter följer projekt och orderrader.</p>
     <div className="actions" style={{flexWrap:'wrap',justifyContent:'flex-start',gap:8}}>
      {report.transfers.some(pair=>pair.rows.length&&internalPrintBlock(pair.fromCenter,pair.toCenter))&&
       <a className="primary" href={printHref('all')} target="_blank" rel="noopener">Skriv ut hela överföringslistan</a>}
