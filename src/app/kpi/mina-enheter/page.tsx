@@ -52,6 +52,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  if(current.error)console.error('foreman_report_failed',{rpc:'hub_transport_leader_scorecard_v4',code:current.error.code,from,to});
  const report=current.data as TransportScorecard|null;
  const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
+ const groupUnits=/^ola(?:\s|$)/i.test(name?.trim()??'');
  const base=new URLSearchParams({from,to,user_id:target,...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})}).toString();
  const view=<div className="content">{profiles}
  <header className="panel"><h1>{owner?name??'Arbetsledarvy':'Mina enheter'}</h1><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
@@ -67,7 +68,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
   <ResultTrend db={db} args={args} generation={report.generation}/>
  </Suspense>}
  <Suspense key={base+report.generation} fallback={<section className="panel" role="status"><h2>Enheternas balans</h2><p>Hämtar enheter och jämförelse …</p></section>}>
-  <UnitCards db={db} args={args} report={report} base={base} continuous={continuous} historyTo={historyTo}/>
+  <UnitCards db={db} args={args} report={report} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits}/>
  </Suspense>
  <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
  </>}
@@ -86,7 +87,7 @@ async function ResultTrend({db,args,generation}:{db:ForemanClient;args:ForemanAr
  return <section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>;
 }
 
-async function UnitCards({db,args,report,base,continuous,historyTo}:{db:ForemanClient;args:ForemanArgs;report:TransportScorecard;base:string;continuous:boolean;historyTo:string}) {
+async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits}:{db:ForemanClient;args:ForemanArgs;report:TransportScorecard;base:string;continuous:boolean;historyTo:string;groupUnits:boolean}) {
  const [old,history]=await Promise.all([
   db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(args.p_from),p_to:previousYearDate(args.p_to)}),
   continuous&&args.p_to>historyTo&&args.p_from<=historyTo
@@ -99,5 +100,5 @@ async function UnitCards({db,args,report,base,continuous,historyTo}:{db:ForemanC
   history?(history.error||history.data?.generation!==report.generation?null:history.data as TransportScorecard):report;
  const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
  const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
- return <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
+ return <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode groupUnits={groupUnits} dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
 }
