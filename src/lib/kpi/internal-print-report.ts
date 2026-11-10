@@ -27,13 +27,31 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
   const sections = internalPrintBlocks.filter(block => selected === 'all' || block.id === selected).map(block => ({
     ...block,
     pairs: summary.transfers.filter(pair => pair.rows.length && internalPrintBlock(pair.fromCenter, pair.toCenter) === block.id)
-      .sort((a, b) => a.fromCenter.localeCompare(b.fromCenter) || a.toCenter.localeCompare(b.toCenter)),
+      .sort((a, b) => a.fromCenter.localeCompare(b.fromCenter) || a.toCenter.localeCompare(b.toCenter))
+      .map(pair => {
+        const workshop = pair.toCenter === '40';
+        const economyPriced = pair.fromCenter === '10' && ['20', '30'].includes(pair.toCenter);
+        const rows: EconomyRow[] = economyPriced
+          ? economy.rows.filter(row => row.from_center === pair.fromCenter && row.to_center === pair.toCenter)
+          : pair.rows.map(row => ({
+            ...row, order_status: '', driver: '', from_center: pair.fromCenter, to_center: pair.toCenter,
+            rate: null, original_amount: row.amount ?? 0, debit_amount: workshop ? null : row.amount,
+            discount_amount: null, price_status: '', price_basis: workshop ? 'Next 4630' : 'Workify',
+            estimated: false, preliminary: row.report_basis === 'preliminary', component: 'original',
+          }));
+        if (!rows.length) throw new Error('Ekonomirader saknas för ett överföringspar');
+        const subtotals = summarize(rows);
+        return { ...pair, workshop, economyPriced, rows, subtotals };
+      }),
   }));
   if (!sections.some(section => section.pairs.length)) return null;
 
   const pdf = await PDFDocument.create();
   const cover = pdf.addPage([842, 595]);
-  const gross = pdf.addPage([842, 595]);
+  const pairs = sections.flatMap(section => section.pairs);
+  const pairKeys = new Set(pairs.map(pair => [pair.fromCenter, pair.toCenter].sort().join('-')));
+  const showGross = pairKeys.size < pairs.length || pairs.some(pair => (pair.subtotals.total ?? 0) < 0);
+  const gross = showGross ? pdf.addPage([842, 595]) : null;
   let summaryPage = cover;
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -80,18 +98,7 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
       y -= 18;
     }
     for (const pair of section.pairs) {
-      const workshop = pair.toCenter === '40';
-      const economyPriced = pair.fromCenter === '10' && ['20', '30'].includes(pair.toCenter);
-      const rows: EconomyRow[] = economyPriced
-        ? economy.rows.filter(row => row.from_center === pair.fromCenter && row.to_center === pair.toCenter)
-        : pair.rows.map(row => ({
-          ...row, order_status: '', driver: '', from_center: pair.fromCenter, to_center: pair.toCenter,
-          rate: null, original_amount: row.amount ?? 0, debit_amount: workshop ? null : row.amount,
-          discount_amount: null, price_status: '', price_basis: workshop ? 'Next 4630' : 'Workify',
-          estimated: false, preliminary: row.report_basis === 'preliminary', component: 'original',
-        }));
-      if (!rows.length) throw new Error('Ekonomirader saknas för ett överföringspar');
-      const subtotals = summarize(rows);
+      const { workshop, economyPriced, rows, subtotals } = pair;
       const from = pair.fromCenter + ' ' + pair.fromName, to = pair.toCenter + ' ' + pair.toName;
       const forward = pair.fromCenter < pair.toCenter;
       const key = [pair.fromCenter, pair.toCenter].sort().join('-');
@@ -146,38 +153,40 @@ export async function internalPrintReport(economy: InternalEconomyReport, summar
     y -= 6;
   }
   band(y - 7, 22, yellow);
-  text('Totalt att överföra efter kvittning', 36, y, bold);
+  text(showGross ? 'Totalt att överföra efter kvittning' : 'Totalt att överföra', 36, y, bold);
   right(money(allAmounts.some(v => v === null) ? null : total(allAmounts as number[])), 714, y);
-  text('Belopp i motsatta riktningar kvittas per kostnadsställepar. Se sida 2 för beloppen före kvittning.', 24, y - 28, font, dark, 9);
+  text(showGross ? 'Se sida 2 för beloppen före kvittning.' : 'Inga överföringar har kvittats i det valda underlaget.', 24, y - 28, font, dark, 9);
   text('Elleholms Maskin AB | Underlag för ekonomi', 24, 22, font, dark, 8);
-  summaryPage = gross;
-  summaryHeader('Sammanställning före kvittning - brutto per riktning', 'Brutto exkl. moms');
-  y = 468;
-  const grossAmounts: (number | null)[] = [];
-  for (const section of grossSections) {
-    band(y - 6, 18, dark);
-    text(section.title, 36, y, bold, white);
-    y -= 18;
-    if (!section.rows.length) {
-      text('Inga överföringar i vald period', 36, y);
+  if (gross) {
+    summaryPage = gross;
+    summaryHeader('Sammanställning före kvittning - brutto per riktning', 'Brutto exkl. moms');
+    y = 468;
+    const grossAmounts: (number | null)[] = [];
+    for (const section of grossSections) {
+      band(y - 6, 18, dark);
+      text(section.title, 36, y, bold, white);
       y -= 18;
+      if (!section.rows.length) {
+        text('Inga överföringar i vald period', 36, y);
+        y -= 18;
+      }
+      for (const row of section.rows) {
+        grossAmounts.push(row.amount);
+        band(y - 6, 18, gray);
+        text(row.from, 36, y);
+        text(row.to, 300, y);
+        right(money(row.amount), 714, y);
+        text('Sida ' + row.page, 751, y);
+        y -= 18;
+      }
+      y -= 6;
     }
-    for (const row of section.rows) {
-      grossAmounts.push(row.amount);
-      band(y - 6, 18, gray);
-      text(row.from, 36, y);
-      text(row.to, 300, y);
-      right(money(row.amount), 714, y);
-      text('Sida ' + row.page, 751, y);
-      y -= 18;
-    }
-    y -= 6;
+    band(y - 7, 22, yellow);
+    text('Totalt före kvittning', 36, y, bold);
+    right(money(grossAmounts.some(v => v === null) ? null : total(grossAmounts as number[])), 714, y);
+    text('Se sida 1 för nettobeloppen som ska föras över.', 24, y - 28, font, dark, 9);
+    text('Elleholms Maskin AB | Underlag för ekonomi', 24, 22, font, dark, 8);
   }
-  band(y - 7, 22, yellow);
-  text('Totalt före kvittning', 36, y, bold);
-  right(money(grossAmounts.some(v => v === null) ? null : total(grossAmounts as number[])), 714, y);
-  text('Se sida 1 för nettobeloppen som ska föras över.', 24, y - 28, font, dark, 9);
-  text('Elleholms Maskin AB | Underlag för ekonomi', 24, 22, font, dark, 8);
   for (const [index, page] of pdf.getPages().entries()) {
     page.drawText(`Sida ${index + 1} / ${pdf.getPageCount()}`, { x: 748, y: 22, size: 7, font });
   }
