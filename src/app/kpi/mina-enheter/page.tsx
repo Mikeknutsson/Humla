@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {Suspense} from 'react';
 import {unitDailyRevenueTargets,productiveDayBasis} from '@/lib/hub/daily-revenue-target';
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
@@ -49,17 +50,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  // Load the primary report before optional comparisons compete for database CPU.
  const current=await db.rpc('hub_transport_leader_scorecard_v4',args);
  if(current.error)console.error('foreman_report_failed',{rpc:'hub_transport_leader_scorecard_v4',code:current.error.code,from,to});
- const [old,trendResult,history]=current.error?[{data:null,error:null},{data:null,error:null},null]:await Promise.all([
-  db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(from),p_to:previousYearDate(to)}),
-  !continuous?Promise.resolve({data:null,error:null}):db.rpc('hub_foreman_result_trend_v1',{p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:target}),
-  to>todayText&&from<=historyTo?db.rpc('hub_transport_leader_scorecard_v4',{...args,p_to:historyTo}):Promise.resolve(null),
- ]);
- const report=current.data as TransportScorecard|null,prior=old.data as TransportScorecard|null;
- const dailyReport=(from>historyTo||history?.error||(history?.data&&history.data.generation!==report?.generation)?null:history?history.data:current.error?null:current.data) as TransportScorecard|null;
- const dailyTargets=continuous&&dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
- const dailyPeriod=continuous&&dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
- const trend=trendResult.data as ForemanTrend|null;
- const trendAvailable=continuous&&!trendResult.error&&trend&&report&&trend.generation===report.generation&&trend.from===from&&trend.to===to;
+ const report=current.data as TransportScorecard|null;
  const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
  const base=new URLSearchParams({from,to,user_id:target,...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})}).toString();
  const view=<div className="content">{profiles}
@@ -67,13 +58,46 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> Du ser profilens avgränsade underlag. <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
  {controls}</header>
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
- {!continuous?<section className="panel"><h2>Resultatets utveckling</h2><p>Trenddiagrammet visas inte för ett urval av separata månader.</p></section>:trendAvailable?<ForemanResultTrend key={target+from+to+report.generation} trend={trend!}/>:<section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>}
+
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
  <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
- <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>
+ {!continuous?<section className="panel"><h2>Resultatets utveckling</h2><p>Trenddiagrammet visas inte för ett urval av separata månader.</p></section>:
+ <Suspense key={target+from+to+report.generation} fallback={<section className="panel" role="status"><h2>Resultatets utveckling</h2><p>Hämtar trenden …</p></section>}>
+  <ResultTrend db={db} args={args} generation={report.generation}/>
+ </Suspense>}
+ <Suspense key={base+report.generation} fallback={<section className="panel" role="status"><h2>Enheternas balans</h2><p>Hämtar enheter och jämförelse …</p></section>}>
+  <UnitCards db={db} args={args} report={report} base={base} continuous={continuous} historyTo={historyTo}/>
+ </Suspense>
  <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
  </>}
  </div>;
  return owner?<KpiDetailShell title="Arbetsledarvyer" breadcrumb="Humla Dashboard / Arbetsledarvyer" query={period.toString()}>{view}</KpiDetailShell>:<main>{view}</main>;
+}
+
+type ForemanClient=Awaited<ReturnType<typeof createClient>>;
+type ForemanArgs={p_tenant:string;p_from:string;p_to:string;p_user:string;p_months?:number[]};
+
+async function ResultTrend({db,args,generation}:{db:ForemanClient;args:ForemanArgs;generation:TransportScorecard['generation']}) {
+ const {p_tenant,p_from,p_to,p_user}=args;
+ const {data,error}=await db.rpc('hub_foreman_result_trend_v1',{p_tenant,p_from,p_to,p_user});
+ const trend=data as ForemanTrend|null;
+ if(!error&&trend&&trend.generation===generation&&trend.from===p_from&&trend.to===p_to)return <ForemanResultTrend trend={trend}/>;
+ return <section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>;
+}
+
+async function UnitCards({db,args,report,base,continuous,historyTo}:{db:ForemanClient;args:ForemanArgs;report:TransportScorecard;base:string;continuous:boolean;historyTo:string}) {
+ const [old,history]=await Promise.all([
+  db.rpc('hub_transport_leader_scorecard_v4',{...args,p_from:previousYearDate(args.p_from),p_to:previousYearDate(args.p_to)}),
+  continuous&&args.p_to>historyTo&&args.p_from<=historyTo
+   ?db.rpc('hub_transport_leader_scorecard_v4',{...args,p_to:historyTo})
+   :Promise.resolve(null),
+ ]);
+ const previous=old.data as TransportScorecard|null;
+ const prior=previous?.generation===report.generation?previous:null;
+ const dailyReport=!continuous||args.p_from>historyTo?null:
+  history?(history.error||history.data?.generation!==report.generation?null:history.data as TransportScorecard):report;
+ const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
+ const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
+ return <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
 }
