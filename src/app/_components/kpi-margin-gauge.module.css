@@ -45,3 +45,13 @@
 .areaAction { display:block; margin-top:8px; font-size:.8rem; color:#475569; }
 .areaClose, .area[open] .areaOpen { display:none; }
 .area[open] .areaClose { display:inline; }
+
+.areaFilter { display:inline-flex; align-items:center; gap:8px; min-height:36px; }
+.areaStatus { margin:4px 0; font-size:.82rem; font-weight:600; }
+.areaStatus[data-under-target="true"] { color:#a83232; }
+.areaFilterEmpty { display:none; }
+.areaList:has(.areaFilter input:checked) .area:not([data-under-target="true"]) { display:none; }
+.areaList:has(.areaFilter input:checked):not(:has(.area[data-under-target="true"])) .areaFilterEmpty { display:block; }
+.costDetails { margin:12px 0; }
+.costDetails summary { cursor:pointer; font-weight:600; }
+.costDetails h4 { margin:10px 0 0; font-size:.82rem; }
