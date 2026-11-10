@@ -72,7 +72,7 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
  {(() => {
   const totals=report.groups.find(area=>area.business_group===(group==='Utan verksamhetsområde'?'Ej klassificerat':group));
   if(!totals)return group==='Flera verksamhetsområden'?<p>Fordonens intäkter och kostnader ingår i de områden där de registrerats.</p>:null;
-  return <div className={styles.card} aria-label={'Sammanställning för '+group}>
+  return <div className={styles.card+' '+styles.areaSummary} aria-label={'Sammanställning för '+group}>
    <KpiMarginGauge label={group} margin={totals.margin_percent} target={totals.target_margin_percent}/>
    <dl className={styles.facts}>
    <dt>Intäkter</dt><dd>{money(totals.revenue)}</dd>
