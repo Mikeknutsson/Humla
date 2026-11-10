@@ -35,3 +35,13 @@
 .areaSummary .value { font-size:1.35rem; }
 .areaSummary .gauge > span { font-size:.82rem; }
 .areaSummary .gauge small { font-size:.75rem; }
+
+.area { margin-block:12px; }
+.areaSummary { display:grid; grid-template-columns:minmax(0,1fr) minmax(95px,170px); align-items:center; gap:12px; cursor:pointer; list-style:none; }
+.areaSummary::-webkit-details-marker { display:none; }
+.areaSummary:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
+.areaSummary .facts { width:fit-content; max-width:100%; column-gap:clamp(8px,3vw,36px); }
+.areaSummary .facts strong { color:inherit; }
+.areaAction { display:block; margin-top:8px; font-size:.8rem; color:#475569; }
+.areaClose, .area[open] .areaOpen { display:none; }
+.area[open] .areaClose { display:inline; }
