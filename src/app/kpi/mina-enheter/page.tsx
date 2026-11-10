@@ -37,26 +37,27 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  const continuous=foremanMonthsContiguous(chosen);
  const target=owner?(q.user_id??null):user.id;
  const period=new URLSearchParams({from,...(to?{to}:{}),...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})});
+ const combinedTransport=owner&&target==='transport';
  const controls=<ForemanPeriodPicker period={chosen} userId={owner?target:null} cutoffError={Boolean(cutoff.error)}/>;
- const profiles=owner&&<section className="panel">{!target&&<><h2>Välj arbetsledarvy</h2><p>Förhandsvisa det underlag respektive läsprofil får se.</p></>}{people.error?<p role="alert">Profilerna kunde inte hämtas. Försök igen.</p>:<div className={target?undefined:"metrics-grid"} style={target?{display:"flex",flexWrap:"wrap",gap:8}:undefined}><Link prefetch={false} className={target?"secondary":"metric-card"} href={"/kpi/verkstad?"+foremanPeriodQuery(chosen.mode==='revenue'?{...chosen,mode:'ytd'}:chosen)}><strong>Verkstaden</strong>{!target&&<><span>KST 40 · Ekonomi och verkstadstid</span><small>Visa arbetsledarvy →</small></>}</Link>{profileRows.map(p=><Link key={p.user_id} prefetch={false} className={target?"secondary":"metric-card"} aria-current={target===p.user_id?'page':undefined} style={{textDecoration:'none',border:target===p.user_id?'2px solid #e1ad27':undefined}} href={'/kpi/mina-enheter?'+foremanPeriodQuery(chosen,p.user_id)}><strong>{p.display_name??'Arbetsledare'}</strong>{!target&&<><span>Läsåtkomst</span><small>Visa arbetsledarvy →</small></>}</Link>)}</div>}{!people.error&&!profileRows.length&&<p>Inga arbetsledarprofiler finns att förhandsvisa.</p>}</section>;
+ const profiles=owner&&<section className="panel">{!target&&<><h2>Välj arbetsledarvy</h2><p>Förhandsvisa det underlag respektive läsprofil får se.</p></>}<Link prefetch={false} className={target?'secondary':'metric-card'} aria-current={combinedTransport?'page':undefined} href={'/kpi/mina-enheter?'+foremanPeriodQuery(chosen,'transport')}><strong>Transport</strong>{!target&&<span>Marcus, Ola och Pierre</span>}</Link>{people.error?<p role="alert">Profilerna kunde inte hämtas. Försök igen.</p>:<div className={target?undefined:"metrics-grid"} style={target?{display:"flex",flexWrap:"wrap",gap:8}:undefined}><Link prefetch={false} className={target?"secondary":"metric-card"} href={"/kpi/verkstad?"+foremanPeriodQuery(chosen.mode==='revenue'?{...chosen,mode:'ytd'}:chosen)}><strong>Verkstaden</strong>{!target&&<><span>KST 40 · Ekonomi och verkstadstid</span><small>Visa arbetsledarvy →</small></>}</Link>{profileRows.map(p=><Link key={p.user_id} prefetch={false} className={target?"secondary":"metric-card"} aria-current={target===p.user_id?'page':undefined} style={{textDecoration:'none',border:target===p.user_id?'2px solid #e1ad27':undefined}} href={'/kpi/mina-enheter?'+foremanPeriodQuery(chosen,p.user_id)}><strong>{p.display_name??'Arbetsledare'}</strong>{!target&&<><span>Läsåtkomst</span><small>Visa arbetsledarvy →</small></>}</Link>)}</div>}{!people.error&&!profileRows.length&&<p>Inga arbetsledarprofiler finns att förhandsvisa.</p>}</section>;
  if(owner&&!target)return <KpiDetailShell title="Arbetsledarvyer" breadcrumb="Humla Dashboard / Arbetsledarvyer" query={period.toString()}><div className="content">{profiles}<section className="panel">{controls}</section></div></KpiDetailShell>;
  if(!target)return <main className="content"><p>Ingen profil vald.</p></main>;
  if(to===null){const empty=<div className="content">{profiles}<section className="panel">{controls}<p>Giltigt intäktsunderlag saknas. Välj en annan period.</p></section></div>;return owner?<KpiDetailShell title="Arbetsledarvyer" query="">{empty}</KpiDetailShell>:<main>{empty}</main>;}
- if(!validTransportDate(from)||!validTransportDate(to)||from>to||Date.parse(to)-Date.parse(from)>366*86400000||!/^[0-9a-f-]{36}$/i.test(target))return <main className="content"><p>Ogiltigt urval.</p><Link href="/kpi/mina-enheter">Återställ</Link></main>;
- const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:target,...(chosen.mode==='months'?{p_months:chosen.months}:{})};
- if(owner&&!profileRows.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
+ if(!validTransportDate(from)||!validTransportDate(to)||from>to||Date.parse(to)-Date.parse(from)>366*86400000||(!combinedTransport&&!/^[0-9a-f-]{36}$/i.test(target)))return <main className="content"><p>Ogiltigt urval.</p><Link href="/kpi/mina-enheter">Återställ</Link></main>;
+ const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:combinedTransport?'00000000-0000-0000-0000-000000000030':target,...(chosen.mode==='months'?{p_months:chosen.months}:{})};
+ if(owner&&!combinedTransport&&!profileRows.some(p=>p.user_id===target))return <KpiDetailShell title="Arbetsledarvyer" query=""><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></KpiDetailShell>;
  const todayText=`${today.year}-${String(today.month).padStart(2,'0')}-${String(today.day).padStart(2,'0')}`;
  const historyTo=to<todayText?to:todayText;
  // Load the primary report before optional comparisons compete for database CPU.
  const current=await db.rpc('hub_transport_leader_scorecard_v4',args);
  if(current.error)console.error('foreman_report_failed',{rpc:'hub_transport_leader_scorecard_v4',code:current.error.code,from,to});
  const report=current.data as TransportScorecard|null;
- const name=owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
- const groupUnits=/^ola(?:\s|$)/i.test(name?.trim()??'');
+ const name=combinedTransport?'Transport':owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
+ const groupUnits=combinedTransport||/^ola(?:\s|$)/i.test(name?.trim()??'');
  const base=new URLSearchParams({from,to,user_id:target,...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})}).toString();
  const view=<div className="content">{profiles}
  <header className="panel"><h1>{owner?name??'Arbetsledarvy':'Mina enheter'}</h1><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
- {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> Du ser profilens avgränsade underlag. <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
+ {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> {combinedTransport?'Du ser Marcus, Olas och Pierres tilldelade underlag.':'Du ser profilens avgränsade underlag.'} <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
  {controls}</header>
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
 
@@ -70,7 +71,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <Suspense key={base+report.generation} fallback={<section className="panel" role="status"><h2>Enheternas balans</h2><p>Hämtar enheter och jämförelse …</p></section>}>
   <UnitCards db={db} args={args} report={report} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits}/>
  </Suspense>
- <p>Endast dina tilldelade enheter och de datum ansvaret gäller. Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
+ <p>{combinedTransport?'Tilldelade enheter för Marcus, Ola och Pierre på de datum ansvaret gäller.':'Endast dina tilldelade enheter och de datum ansvaret gäller.'} Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
  </>}
  </div>;
  return owner?<KpiDetailShell title="Arbetsledarvyer" breadcrumb="Humla Dashboard / Arbetsledarvyer" query={period.toString()}>{view}</KpiDetailShell>:<main>{view}</main>;
