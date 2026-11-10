@@ -100,5 +100,5 @@ async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits}:{
   history?(history.error||history.data?.generation!==report.generation?null:history.data as TransportScorecard):report;
  const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
  const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
- return <TransportBalanceCards report={{...report,groups:[]}} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode groupUnits={groupUnits} dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
+ return <TransportBalanceCards report={report} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(report,prior)} hideGroups foremanMode groupUnits={groupUnits} dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
 }
