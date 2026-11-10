@@ -39,9 +39,28 @@ function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foreman
  </details>}</article>;
 }
 
-export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false,foremanMode=false,dailyTargets,dailyPeriod}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean;foremanMode?:boolean;dailyTargets?:Record<string,DailyRevenueTarget>;dailyPeriod?:{from:string;to:string;days:number;workdays:number;vacationDays:number}}) {
+export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false,foremanMode=false,groupUnits=false,dailyTargets,dailyPeriod}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean;foremanMode?:boolean;groupUnits?:boolean;dailyTargets?:Record<string,DailyRevenueTarget>;dailyPeriod?:{from:string;to:string;days:number;workdays:number;vacationDays:number}}) {
  const link = (key:string,value:string) => {const p=new URLSearchParams(base);p.set(key,value);return '/kpi/transportledare?'+p;};
  const all=new URLSearchParams(base);all.delete('group');
+ const unitGroups=new Map<string,TransportScorecard['units']>();
+ if(groupUnits){
+  const memberships=new Map<string,Set<string>>();
+  for(const {unit_id,business_group} of report.analysis_inputs??[]){
+   const group=business_group.trim();
+   if(!group||group==='Ej klassificerat')continue;
+   const groups=memberships.get(unit_id)??new Set<string>();
+   groups.add(group);
+   memberships.set(unit_id,groups);
+  }
+  for(const unit of report.units){
+   const groups=memberships.get(unit.unit_id??'');
+   const group=groups?.size===1?Array.from(groups)[0]:groups?.size?'Flera verksamhetsområden':'Utan verksamhetsområde';
+   const units=unitGroups.get(group)??[];
+   units.push(unit);
+   unitGroups.set(group,units);
+  }
+ }
+ const renderUnit=(u:TransportScorecard['units'][number])=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} dailyTarget={dailyTargets?.[u.unit_id??'']} costBreakdown={u.cost_breakdown} mileage={u.mileage} timeMetrics={u.time_metrics} foremanMode={foremanMode} href={!foremanMode&&u.unit_id?link('unit',u.unit_id):undefined}/>;
  return <>
  {!hideGroups&&<section className="panel"><h2>{selectedGroup??'Verksamhetsområden'}</h2>
  {selectedGroup&&<Link href={'/kpi/transportledare?'+all}>← Alla verksamhetsområden</Link>}
@@ -49,7 +68,7 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
  <p>Period: {report.from}–{report.to}. Klicka på ett verksamhetsområde eller en enhet för att se underlaget. Förklaringar finns i varje ruta under ”Om siffrorna”.</p>
  <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} analysis={analyses?.groups[g.business_group]} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
  </section>}
- <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Dagsbehov och snittintäkt avser {dailyPeriod.from}–{dailyPeriod.to} · {number.format(dailyPeriod.days)} arbetsdagar efter semesteravdrag (schablon).</p>}{foremanMode&&dailyPeriod&&<details><summary>Så räknas dagsbehovet</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<p>Dagsbehovets historiska underlag kunde inte hämtas.</p>}<div className={styles.cards}>{report.units.map(u=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} dailyTarget={dailyTargets?.[u.unit_id??'']} costBreakdown={u.cost_breakdown} mileage={u.mileage} timeMetrics={u.time_metrics} foremanMode={foremanMode} href={!foremanMode&&u.unit_id?link('unit',u.unit_id):undefined}/>)}</div></section>
+ <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Dagsbehov och snittintäkt avser {dailyPeriod.from}–{dailyPeriod.to} · {number.format(dailyPeriod.days)} arbetsdagar efter semesteravdrag (schablon).</p>}{foremanMode&&dailyPeriod&&<details><summary>Så räknas dagsbehovet</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<p>Dagsbehovets historiska underlag kunde inte hämtas.</p>}{groupUnits?Array.from(unitGroups,([group,units])=><section key={group}><h3>{group}</h3><div className={styles.cards}>{units.map(renderUnit)}</div></section>):<div className={styles.cards}>{report.units.map(renderUnit)}</div>}</section>
  </>;
 }
 
