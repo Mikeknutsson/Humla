@@ -1,3 +1,6 @@
+import {internalPrintReport} from '@/lib/kpi/internal-print-report';
+import {internalPrintBlocks} from '@/lib/kpi/internal-print-blocks';
+import type {InternalEconomyReport} from '@/lib/kpi/internal-economy-pdf';
 import {createClient} from '@/lib/supabase/server';
 import {internalQuery,transferWorkbook,transferGroups,transferTotals,finishedRows,type InternalRow} from '@/lib/kpi/internal-transfers';
 import {internalCenterSummaryCsv,type InternalCenterSummary} from '@/lib/kpi/internal-center-summary';
@@ -8,6 +11,25 @@ function download(rows:InternalRow[],id:string,report=false,includeReview=false)
 export async function GET(req:Request){
  const ctx=await context();if(!ctx)return Response.json({error:'Inloggning och arbetsyta krävs'},{status:401});
  try{const p=new URL(req.url).searchParams;
+  if(p.get('download')==='print_pdf'){
+   const block=p.get('block')??'all';
+   if(block!=='all'&&!internalPrintBlocks.some(item=>item.id===block))throw Error('Ogiltigt utskriftsblock');
+   const args={p_tenant_id:ctx.tenant,...internalQuery(p)};
+   const [summary,economy]=await Promise.all([
+    ctx.db.rpc('hub_kpi_internal_center_summary_v2',args),
+    ctx.db.rpc('hub_kpi_internal_economy_export_v1',args),
+   ]);
+   const error=summary.error??economy.error;
+   if(error)return Response.json({error:error.code==='42501'?'Du saknar KPI-behörighet.':'Ekonomiunderlaget kunde inte hämtas. Försök igen eller välj en kortare period.'},{status:error.code==='42501'?403:503});
+   try{
+    const bytes=await internalPrintReport(economy.data as InternalEconomyReport,summary.data as InternalCenterSummary,block);
+    if(!bytes)return Response.json({error:'Inga överföringar finns i valt block för perioden.'},{status:404});
+    return new Response(new Uint8Array(bytes),{headers:{...headers,'Content-Type':'application/pdf','Content-Disposition':`inline; filename="Internoverforing-${block}-${args.p_from}-${args.p_to}.pdf"`}});
+   }catch(error){
+    console.error('[kpi.internal-transfers] PDF generation failed',error);
+    return Response.json({error:'PDF kunde inte skapas från ekonomiunderlaget.'},{status:503});
+   }
+  }
   if(p.has('export_id')){const id=p.get('export_id')!;if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Ogiltigt export-ID');const {data,error}=await ctx.db.from('kpi_internal_transfer_ledger').select('snapshot').eq('tenant_id',ctx.tenant).eq('export_id',id).limit(2001);if(error||!data?.length) return Response.json({error:'Export saknas eller åtkomst nekad'},{status:404});if(data.length>2000)throw Error('Exportgränsen överskreds');return download(data.map(r=>r.snapshot as InternalRow),id);}
   const simple=p.get('view')==='summary';
   const {data,error}=await ctx.db.rpc(simple?'hub_kpi_internal_center_summary_v2':'hub_kpi_internal_transfers_with_purchase_v1',{p_tenant_id:ctx.tenant,...internalQuery(p)});
