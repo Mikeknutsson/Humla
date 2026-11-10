@@ -29,3 +29,9 @@
 .costRow { display:contents; }
 .costRow dt { padding-left:10px; font-size:.75rem; }
 .costRow dd { font-size:.75rem; color:#475569; }
+
+.areaSummary .gauge { gap:4px; }
+.areaSummary .gauge svg { max-width:170px; }
+.areaSummary .value { font-size:1.35rem; }
+.areaSummary .gauge > span { font-size:.82rem; }
+.areaSummary .gauge small { font-size:.75rem; }
