@@ -8,7 +8,7 @@ export function ForemanSawBreakdown({value}:{value?:SawBreakdown|null}){
  ['Kostnad lastbil – avräknad',value.truck_charge],
  ['Intäkt Grot/Stock',value.material_revenue],
  ['Kostnader Arbetsledning',value.management_cost],
- ['Övriga kostnader inkl. overhead',value.other_cost],
+ ['Övriga kostnader',value.other_cost],
  ['Kostnader totalt',value.cost],
  ] as const;
  return <section className="panel" aria-label="Sågningens intäkter och kostnader"><h2>Sågningen – intäkter och kostnader</h2>
