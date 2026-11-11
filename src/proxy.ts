@@ -32,7 +32,8 @@ export async function proxy(request: NextRequest) {
   const {data}=await supabase.auth.getClaims();
   const userId=data?.claims?.sub;
   const path=request.nextUrl.pathname;
-  if(userId&&(path==='/kpi'||path.startsWith('/kpi/'))&&!path.startsWith('/kpi/login')&&request.method==='GET'&&!request.headers.has('next-router-prefetch')){
+  const widget=path==='/kpi/mina-enheter'&&['month','ytd'].includes(request.nextUrl.searchParams.get('widget')??'');
+  if(!widget&&userId&&(path==='/kpi'||path.startsWith('/kpi/'))&&!path.startsWith('/kpi/login')&&request.method==='GET'&&!request.headers.has('next-router-prefetch')){
     const name=selectionCookie(userId);
     const saved=readSavedSelection(request.cookies.get(name)?.value);
     const restored=restoreSelection(request.nextUrl.searchParams,saved);

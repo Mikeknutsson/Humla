@@ -1,18 +1,27 @@
 "use server";
 
+import { foremanWidgetReturn } from "@/lib/kpi/foreman-widget";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  if (!email || !password) redirect("/kpi/login?error=Fyll i e-postadress och lösenord.");
+  const returnTo = foremanWidgetReturn(formData.get("return_to"));
+  const params = new URLSearchParams(returnTo ? { return_to: returnTo } : {});
+  if (!email || !password) {
+    params.set("error", "Fyll i e-postadress och lösenord.");
+    redirect("/kpi/login?" + params);
+  }
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) redirect(`/kpi/login?error=${encodeURIComponent("Inloggningen misslyckades. Kontrollera uppgifterna.")}`);
-  // Complete auth on a separate request so the refreshed session cookie is
-  // available to both Auth and tenant-scoped RLS before the dashboard loads.
-  redirect("/kpi/login?complete=1");
+  if (error) {
+    params.set("error", "Inloggningen misslyckades. Kontrollera uppgifterna.");
+    redirect("/kpi/login?" + params);
+  }
+  // The new request receives the session cookie before loading the report.
+  params.set("complete", "1");
+  redirect("/kpi/login?" + params);
 }
 
 export async function logout() {
