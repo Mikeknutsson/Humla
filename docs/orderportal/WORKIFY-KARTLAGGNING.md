@@ -110,3 +110,29 @@ Läst via inloggad Workify-webbläsare. Artikel-, person-, fordons- och orderfor
 - Separera personer, fordon, kund och projekt i registervyer. Koppla via kanoniska Hub-ID.
 - Skilj resursfärg (vem/vad) från statusfärg (var i flödet). Standardchaufför/fordon får inte skrivas över till historiska order automatiskt.
 - Bilagor, vägningar, prisavtal och flerroller återstår i Humla; Workify-funktioner ovan är inte ett påstående om implementerad Humla-funktionalitet.
+
+### Kalender och Skapa order — fördjupning samma dag
+
+- Kalendern granskades i vecka 46 (9–15 november), den period som öppnades i kontot. Oktober är fortsatt Humlas testperiod.
+- Tidslinje: resurser som rader, datum som kolumner, grupper för ej tilldelade, chaufförer och fordonstyper. Dagens kolumn markeras och flera dagars order visas som sammanhängande block.
+- Hela bokningsblock har färgad bakgrund och innehåller tid, ordernummer/titel, kund och plats när motsvarande visningsval är på.
+- Växling från Status till Resource genomfördes: samma chaufförs bokningar fick samma färg som resursens färgprick. Ej tilldelade blev röda i resursläget. Läget återställdes till Status.
+- Orange bokning 45718 öppnades och statusen Unassigned verifierades. Grönmint och mörk turkos förekom på andra kort men full färg–status-matris är inte verifierad. Humlas övriga statusfärger är egna, inte påstådda exakta Workify-färger.
+- Statusmenyn visar Ordered, Confirmed, Unassigned, Assigned, In progress, On hold, Done, Reported, [Ready for] Invoicing och Invoiced. Inget statusval genomfördes.
+- Agenda öppnades och visade veckodagar som kolumner och klockslag vertikalt; därefter återställdes Timeline. Dag/vecka/månad finns som periodval. Månadsvyn testades inte.
+- Visningsval: kund, platser, ej tilldelade, inaktiva resurser, fordonstyp, fordon/objekt och personer; sökbart resursurval och komprimerade platser. Drag-and-drop testades inte, eftersom det skulle kunna ändra skarpa bokningar.
+- Kalenderns plusknapp öppnade Skapa order. Formuläret har mintgrön rubrikrad och tydligt inramade sektioner: Grunduppgifter, Detaljer, Platser, Resurser och planering, Artiklar, Tillägg, Filer samt miljö-/dokumentval.
+- Kund, titel och slutdatum markerades som obligatoriska. Vår referens var förifylld med inloggad användare.
+- Platsdelen: Lägg till plats, favoritplats samt visa från/till på faktura respektive följesedel.
+- Resursdelen: start-/slutdatum, start-/sluttid, sökbart fordonsval med namn och registreringsnummer, chaufför och omvänd moms. Fordonsväljaren öppnades men ingen resurs valdes.
+- Lägg till artikel var avstängd med uttrycklig hjälptext att kund och slutdatum måste väljas först. Artikelinmatning i ny order testades därför inte i denna genomgång.
+- Filer: filval och kommentar. Tillägg: kundportal, miljörapport, följesedel/fakturaunderlag, e-post/BEAst 4.0 och mottagare.
+- Formuläret stängdes med Avbryt och bekräftelsen Stäng utan att spara. Ingen order skapades.
+
+### Implementerat efter fördjupningen
+
+- Mjukare Nunito Sans, statusflikar med urvalsantal och konsekventa statusfärger.
+- Visuell ordersammanfattning med status, radvärde, tider, chaufför och fordon; grupperade fält i redigering.
+- Humlas planering har fullfärgade orderkort, läsbar statustext även i resursfärgläge, statuslegend, sökning, statusfilter, kund-/platsvisning, dag/sjudagarsval och separat ej-tilldelad-lista för vald resurstyp.
+- Resursfärgerna i Humla härleds deterministiskt från resursnyckeln för visning. De är inte importerade Workify-färger eller administrativt sparade val, och unik färg för varje resurs garanteras inte.
+- Humlas kalender är fortsatt en resurs-/dagtabell: timplacerad agenda, månad, drag-and-drop och full Workify-statusmodell återstår. Registerfunktioner, fler orderfält och dokumentflöden ovan är kartlagda men inte fullt implementerade.
