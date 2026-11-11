@@ -70,3 +70,43 @@ Fullständig/live orderimport, nya behörigheter för transportledare, verkligt 
 - KPI-underlagets antal kvarstår: 1 111 oktoberrader / 392 ordernummer. Inga testorder kvar efter databastestet.
 - Lokal visuell QA kunde inte genomföras: preview-servern startade men Work-webbläsaren fick ERR_CONNECTION_REFUSED mot den tilldelade adressen. Dator/mobil och fullständigt inloggat användarflöde behöver därför verifieras på den publicerade förhandsversionen.
 - Endast portalens egna filer, dokumentation, tester och nya databasobjekt ändrade. Produktion/main publiceras inte.
+
+## Fördjupad UI-kartläggning 2026-11-11
+
+Läst via inloggad Workify-webbläsare. Artikel-, person-, fordons- och orderformulär öppnades för inspektion och stängdes utan att spara. Inga skarpa order eller register ändrades. Antal registerposter ändrades under asynkron inläsning; mellanvärden används inte som verifierade totalsiffror.
+
+### Artiklar och prislistor — verifierat
+- Artikellista: artikelnummer, namn, enhet, standardkostnad, vägbar, tidsartikel, index och prislistans pris. Sökning, visa borttagna, prislistval, export samt kontroller för skapa/redigera/radera finns.
+- Artikelkort (DMT Bil): nummer, namn, enhet, vägbar/tidsartikel, index, produktgrupp, kalkylkostnad, EAN, branschartikelnummer, avfallskod, omräkningsfaktor till rapporterad vikt i kg samt standardkommentar.
+- Produktgrupper i väljaren: Verkstad, Maskiner, Externa Avsättningar, Uthyrningsartiklar, Försäljning Grusmaterial, Avräkningsartiklar, Tippavgifter Pukavik, Försäljning Pukavik och Lastbilar.
+- Separat prislistflik med kod/namn, beskrivning och kopiera/redigera/radera-kontroller. STD är visuellt låst. Kundspecifika och interna listor förekommer, exempelvis SEVAB, KEVAB, STENA och ELLEHINTERN.
+- Prislistornas detaljredigering, prioritet och automatiska prisval är inte verifierade. Klick på prislistnamn gav inte ett verifierbart detaljresultat.
+
+### Personer — verifierat
+- Lista under Mitt företag med förnamn, efternamn, e-post, telefon, användartyp, standardfordon, regelverk, färgkod och bokningsbar resurs. Aktiv/inaktiv/alla-filter och inaktiveringskontroller finns.
+- Personkort: namn, kontaktuppgifter, anställnings-ID, lönetyp (månad/timme), endast avvikelserapportering, användartyp, standardfordon, färgkod och bokningsbar resurs. Fält för nytt lösenord finns men användes inte.
+- Roller som visas: Operations manager, Planner, Driver, Finance och Driver +. Rollernas faktiska behörighetsmatris har inte testats.
+- Användarkonto och bokningsbar resurs är skilda begrepp. Listan innehåller även samlings-/externa resurser och är inte en säker förteckning över fysiska anställda.
+- Personuppgifter kopierades inte till denna dokumentation. Standardkopplingar är aktuella registerinställningar, inte bevis för historiska körningar.
+
+### Fordon och objekt — verifierat
+- Lista: namn, beskrivning, regnr, standardchaufför, VIN, kostnadsställe, typ och färg. Aktiv/inaktiv-filter.
+- Öppnat hjullastarkort: namn/regnr, beskrivning, VIN, modell, fabrikat, fordonstyp, standardchaufför, färg, bränsle, motortyp, förbrukning per sträcka/timme och CO2-val, kostnadsställe, skopvolym, maskinvikt och lyftkapacitet.
+- Underhåll och Dokument visas som avstängda flikar med uppmaning att kontakta försäljning. Dessa räknas inte som aktiva funktioner i det granskade kontot.
+- Resurstaggar, uthyrningskategorier, kostnadsställen, produktgrupper och sparade mottagare visas som separata registersektioner. Detaljfunktionerna i dessa är inte testade.
+
+### Order 45547 — verifierad detaljstruktur
+- Överst: ordernummer, Skicka, Skriv ut, Redigera, Upprepa, Kopiera, Radera. Åtgärdernas genomförande testades inte.
+- Märkning, objektnummer, externt dokumentnummer och projekt samt stegindikator Planering → Pågående → Granskning → Fakturering.
+- Visuell översikt med färgad status/radvärde, start/slut, planerare, tilldelad person och fordon. Separat händelsepanel med kommentarsfilter.
+- Detaljer: titel/instruktion, kund, kundreferens och kontakt. Separata sektioner för karta/platser, vägningar, artiklar, fakturaanteckning, filer och händelser.
+- Artikelrader: person, datum, artikel, antal, enhet, à-pris, summa, kommentar samt redigera/radera. Ordern innehåller transport, material och tippavgifter.
+- Filsektionen har systemdokument (följesedel/vågkvitto) och uppladdade bilder. Filer öppnades eller laddades inte ned i denna genomgång.
+- Redigeringsformulär grupperas i Grunduppgifter, Detaljer, Resurser och planering samt Tillägg. Där finns kund/projekt/titel/instruktion, märkning/objektnummer/extern projektreferens/era och våra referenser, datum/tider, omvänd moms, kundportal, miljörapport och dokument-/leveransval. Ingen skickfunktion användes.
+
+### Konsekvenser för Humla — föreslagna förbättringar
+- Skilj visuell orderöversikt från redigerbara fält; visa tydliga resursikoner och samlad status/radvärde.
+- Eget artikelregister och separata prislistor, inte enbart textförslag på orderraden. Rikare register kräver verifierad datakoppling till Hubben; saknade metadata ska inte hittas på.
+- Separera personer, fordon, kund och projekt i registervyer. Koppla via kanoniska Hub-ID.
+- Skilj resursfärg (vem/vad) från statusfärg (var i flödet). Standardchaufför/fordon får inte skrivas över till historiska order automatiskt.
+- Bilagor, vägningar, prisavtal och flerroller återstår i Humla; Workify-funktioner ovan är inte ett påstående om implementerad Humla-funktionalitet.
