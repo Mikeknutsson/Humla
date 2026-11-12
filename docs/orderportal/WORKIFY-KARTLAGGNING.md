@@ -136,3 +136,17 @@ Läst via inloggad Workify-webbläsare. Artikel-, person-, fordons- och orderfor
 - Humlas planering har fullfärgade orderkort, läsbar statustext även i resursfärgläge, statuslegend, sökning, statusfilter, kund-/platsvisning, dag/sjudagarsval och separat ej-tilldelad-lista för vald resurstyp.
 - Resursfärgerna i Humla härleds deterministiskt från resursnyckeln för visning. De är inte importerade Workify-färger eller administrativt sparade val, och unik färg för varje resurs garanteras inte.
 - Humlas kalender är fortsatt en resurs-/dagtabell: timplacerad agenda, månad, drag-and-drop och full Workify-statusmodell återstår. Registerfunktioner, fler orderfält och dokumentflöden ovan är kartlagda men inte fullt implementerade.
+
+## Ombyggnad 2026-11-12
+
+- Smal navigation, svart text, Humlas gula markeringar och tät statusfärgad ordertabell som standard. Kortvy finns kvar, med kort på mobil.
+- Ej tilldelade order visas i samma datumrutnät som resurserna.
+- Sökbara val från befintliga Humla-ID för kund, projekt, fordon, förare och artiklar. Registerval skapar inga nya kund-/artikelidentiteter.
+- Orderformulär: kund/projekt, rubrik, större instruktion, kontaktuppgifter, platser, planering/resurser, referenser, kommentarer och artiklar.
+- Kontaktuppgifter är orderbundna fält, inte ett färdigt kundkontaktregister. Adresslänken öppnar Google Maps; den är inte inbyggd autocomplete.
+- Artikelregistret har en egen sökbar läsvy. Materialrader kan spara hämtplats, mottagningsplats och separat inköpspris i testorderns befintliga JSON-payload och versionshistorik. Platser är fritext tills ett gemensamt platsregister kopplats in.
+- Försäljningspriser märks servermässigt som manuella testpriser. Automatiska STD-, kund-, projekt- och platspriser är INTE implementerade. De ska inte härledas från intäktsimporter eller ersättas av kopierade artiklar.
+- Köpkostnad ingår inte i orderns försäljningssumma. Vald artikel kontrolleras mot organisationens aktiva Hub-register via order-API:t.
+- Inga ändringar i KPI-kod, beräkningar, skarpa Workify-order eller fakturaintegrationer. Inga nya databastabeller eller migreringar i denna revision.
+
+Verifiering: Next-produktionsbygge och modelltester. Visuell browser-QA försöktes med syntetisk lokal fixture men kunde inte köras: Chromium stoppades av miljön (socket Operation not permitted). Sparande/återöppning av de nya fälten i en inloggad liveförhandsversion återstår att verifiera. Fullständig Workify-kartläggning är fortsatt ofärdig efter utgången inloggning.
