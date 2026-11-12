@@ -1,4 +1,4 @@
-import type {Order} from './model';
+import type {Order,Resource} from './model';
 export const canPlan=(order:Order)=>order.source==='humla'&&['Utkast','Planerad','Pågående'].includes(order.status);
 // Shift calendar dates, preserving local clock times even across daylight-saving changes.
 export function moveOrderDay(order:Order,anchor:string,target:string):Order{
@@ -8,3 +8,5 @@ export function moveOrderDay(order:Order,anchor:string,target:string):Order{
  if(!canPlan(order))throw Error('Ordern kan inte planeras.');
  return {...order,start:shift(order.start),end:shift(order.end)};
 }
+
+export function copyOrderForTest(o:Order,resources:Resource[],newId:()=>string=()=>crypto.randomUUID()):Order{return ({...o,id:'',number:'',source:'humla',version:0,status:'Utkast',requestId:newId(),copiedFrom:o.source==='workify'?'Workify '+o.number:o.id,importedAt:'',issues:[],sourceFields:undefined,batches:undefined,projectId:'',project:'',vehicleId:resources.some(r=>r.id===o.vehicleId)?o.vehicleId:'',vehicle:resources.find(r=>r.id===o.vehicleId)?.label||'',driverId:resources.some(r=>r.id===o.driverId)?o.driverId:'',driver:resources.find(r=>r.id===o.driverId)?.label||'',lines:o.lines.map(l=>({...l,id:newId(),sourceId:undefined,fingerprint:undefined,valid:true,errors:[]}))});}

@@ -178,3 +178,13 @@ Begränsningar: inloggad browser-QA återstår; visuell verifiering är inte gen
 Verifiering: Next-produktionsbygge, åtta modelltester och databasens rollback-test för fordon/förare, vanlig ordersparning, angränsande perioder, flerdagarsflytt, avregistrering av resurs, gammal version, ändringshistorik, oförändrade artikelrader, slutförd order och obehörig användare. Inloggad visuell kontroll och faktiska drag-/touchinteraktioner är ännu inte verifierade i webbläsare.
 
 Kalenderceller har även Ny order med förvald dag och den valda resurstypens Hub-ID. Formuläret kompletteras med kund/uppdrag före sparande.
+
+## Draghandtag och Workify-testkopior – 2026-11-12
+
+- Synligt Dra order-handtag, dämpat kort under dragning och Släpp här-markering i giltig kalendercell.
+- Befintliga aktiva Humla-testorder flyttas via granskningsdialogen och samma konflikt-/versionsskydd som tidigare.
+- Workify-importer har Dra testkopia. Släpp skapar ett osparat Humla-utkast med ny identitet, kopieringsreferens, vald dag och målresurs. Originalet ändras inte. Användaren behöver granska och spara kopian; saknade obligatoriska kund-/tidsfält måste kompletteras.
+- Native HTML-dragning för mus; pointer capture med rörelsetröskel på handtaget för touch/penna. Klick på handtaget öppnar motsvarande formulär. I touchläge kan synliga kalenderceller användas; rulla kalendern separat före dragning vid behov.
+- Kopiering/flytt lämnar artikelradernas datum och priser kvar. Detta anges både i hjälpen och testkopians formulär.
+- Nio modelltester godkända, inklusive att importoriginal och dess källrader förblir oförändrade. Next-produktionsbygge godkänt.
+- Webbläsarförsök nådde Vercels inloggningssida. Mus-/touchdragning och faktisk sparning är inte visuellt end-to-end-verifierade i denna revision. Ingen inloggning eller försvagning av förhandsversionens skydd utfördes.
