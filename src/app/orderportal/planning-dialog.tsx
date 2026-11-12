@@ -1,0 +1,18 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {CalendarDays,Save,X} from 'lucide-react';
+import {conflicts,type Order,type Resource} from '@/lib/orderportal/model';
+import ResourcePicker from './resource-picker';
+export default function PlanningDialog({order,original,orders,resources,onClose,onSaved}:{order:Order;original:Order;orders:Order[];resources:Resource[];onClose:()=>void;onSaved:()=>Promise<void>}){
+ const dialog=useRef<HTMLDialogElement>(null);const [draft,setDraft]=useState(order),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{const node=dialog.current;node?.showModal();return()=>node?.close();},[]);
+ const overlaps=conflicts([...orders.filter(o=>o.id!==draft.id),draft]).get(draft.id)||[];
+ const valid=draft.start&&draft.end&&draft.end>draft.start;
+ const resource=(key:'vehicleId'|'driverId',label:string,kinds:string[])=> <ResourcePicker label={label} value={draft[key]} items={resources.filter(r=>kinds.includes(r.kind))} onChange={r=>setDraft(d=>({...d,[key]:r?.id||'',[key==='vehicleId'?'vehicle':'driver']:r?.label||''}))}/>;
+ return <dialog ref={dialog} className="op-dialog op-plan-dialog" aria-label="Planera testorder" onCancel={e=>{if(busy)e.preventDefault();else onClose();}}><form onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');try{const r=await fetch('/api/orderportal/planning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:original.id,version:original.version,start:draft.start,end:draft.end,vehicleId:draft.vehicleId,driverId:draft.driverId})});const j=await r.json();if(!r.ok)throw Error(j.error);await onSaved();onClose();}catch(e){setError(e instanceof Error?e.message:'Kunde inte spara.');}finally{setBusy(false);}}}>
+ <header className="op-editorhead"><div><span className="op-eyebrow">TRANSPORTPLANERING · TEST</span><h2><CalendarDays size={24}/> Planera {order.number}</h2><p>{order.title}</p></div><button type="button" className="op-icon" aria-label="Stäng planering" disabled={busy} onClick={onClose}><X/></button></header>
+ <div className="op-editorbody"><div className="op-plan-before"><strong>Nuvarande planering</strong><p>{original.start.replace('T',' ')} – {original.end.replace('T',' ')}</p><p>{original.vehicle||'Ej tilldelat fordon'} · {original.driver||'Ej tilldelad förare'}</p></div><fieldset disabled={busy} className="op-plan-fields"><div className="op-fields"><label>Ny start<input type="datetime-local" required value={draft.start} onChange={e=>setDraft({...draft,start:e.target.value})}/></label><label>Nytt slut<input type="datetime-local" required value={draft.end} onChange={e=>setDraft({...draft,end:e.target.value})}/></label>{resource('vehicleId','Tilldelat fordon',['Vehicle','vehicle'])}{resource('driverId','Tilldelad förare',['Person'])}</div></fieldset>
+ {!valid&&<p className="op-error">Sluttiden måste vara efter starttiden.</p>}{overlaps.length>0&&<p className="op-error" role="alert">Resurskonflikt med {overlaps.join(', ')}. Välj en annan tid eller resurs.</p>}
+ <p className="op-help">Artikelradernas datum och priser behålls. Ändra dem separat om uppdragets utförandedatum ändras. Konflikter kontrolleras mot aktiva Humla-testorder; Workify-importen är inte ett fullständigt bokningsunderlag.</p>{error&&<p className="op-error" role="alert">{error}</p>}</div>
+ <footer className="op-editorfoot"><span>Ändringen sparas i orderhistoriken.</span><div><button type="button" className="op-secondary" disabled={busy} onClick={onClose}>Avbryt</button><button className="op-primary" disabled={busy||!valid||overlaps.length>0}><Save size={16}/>{busy?'Sparar…':'Spara planering'}</button></div></footer></form></dialog>;
+}

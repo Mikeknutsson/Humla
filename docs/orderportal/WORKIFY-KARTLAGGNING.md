@@ -164,3 +164,17 @@ Implementerat i testportalen:
 Verifiering: produktionsbygge, sex modelltester samt transaktionella databastester av prioritering, platskrav, datum, överlapp, konflikt, prissnapshot, inköp/försäljning, ändrat projekt, arkivering, bevarat orderpris och tenantbehörighet. Befintlig ordertestsvit med versionskontroll, historik och faktureringsspärr körd igen. Alla testskrivningar rullades tillbaka. Säkerhetsrådgivaren gav inga orderportal-specifika anmärkningar.
 
 Begränsningar: inloggad browser-QA återstår; visuell verifiering är inte genomförd. Automatisk prisimport, rabatt-/indexmodeller, littrabaserade avtal, olika prislistor per kund med valbart avtal, masskopiering och Google Maps-autocomplete återstår. Samtidiga lika prioriterade kund-/projektlistor kräver att användaren korrigerar överlappande priser. Testplatser är uttryckligen separata från ett framtida skarpt platsregister och ska mappas vid produktionssättning.
+
+## Mörkgrå navigation och aktiv planering – 2026-11-12
+
+- Navigationens bakgrund och mörka segmentknappar ändrade från nästan svart till mörkgrå (#34383e). Svart innehållstext och gula aktiva val behålls.
+- Aktiva Humla-testorder (Utkast, Planerad, Pågående) kan dras mellan kalenderdagar och kanoniskt identifierade fordons-/förarrader. Ett granskningsformulär öppnas före sparande. Knappen Planera / tilldela ger motsvarande funktion på mobil och med tangentbord.
+- Valet Visa lediga resurser visar även registerresurser utan bokning i aktuellt urval. Ej tilldelad finns som möjlig målrad. Kalenderfiltret kan dölja uppdrag; konflikter kontrolleras ändå mot alla aktiva Humla-testorder i organisationen.
+- Flytt av ett flerdagarsuppdrag utgår från den dag som greps och bevarar hela uppdragets datumlängd och lokala klockslag. Datum och priser på artikelrader ändras inte automatiskt; detta framgår i formuläret.
+- Planering sparas i Hubben med befintlig versionskontroll och full orderhistorik. Uppslag av fordons-/förarnamn sker från kanoniska Hub-ID på serversidan.
+- Alla ordinarie testordersparningar och planeringsändringar använder nu ett gemensamt organisationslås före konfliktkontroll. Överlapp för samma fordon eller förare blockeras. Intilliggande tidsintervall tillåts. Utförda/avbrutna/faktureringsklara order ingår inte i konfliktkontrollen.
+- Workify-importer är skrivskyddade och används inte för att garantera skarp resurskapacitet. Kalenderflytt påverkar inte KPI, Workify eller fakturering.
+
+Verifiering: Next-produktionsbygge, åtta modelltester och databasens rollback-test för fordon/förare, vanlig ordersparning, angränsande perioder, flerdagarsflytt, avregistrering av resurs, gammal version, ändringshistorik, oförändrade artikelrader, slutförd order och obehörig användare. Inloggad visuell kontroll och faktiska drag-/touchinteraktioner är ännu inte verifierade i webbläsare.
+
+Kalenderceller har även Ny order med förvald dag och den valda resurstypens Hub-ID. Formuläret kompletteras med kund/uppdrag före sparande.
