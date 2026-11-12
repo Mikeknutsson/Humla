@@ -150,3 +150,17 @@ Läst via inloggad Workify-webbläsare. Artikel-, person-, fordons- och orderfor
 - Inga ändringar i KPI-kod, beräkningar, skarpa Workify-order eller fakturaintegrationer. Inga nya databastabeller eller migreringar i denna revision.
 
 Verifiering: Next-produktionsbygge och modelltester. Visuell browser-QA försöktes med syntetisk lokal fixture men kunde inte köras: Chromium stoppades av miljön (socket Operation not permitted). Sparande/återöppning av de nya fälten i en inloggad liveförhandsversion återstår att verifiera. Fullständig Workify-kartläggning är fortsatt ofärdig efter utgången inloggning.
+
+## Prisflöde – 2026-11-12, fortsättning
+
+Implementerat i testportalen:
+- Egen Prislistor-vy: skapa grundprislista (en per organisation), kundavtal, projektavtal och namngivna täkter/tippplatser. Allt lagras i Hubben. Prislistor och platser får kanoniska testobjekt-ID, artiklar/kunder/projekt återanvänder befintliga Hub-ID.
+- Prisrader med artikel, enhet, giltighetsdatum, valfri hämt-/mottagningsplats, försäljningspris och separat valfritt inköpspris.
+- Hub-funktionen väljer projekt > kund > grundpris, sedan högsta platsspecificitet inom den nivån. Datum och enhet måste matcha exakt. Saknad plats vid möjliga platspriser kräver platsval. Lika rang ger konflikt i stället för godtyckligt val.
+- Orderradens Hämta avtalspris är ett uttryckligt val. Spara kontrollerar register-ID, avtalsvillkor och pris på nytt i databasen. Prisradens ID och prisvillkor sparas som snapshot med orderhistoriken. Inköpspris påverkar inte försäljningssumman.
+- Priser arkiveras med tid och användar-ID; ersättningspris kan registreras efteråt. Befintliga order kan behålla arkiverat pris, nya order får inte använda det. Historik visas med Visa arkiverade.
+- Prisregister är tomt från början: Workify-prislistor och ekonomins befintliga materialinköpspriser har INTE importerats eller automatiskt mappats. Inga antagna affärspriser har skapats.
+
+Verifiering: produktionsbygge, sex modelltester samt transaktionella databastester av prioritering, platskrav, datum, överlapp, konflikt, prissnapshot, inköp/försäljning, ändrat projekt, arkivering, bevarat orderpris och tenantbehörighet. Befintlig ordertestsvit med versionskontroll, historik och faktureringsspärr körd igen. Alla testskrivningar rullades tillbaka. Säkerhetsrådgivaren gav inga orderportal-specifika anmärkningar.
+
+Begränsningar: inloggad browser-QA återstår; visuell verifiering är inte genomförd. Automatisk prisimport, rabatt-/indexmodeller, littrabaserade avtal, olika prislistor per kund med valbart avtal, masskopiering och Google Maps-autocomplete återstår. Samtidiga lika prioriterade kund-/projektlistor kräver att användaren korrigerar överlappande priser. Testplatser är uttryckligen separata från ett framtida skarpt platsregister och ska mappas vid produktionssättning.
