@@ -32,7 +32,6 @@ export function KpiMarginGauge({margin, target, label}: {margin: number | null |
     </svg>
     <strong className={styles.value} style={{color}}>{hasMargin ? `${percent.format(margin)} %` : '–'}</strong>
     <span style={{color}}>{status}</span>
-    <small>{hasTarget ? `Mål ${percent.format(target)} % · svart markering` : 'Inget fullständigt mål för perioden'}</small>
-    {hasMargin && (margin < min || margin > max) && <small>Visaren är vid skalans gräns. Exakt värde visas ovan.</small>}
+    <small>{hasTarget ? `Mål ${percent.format(target)} %` : 'Mål saknas'}</small>
   </div>;
 }
