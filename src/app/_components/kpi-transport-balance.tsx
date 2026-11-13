@@ -16,14 +16,15 @@ const costCategories=['personnel','fuel','service_repair','fixed','depreciation'
 const costCategoryOrder=(category:string)=>{const index=costCategories.indexOf(category);return index<0?costCategories.length:index;};
 
 function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foremanMode=false,dailyTarget,mileage,timeMetrics}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis;costBreakdown?:TransportCostBreakdown[];foremanMode?:boolean;dailyTarget?:DailyRevenueTarget;mileage?:TransportMileage;timeMetrics?:TransportTime}) {
- return <article className={styles.card}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
+ const status=metrics.deviation_pp==null?"unknown":metrics.deviation_pp<0?"below":"on-target";
+ return <article className={styles.card} data-target-status={status}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
  <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
  <dl className={styles.facts}>
  <dt>Intäkter</dt><dd>{money(metrics.revenue)}</dd><dt>Kostnader</dt><dd>{money(metrics.cost)}</dd>
  {foremanMode && (costBreakdown == null ? <><dt>Kostnadsfördelning</dt><dd>Underlag saknas</dd></> : [...costBreakdown].sort((a,b)=>costCategoryOrder(a.category)-costCategoryOrder(b.category)||a.category.localeCompare(b.category,'sv')).map(row=><div key={row.category} className={styles.costRow}><dt>{labels[row.category]??row.category}</dt><dd>{money(row.amount)}</dd></div>))}
- <dt>Resultat</dt><dd><strong>{money(metrics.result)}</strong></dd>
+ <dt><strong>Resultat</strong></dt><dd className={styles.resultValue} data-negative={metrics.result!=null&&metrics.result<0}><strong>{money(metrics.result)}</strong></dd>
  {foremanMode&&dailyTarget&&<><dt>Intäkt som krävs / arbetsdag</dt><dd><strong>{dailyTarget.required==null?dailyTarget.reason:money(dailyTarget.required)}</strong></dd><dt>Snittintäkt / arbetsdag (schablon)</dt><dd>{money(dailyTarget.actual)}</dd><dt>Över / under dagsbehov</dt><dd>{dailyTarget.gap==null?'–':(dailyTarget.gap>=0?'+':'')+money(dailyTarget.gap)}</dd></>}
- <dt>Avvikelse mot mål</dt><dd>{metrics.deviation_pp==null?'Mål saknas':`${number.format(metrics.deviation_pp)} pp`}</dd>
+ <dt>Avvikelse mot mål</dt><dd className={styles.targetDeviation} data-negative={metrics.deviation_pp!=null&&metrics.deviation_pp<0}>{metrics.deviation_pp==null?'Mål saknas':`${number.format(metrics.deviation_pp)} pp`}</dd>
  <dt>Fg. år · marginal</dt><dd>{pct(previous?.margin_percent)}</dd>
  <dt>Fg. år · resultat</dt><dd>{money(previous?.result)}</dd>
  </dl>
@@ -69,7 +70,7 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
   const totals=report.groups.find(area=>area.business_group===(group==='Utan verksamhetsområde'?'Ej klassificerat':group));
   const deviation=totals?.deviation_pp;
   const underTarget=deviation!=null&&deviation<0;
-  return <details key={group} className={styles.area} data-under-target={underTarget}>
+  return <details key={group} className={styles.area} data-under-target={underTarget} data-target-status={deviation==null?"unknown":underTarget?"below":"on-target"}>
    <summary className={styles.card+' '+styles.areaSummary}>
     <div>
      <h3>{group}</h3>
