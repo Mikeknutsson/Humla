@@ -57,3 +57,14 @@
 .costDetails h4 { margin:10px 0 0; font-size:.82rem; }
 
 @media(max-width:600px) { .cards { grid-template-columns:1fr; gap:8px; } .card { padding:10px 12px; } .areaSummary { grid-template-columns:minmax(0,1fr) 110px; gap:8px; } .areaSummary .gauge svg { max-width:110px; } .areaSummary .value { font-size:1.1rem; } }
+
+/* Stronger visual distinction between healthy and weak margins. */
+.card { border-left:4px solid #d7a51c; box-shadow:0 2px 9px rgba(15,23,42,.05); }
+.card:hover { box-shadow:0 6px 18px rgba(15,23,42,.09); }
+.card h3 { font-weight:800; letter-spacing:-.015em; }
+.facts dd strong { font-size:1.05em; font-weight:850; }
+.area[data-under-target="true"] > .areaSummary { border-left-color:#c43e3e; background:#fffafa; }
+.area[data-under-target="false"] > .areaSummary { border-left-color:#19865d; }
+.areaStatus[data-under-target="false"] { color:#13774f; }
+.areaSummary .value { font-weight:850; }
+@media print { .card { box-shadow:none; } }
