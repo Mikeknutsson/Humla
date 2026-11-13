@@ -68,3 +68,17 @@
 .areaStatus[data-under-target="false"] { color:#13774f; }
 .areaSummary .value { font-weight:850; }
 @media print { .card { box-shadow:none; } }
+
+/* Data-driven state: never color unknown margin as success. */
+.card[data-target-status="below"] { border-left-color:#c83b42; background:linear-gradient(100deg,#fff6f6 0,#fff 34%); }
+.card[data-target-status="on-target"] { border-left-color:#19865d; background:linear-gradient(100deg,#f2fbf5 0,#fff 34%); }
+.card[data-target-status="unknown"] { border-left-color:#94a3b8; }
+.resultValue strong { font-size:1.1em; font-weight:850; }
+.resultValue[data-negative="true"] { color:#b42332; }
+.targetDeviation { font-weight:800; color:#16724e; }
+.targetDeviation[data-negative="true"] { color:#b42332; }
+.card[data-target-status="unknown"] .targetDeviation { color:#64748b; }
+.area[data-target-status="below"] > .areaSummary { border-left-color:#c83b42; background:#fff7f7; }
+.area[data-target-status="on-target"] > .areaSummary { border-left-color:#19865d; background:#f4fbf6; }
+.area[data-target-status="unknown"] > .areaSummary { border-left-color:#94a3b8; background:#fff; }
+@media (prefers-reduced-motion:reduce) { .card { transition:none; } }
