@@ -33,10 +33,7 @@ function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foreman
  <strong>{analysis.insights[0].title}</strong>
  <details><summary>Visa jämförelse</summary>{analysis.insights[0].evidence.map(e=><p key={e}>{e}</p>)}</details>
  </aside>}
- {!foremanMode&&<details className={styles.explanation}><summary>Om siffrorna</summary>
- <p>Resultat = intäkter minus kostnader, inklusive fördelad overhead. Marginal = resultatets andel av intäkterna. Avvikelse mot mål anges i procentenheter. Fg. år avser samma period föregående år.</p>
- <p>Endast tydliga avvikelser visas. Jämförelsen gäller egen historik eller minst två andra enheter i samma verksamhetsområde. Timanalys kräver tillförlitlig TransPA-tid. Engångskostnader och olika uppdrag kan påverka jämförelsen.</p>
- </details>}</article>;
+ </article>;
 }
 
 export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false,foremanMode=false,groupUnits=false,dailyTargets,dailyPeriod}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean;foremanMode?:boolean;groupUnits?:boolean;dailyTargets?:Record<string,DailyRevenueTarget>;dailyPeriod?:{from:string;to:string;days:number;workdays:number;vacationDays:number}}) {
@@ -64,11 +61,9 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
  return <>
  {!hideGroups&&<section className="panel"><h2>{selectedGroup??'Verksamhetsområden'}</h2>
  {selectedGroup&&<Link href={'/kpi/transportledare?'+all}>← Alla verksamhetsområden</Link>}
- <p>Marginal efter samtliga kostnader i urvalet. Rött visar negativt resultat, gult positiv marginal under mål och grönt uppnått mål. Grått fält betyder att mål saknas.</p>
- <p>Period: {report.from}–{report.to}. Klicka på ett verksamhetsområde eller en enhet för att se underlaget. Förklaringar finns i varje ruta under ”Om siffrorna”.</p>
  <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} analysis={analyses?.groups[g.business_group]} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
  </section>}
- <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Dagsbehov och snittintäkt avser {dailyPeriod.from}–{dailyPeriod.to} · {number.format(dailyPeriod.days)} arbetsdagar efter semesteravdrag (schablon).</p>}{foremanMode&&dailyPeriod&&<details><summary>Så räknas dagsbehovet</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<p>Dagsbehovets historiska underlag kunde inte hämtas.</p>}{groupUnits?<div className={styles.areaList}>
+ <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Arbetsdagar: {number.format(dailyPeriod.days)} · {dailyPeriod.from}–{dailyPeriod.to}</p>}{foremanMode&&dailyPeriod&&<details><summary>Beräkning av dagsbehov</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<p>Dagsbehovets historiska underlag kunde inte hämtas.</p>}{groupUnits?<div className={styles.areaList}>
  <label className={styles.areaFilter}><input type="checkbox"/> Visa bara områden under mål</label>
  <p className={styles.areaFilterEmpty}>Inga områden ligger under mål i perioden.</p>
  {Array.from(unitGroups,([group,units])=>{
@@ -103,7 +98,7 @@ export function TransportBreakdowns({report,prior}:{report:TransportScorecard;pr
  const currentAvailable=report.summary.rows>0;
  const previousAvailable=prior!=null&&prior.summary.rows>0;
  const find=(rows:TransportBreakdown[]|undefined,kind:string,category:string)=>rows?.find(r=>r.kind===kind&&r.category===category);
- return <section className="panel"><h2>Intäkter och kostnader – avvikelser</h2><p>Samma period föregående år. Andel avser respektive post i förhållande till omsättningen. Förändring i andel visas i procentenheter (pp).</p>
+ return <section className="panel"><h2>Intäkter och kostnader</h2>
  <div className={styles.breakdowns}>{(['revenue','cost']as const).map(kind=>{
  const categories=[...new Set([...report.breakdown,...(prior?.breakdown??[])].filter(r=>r.kind===kind).map(r=>r.category))];
  return <div key={kind}><h3>{kind==='revenue'?'Intäkter':'Kostnader'}</h3><div className="monthly-scroll"><table><thead><tr><th>Post</th><th>Utfall</th><th>Fg. år</th><th>Skillnad kr</th><th>Andel</th><th>Δ andel</th></tr></thead><tbody>{categories.map(category=>{
