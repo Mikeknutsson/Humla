@@ -66,3 +66,13 @@ body:has(.op-root) > .shell > .main{padding:0;max-width:none;width:100%;min-widt
 .op-planning .op-event-bottom{padding-top:4px;margin-top:5px}
 .op-agenda-resource .op-event{width:100%;min-width:0}
 .op-agenda-resource p{font-size:13px;color:var(--op-muted)}
+
+.op-agenda-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 12px;background:#34383e;color:white}
+.op-agenda-heading h3{text-transform:capitalize;font-size:16px}
+.op-agenda-heading .op-secondary{min-height:44px;white-space:nowrap}
+@media(max-width:760px){
+ .op-planning>.op-panelhead .op-actions{display:grid;grid-template-columns:auto minmax(0,1fr) auto;justify-content:stretch}
+ .op-planning>.op-panelhead .op-actions input{width:100%;min-width:0}
+ .op-planning>.op-panelhead .op-actions .op-segment{grid-column:1/-1;justify-self:start}
+ .op-planning>.op-panelhead .op-actions button{min-height:44px}
+}
