@@ -76,3 +76,22 @@ body:has(.op-root) > .shell > .main{padding:0;max-width:none;width:100%;min-widt
  .op-planning>.op-panelhead .op-actions .op-segment{grid-column:1/-1;justify-self:start}
  .op-planning>.op-panelhead .op-actions button{min-height:44px}
 }
+
+.op-register-controls{display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:16px}
+.op-register-controls label{flex:1;min-width:min(100%,240px)}
+.op-register-body{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,1.4fr);gap:18px;padding:0 16px 16px}
+.op-register-list{list-style:none;padding:0;margin:8px 0;display:grid;gap:4px}
+.op-register-list button{width:100%;text-align:left;padding:9px 12px;min-height:44px;border:1px solid var(--op-line);border-radius:5px;background:#fff;overflow-wrap:anywhere}
+.op-register-list button[aria-pressed=true]{border-left:5px solid var(--op-yellow);background:#fff8d6}
+.op-register-list small{display:block;color:var(--op-muted)}
+.op-register-detail{align-self:start;background:#fff;border:1px solid var(--op-line);border-radius:7px;padding:14px;overflow-wrap:anywhere}
+.op-register-detail header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.op-register-detail dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.op-register-detail dt{font-size:12px;color:var(--op-muted)}
+.op-register-detail dd{margin:0;font-weight:700}
+.op-order-section-nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.op-order-section-nav a{padding:8px 12px;background:#34383e;color:#fff;border-radius:5px;font-weight:700}
+@media(max-width:760px){
+ .op-register-body{grid-template-columns:minmax(0,1fr)}
+ .op-register-detail{grid-row:1}
+}
