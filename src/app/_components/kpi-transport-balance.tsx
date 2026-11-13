@@ -22,11 +22,10 @@ function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foreman
  <dt>Intäkter</dt><dd>{money(metrics.revenue)}</dd><dt>Kostnader</dt><dd>{money(metrics.cost)}</dd>
  {foremanMode && (costBreakdown == null ? <><dt>Kostnadsfördelning</dt><dd>Underlag saknas</dd></> : [...costBreakdown].sort((a,b)=>costCategoryOrder(a.category)-costCategoryOrder(b.category)||a.category.localeCompare(b.category,'sv')).map(row=><div key={row.category} className={styles.costRow}><dt>{labels[row.category]??row.category}</dt><dd>{money(row.amount)}</dd></div>))}
  <dt>Resultat</dt><dd><strong>{money(metrics.result)}</strong></dd>
- <dt>Målmarginal</dt><dd>{metrics.target_margin_percent==null?'Mål saknas':pct(metrics.target_margin_percent)}</dd>
  {foremanMode&&dailyTarget&&<><dt>Intäkt som krävs / arbetsdag</dt><dd><strong>{dailyTarget.required==null?dailyTarget.reason:money(dailyTarget.required)}</strong></dd><dt>Snittintäkt / arbetsdag (schablon)</dt><dd>{money(dailyTarget.actual)}</dd><dt>Över / under dagsbehov</dt><dd>{dailyTarget.gap==null?'–':(dailyTarget.gap>=0?'+':'')+money(dailyTarget.gap)}</dd></>}
  <dt>Avvikelse mot mål</dt><dd>{metrics.deviation_pp==null?'Mål saknas':`${number.format(metrics.deviation_pp)} pp`}</dd>
- <dt>Marginal fg. år</dt><dd>{pct(previous?.margin_percent)}</dd>
- <dt>Resultat fg. år</dt><dd>{money(previous?.result)}</dd>
+ <dt>Fg. år · marginal</dt><dd>{pct(previous?.margin_percent)}</dd>
+ <dt>Fg. år · resultat</dt><dd>{money(previous?.result)}</dd>
  </dl>
  {foremanMode&&<><ForemanMileage value={mileage}/><ForemanTime value={timeMetrics}/></>}
  {analysis&&analysis.insights.length>0&&<aside className={styles.analysis} aria-label={`Avvikelse – ${label}`} data-status="warning">
