@@ -1,17 +1,17 @@
 .gauge { display:grid; justify-items:center; align-content:center; gap:2px; min-width:0; color:#475569; }
-.gauge svg { width:100%; max-width:116px; height:auto; }
-.value { font-size:1.05rem; line-height:1.15; font-variant-numeric:tabular-nums; }
+.gauge svg { width:100%; max-width:104px; height:auto; }
+.value { font-size:1.12rem; line-height:1.15; font-variant-numeric:tabular-nums; }
 .gauge > span { font-size:.72rem; font-weight:600; text-align:center; }
 .gauge small { font-size:.65rem; text-align:center; }
-.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:10px; margin:12px 0; }
-.card { padding:13px 15px; border:1px solid var(--border,#dce2e8); border-radius:12px; background:#fff; color:#0f172a; min-width:0; }
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:8px; margin:8px 0; }
+.card { padding:11px 13px; border:1px solid var(--border,#dce2e8); border-radius:10px; background:#fff; color:#0f172a; min-width:0; }
 .card h3 { margin:0; font-size:.95rem; }
-.cardTop { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.cardTop .gauge { width:116px; flex:0 0 116px; }
-.facts { display:grid; grid-template-columns:1fr auto; gap:5px 10px; margin:10px 0 0; font-size:.8rem; }
+.cardTop { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.cardTop .gauge { width:104px; flex:0 0 104px; }
+.facts { display:grid; grid-template-columns:1fr auto; gap:4px 10px; margin:7px 0 0; font-size:.8rem; }
 .facts dt { color:#64748b; }
 .facts dd { margin:0; text-align:right; font-variant-numeric:tabular-nums; }
-.analysis { margin-top:14px; padding:10px 12px; border-radius:8px; background:#f8fafc; border-left:3px solid #94a3b8; font-size:.8rem; line-height:1.5; }
+.analysis { margin-top:9px; padding:8px 10px; border-radius:8px; background:#f8fafc; border-left:3px solid #94a3b8; font-size:.8rem; line-height:1.5; }
 .analysis[data-status="warning"] { background:#fffbeb; border-left-color:#d97706; }
 .analysis[data-status="ok"] { background:#f0fdf4; border-left-color:#16a34a; }
 .analysis h4 { margin:0 0 5px; font-size:.85rem; }
@@ -21,7 +21,7 @@
 .analysis summary,.explanation summary { cursor:pointer; font-weight:600; }
 .analysis summary:focus-visible,.explanation summary:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
 .explanation { margin-top:12px; font-size:.78rem; line-height:1.5; color:#475569; }
-.breakdowns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.breakdowns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .breakdowns th, .breakdowns td { font-size:.85rem; }
 @media(max-width:900px) { .breakdowns { grid-template-columns:1fr; } }
 @media print { .card { break-inside:avoid; } .gauge { print-color-adjust:exact; } }
@@ -31,13 +31,13 @@
 .costRow dd { font-size:.75rem; color:#475569; }
 
 .areaSummary .gauge { gap:4px; }
-.areaSummary .gauge svg { max-width:170px; }
+.areaSummary .gauge svg { max-width:145px; }
 .areaSummary .value { font-size:1.35rem; }
 .areaSummary .gauge > span { font-size:.82rem; }
 .areaSummary .gauge small { font-size:.75rem; }
 
-.area { margin-block:12px; }
-.areaSummary { display:grid; grid-template-columns:minmax(0,1fr) minmax(95px,170px); align-items:center; gap:12px; cursor:pointer; list-style:none; }
+.area { margin-block:8px; }
+.areaSummary { display:grid; grid-template-columns:minmax(0,1fr) minmax(95px,145px); align-items:center; gap:12px; cursor:pointer; list-style:none; }
 .areaSummary::-webkit-details-marker { display:none; }
 .areaSummary:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
 .areaSummary .facts { width:fit-content; max-width:100%; column-gap:clamp(8px,3vw,36px); }
@@ -55,3 +55,5 @@
 .costDetails { margin:12px 0; }
 .costDetails summary { cursor:pointer; font-weight:600; }
 .costDetails h4 { margin:10px 0 0; font-size:.82rem; }
+
+@media(max-width:600px) { .cards { grid-template-columns:1fr; gap:8px; } .card { padding:10px 12px; } .areaSummary { grid-template-columns:minmax(0,1fr) 110px; gap:8px; } .areaSummary .gauge svg { max-width:110px; } .areaSummary .value { font-size:1.1rem; } }
