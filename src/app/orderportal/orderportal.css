@@ -122,3 +122,12 @@ body:has(.op-root) > .shell > .main{padding:0;max-width:none;width:100%;min-widt
 @media(max-width:760px){
  .op-order-workspace [id^=op-order-]{scroll-margin-top:155px}
 }
+
+.op-plan-switch{display:flex;gap:6px;padding:14px 16px;background:#34383e}
+.op-plan-switch button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 18px;border:1px solid #889097;border-radius:5px;color:white;background:#454b52;font-weight:800}
+.op-plan-switch button[aria-pressed=true]{background:var(--op-yellow);border-color:var(--op-yellow);color:#111}
+.op-plan-options,.op-plan-help{border-top:1px solid var(--op-line)}
+.op-plan-options>summary,.op-plan-help>summary{cursor:pointer;padding:10px 16px;font-weight:700}
+.op-plan-options .op-calendar-view{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.op-plan-options .op-calendar-legend{flex-wrap:wrap}
+@media(max-width:760px){.op-plan-switch button{flex:1;padding-inline:8px}}
