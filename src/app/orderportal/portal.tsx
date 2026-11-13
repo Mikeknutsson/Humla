@@ -106,6 +106,23 @@ export default function Portal(){
 }
 function Editor({order,resources,saving,onClose,onCopy,onSave,conflicts:collision}:{order:Order;resources:Resource[];saving:boolean;onClose:()=>void;onCopy:(o:Order)=>void;onSave:(o:Order)=>Promise<void>;conflicts:string[]}){
  const dialog=useRef<HTMLDialogElement>(null);const [draft,setDraft]=useState(order),[error,setError]=useState(''),[history,setHistory]=useState<{version:number;created_at:string;actor_id:string;before_data:unknown;after_data:unknown}[]|null>(null),[historyError,setHistoryError]=useState('');const read=order.source==='workify';
+ const [documentError,setDocumentError]=useState('');
+ const [downloading,setDownloading]=useState(false);
+ async function downloadDocument(kind:'delivery-note'|'invoice-basis'){
+  setDocumentError('');setDownloading(true);
+  try{
+   const query=new URLSearchParams({id:order.id,version:String(order.version),kind});
+   const response=await fetch('/api/orderportal/documents?'+query);
+   if(!response.ok)throw Error((await response.json()).error);
+   const href=URL.createObjectURL(await response.blob());
+   const link=document.createElement('a');
+   link.href=href;
+   link.download=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'testunderlag.pdf';
+   link.click();
+   window.setTimeout(()=>URL.revokeObjectURL(href),1000);
+  }catch(error){setDocumentError(error instanceof Error?error.message:'Dokumentet kunde inte hämtas.');}
+  finally{setDownloading(false);}
+ }
  const {card:customerCard,error:customerCardError}=useCustomerCard(read?'':draft.customerId);
  const [catalog,setCatalog]=useState<Catalog|null>(null),[pricingError,setPricingError]=useState(''),[quoting,setQuoting]=useState('');
  useEffect(()=>{if(!read)void fetchCatalog().then(setCatalog).catch(e=>setPricingError(e.message));},[read]);
@@ -145,5 +162,11 @@ function Editor({order,resources,saving,onClose,onCopy,onSave,conflicts:collisio
   customerCard.profile.documents.signature&&'Begär signatur',
  ].filter(Boolean).join(' · ')||'Inga dokumentval angivna.'}</p>
  {customerCard.profile.documents.recipient&&<p>Mottagare: {customerCard.profile.documents.recipient}</p>}
- </section>}</div></details>{read&&<><p className="op-help">Fullständiga bilagor, arbetsinstruktioner, orderbekräftelser och kommentarshistorik ingår inte i denna import.</p><details><summary>Alla importerade orderfält</summary><dl className="op-sourcefields">{Object.entries(order.sourceFields||{}).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v||'—'}</dd></div>)}</dl></details></>}{!read&&order.id&&<section><button type="button" className="op-secondary" onClick={()=>void loadHistory()}>Visa ändringshistorik</button>{historyError&&<p role="alert">{historyError}</p>}{history?.map(h=><details key={h.version}><summary>Version {h.version} · {new Date(h.created_at).toLocaleString('sv-SE')}</summary><p>Användar-ID: {h.actor_id}</p><pre>{JSON.stringify({före:h.before_data,efter:h.after_data},null,2)}</pre></details>)}</section>}{draft.copiedFrom&&<p className="op-help">Kopierad från: {draft.copiedFrom}</p>}{error&&<div className="op-error" role="alert">{error}</div>}</div><footer className="op-editorfoot"><button type="button" className="op-secondary" disabled={saving} onClick={()=>onCopy(order)}><Copy size={16}/>Kopiera till testorder</button><div><button type="button" className="op-secondary" disabled={saving} onClick={onClose}>Stäng</button>{!read&&<button className="op-primary" disabled={saving||!!quoting}><Save size={16}/>{saving?'Sparar…':'Spara testorder'}</button>}</div></footer></form></dialog>;
+ {(customerCard.profile.documents.deliveryNote||customerCard.profile.documents.invoiceData)&&
+ <div className="op-actions">
+  <p className="wide">PDF hämtas från den sparade testordern. Spara ändringar före nedladdning.</p>
+  {customerCard.profile.documents.deliveryNote&&<button type="button" className="op-secondary" disabled={!order.id||draft!==order||downloading} onClick={()=>void downloadDocument('delivery-note')}>Hämta följesedel</button>}
+  {customerCard.profile.documents.invoiceData&&<button type="button" className="op-secondary" disabled={!order.id||draft!==order||downloading} onClick={()=>void downloadDocument('invoice-basis')}>Hämta fakturaunderlag</button>}
+  {documentError&&<p role="alert">{documentError}</p>}
+ </div>}</section>}</div></details>{read&&<><p className="op-help">Fullständiga bilagor, arbetsinstruktioner, orderbekräftelser och kommentarshistorik ingår inte i denna import.</p><details><summary>Alla importerade orderfält</summary><dl className="op-sourcefields">{Object.entries(order.sourceFields||{}).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v||'—'}</dd></div>)}</dl></details></>}{!read&&order.id&&<section><button type="button" className="op-secondary" onClick={()=>void loadHistory()}>Visa ändringshistorik</button>{historyError&&<p role="alert">{historyError}</p>}{history?.map(h=><details key={h.version}><summary>Version {h.version} · {new Date(h.created_at).toLocaleString('sv-SE')}</summary><p>Användar-ID: {h.actor_id}</p><pre>{JSON.stringify({före:h.before_data,efter:h.after_data},null,2)}</pre></details>)}</section>}{draft.copiedFrom&&<p className="op-help">Kopierad från: {draft.copiedFrom}</p>}{error&&<div className="op-error" role="alert">{error}</div>}</div><footer className="op-editorfoot"><button type="button" className="op-secondary" disabled={saving} onClick={()=>onCopy(order)}><Copy size={16}/>Kopiera till testorder</button><div><button type="button" className="op-secondary" disabled={saving} onClick={onClose}>Stäng</button>{!read&&<button className="op-primary" disabled={saving||!!quoting}><Save size={16}/>{saving?'Sparar…':'Spara testorder'}</button>}</div></footer></form></dialog>;
 }
