@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Order, Resource } from '@/lib/orderportal/model';
+import RegisterSettings from './register-settings';
 import CustomerCardPanel from './customer-card';
 import { fetchCatalog, type Catalog } from './pricing-panel';
 
@@ -21,8 +22,8 @@ const groups: Record<Section, { label: string; kinds: string[] }[]> = {
 };
 const money = new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK'});
 
-export default function RegisterPanel({section,resources,orders,onOrder,onPrices}:{
- section:Section;resources:Resource[];orders:Order[];onOrder:(order:Order)=>void;onPrices:()=>void;
+export default function RegisterPanel({section,resources,orders,onOrder,onPrices,onRegisterSaved}:{
+ section:Section;resources:Resource[];orders:Order[];onOrder:(order:Order)=>void;onPrices:()=>void;onRegisterSaved:()=>void;
 }){
  const [group,setGroup]=useState(0);
  const [query,setQuery]=useState('');
@@ -49,7 +50,7 @@ export default function RegisterPanel({section,resources,orders,onOrder,onPrices
  const activeGroup=groups[section][group];
  const search=query.trim().toLocaleLowerCase('sv-SE');
  const entries=resources.filter(r=>activeGroup.kinds.includes(r.kind)&&
-  [r.label,...Object.values(r.details||{})].some(value=>value.toLocaleLowerCase('sv-SE').includes(search)))
+  [r.label,r.settings?.category||'',...Object.values(r.details||{})].some(value=>value.toLocaleLowerCase('sv-SE').includes(search)))
   .sort((a,b)=>a.label.localeCompare(b.label,'sv-SE',{numeric:true}));
  const relatedOrders=selected?orders.filter(o=>selected.kind==='Customer'?o.customerId===selected.id:
   selected.kind==='Project'?o.projectId===selected.id:selected.kind==='Person'?o.driverId===selected.id:
@@ -81,6 +82,7 @@ export default function RegisterPanel({section,resources,orders,onOrder,onPrices
       onClick={()=>setSelected(r)}>{r.label}
       {(r.details?.customer_number||r.details?.article_number||r.details?.vehicle_type)&&
        <small>{r.details.customer_number||r.details.article_number||r.details.vehicle_type}</small>}
+      {r.settings?.category&&<small>{r.settings.category}</small>}
      </button></li>)}
     </ul>
     {entries.length>limit&&<button type="button" className="op-secondary" onClick={()=>setLimit(n=>n+40)}>Visa fler</button>}
@@ -100,6 +102,7 @@ export default function RegisterPanel({section,resources,orders,onOrder,onPrices
       matchingLists.length?<ul>{matchingLists.map(list=><li key={list.id}>{list.name}</li>)}</ul>:<p>Ingen särskild prislista kopplad.</p>}
      <button type="button" className="op-secondary" onClick={onPrices}>Öppna prislistor</button>
     </section>}
+    {section!=='customers'&&<RegisterSettings key={selected.id} resource={selected} onSaved={onRegisterSaved}/>}
     {selected.kind==='Customer'&&<CustomerCardPanel key={selected.id} id={selected.id}/>}
     <section><h4>Senaste kopplade order i portalen</h4>
      {relatedOrders.length?<ul className="op-register-list">{relatedOrders.map(o=><li key={o.id}>

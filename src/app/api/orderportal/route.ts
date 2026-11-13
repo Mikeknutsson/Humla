@@ -22,6 +22,14 @@ export async function GET(request:Request){const ctx=await orderAccess();if(!ctx
   numbers.add(key.identity_value);
   customerNumbers.set(key.object_id,numbers);
  }
+ const settings=new Map<string,{category:string;unit:string}>();
+ for(let offset=0;;offset+=1000){
+  const page=await db.from('hub_orderportal_register_settings').select('object_id,category,unit')
+   .eq('tenant_id',tenantId).order('object_id').range(offset,offset+999);
+  if(page.error)return Response.json({error:'Registerinställningarna kunde inte läsas.'},{status:500,headers});
+  for(const row of page.data)settings.set(row.object_id,{category:row.category,unit:row.unit});
+  if(page.data.length<1000)break;
+ }
  const resources=allObjects.map(o=>{
   const fields=registerFields[o.object_type==='vehicle'?'Vehicle':o.object_type]||[];
   const details:Record<string,string>={};
@@ -31,7 +39,7 @@ export async function GET(request:Request){const ctx=await orderAccess();if(!ctx
   }
   const numbers=customerNumbers.get(o.id);
   if(!details.customer_number&&numbers?.size===1)details.customer_number=[...numbers][0];
-  return {id:o.id,kind:o.object_type,label:String(o.data.display_name||o.data.registration_number||o.data.name||o.id)+(o.data.project_number?' · '+o.data.project_number:''),details};
+  return {id:o.id,kind:o.object_type,label:String(o.data.display_name||o.data.registration_number||o.data.name||o.id)+(o.data.project_number?' · '+o.data.project_number:''),details,settings:settings.get(o.id)};
  });
 
  const rows=(imports.data||[]) as ImportRow[];const imported=groupImports(rows,ids.data||[]);const native=allDrafts.map(d=>({...d.payload,id:d.id,number:d.order_number,source:'humla',version:d.version,amount:d.amount,importedAt:d.updated_at,issues:[]}));
