@@ -24,6 +24,11 @@ test('missing times and source disappearance are explicit; no guessed end or can
 });
 
 test('a booking without start does not invent an interval before its end',()=>{
- const [o]=maintenanceOrders([{...record,raw:{...record.raw,start:null}}]);
- assert.equal(conflicts([o,{...emptyOrder(),id:'native',vehicleId:o.vehicleId}]).size,0);
+ assert.equal(maintenanceOrders([{...record,raw:{...record.raw,start:null}}]).length,0);
+});
+test('dated fault alone is excluded; located visit retains fault context',()=>{
+ const fault={...record,raw:{...record.raw,title:'Felrapport - Övriga fel',fault_reports:[{number:'FR-1',description:'Bromsar'}]}};
+ assert.equal(maintenanceOrders([fault]).length,0);
+ const [visit]=maintenanceOrders([{...fault,raw:{...fault.raw,location:'Scania'}}]);
+ assert.match(visit.instruction,/FR-1.*Bromsar/);
 });

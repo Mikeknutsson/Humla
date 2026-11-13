@@ -34,3 +34,5 @@
 .op-drag-handle{display:flex;align-items:center;gap:5px;width:100%;min-height:32px;border:1px solid #9da7af;border-radius:4px 4px 0 0;background:#dce2e6;color:#20262c;font-size:11px;font-weight:800;padding:6px 8px;cursor:grab;touch-action:none;user-select:none}.op-drag-handle:hover{background:#ffe576}.op-drag-handle:active{cursor:grabbing}.op-event-wrap.op-dragging{opacity:.55;outline:2px dashed #555}.op-calendar td.op-drop-target::after{content:'Släpp här';display:block;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#222;background:#f2c500;pointer-events:none}
 
 .op-app .op-event.maintenance{--tone:#6d3993;background:#6d3993;color:#fff;border:2px solid #42205c}.op-app .op-event.maintenance .op-event-top span{background:#fff;color:#42205c;font-weight:900}
+
+.op-root .maintenance{--tone:#a51d75}.op-mobile-order.maintenance header{background:#a51d75;color:white}.op-orderrow.maintenance{border-left:6px solid #a51d75}.op-event.maintenance{background:#a51d75!important;color:white!important}
