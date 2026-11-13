@@ -95,3 +95,10 @@ body:has(.op-root) > .shell > .main{padding:0;max-width:none;width:100%;min-widt
  .op-register-body{grid-template-columns:minmax(0,1fr)}
  .op-register-detail{grid-row:1}
 }
+
+.op-customer-settings{display:grid;gap:10px}
+.op-customer-settings fieldset{min-width:0;margin:0;border:1px solid var(--op-line);border-radius:5px;padding:10px;display:grid;gap:8px}
+.op-customer-settings legend{font-weight:800}
+.op-customer-fields{display:grid;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--op-line)}
+.op-customer-settings .op-customer-checkbox{flex-direction:row;align-items:center}
+.op-customer-settings input:not([type=checkbox]){width:100%}
