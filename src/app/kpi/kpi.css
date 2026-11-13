@@ -107,3 +107,36 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-app .analysis-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.kpi-app .analysis-totals>a,.kpi-app .analysis-totals>div{display:grid;gap:10px;padding:16px;border:1px solid #e3e6e8;border-radius:8px;text-decoration:none}.kpi-app .analysis-totals strong{font-size:clamp(18px,2vw,28px);overflow-wrap:anywhere}.economic-units table{min-width:620px!important}.economic-units td:not(:first-child),.economic-units th:not(:first-child){text-align:right}.kpi-app details.panel>summary{cursor:pointer;font-weight:600;padding:8px 0}@media(max-width:700px){.kpi-app .analysis-totals{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .cost-breakdown-overhead{min-width:0;align-self:start}.cost-breakdown-overhead>summary{display:grid;gap:7px;padding:16px;border:1px solid #e1e5e9;border-radius:10px;background:#fff;cursor:pointer;list-style:none}.cost-breakdown-overhead>summary::-webkit-details-marker{display:none}.cost-breakdown-overhead>summary:hover{border-color:#d4aa00;background:#fffdf2}.cost-breakdown-overhead>summary:focus-visible{outline:3px solid #16816a;outline-offset:2px}.cost-breakdown-overhead>div{display:grid;gap:6px;margin-top:6px}@media(max-width:640px){.cost-breakdown-overhead>summary{padding:12px}}
+
+/* KPI visual hierarchy: compact, readable, and status-oriented. */
+@media screen {
+.kpi-app .overview-pulse>a,.kpi-app .metric-card,.kpi-app .mini-kpi-grid a,.kpi-app .cost-kpi-grid a {
+  position:relative;overflow:hidden;border-radius:12px;border:1px solid #d9e0e7;
+  box-shadow:0 2px 8px rgba(15,23,42,.045);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;
+}
+.kpi-app .overview-pulse>a::before,.kpi-app .metric-card::before,.kpi-app .mini-kpi-grid a::before,.kpi-app .cost-kpi-grid a::before {
+  content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#d6a21d;
+}
+.kpi-app .overview-pulse>a:nth-child(4n+2)::before,.kpi-app .metric-card:nth-child(4n+2)::before {background:#2877ad}
+.kpi-app .overview-pulse>a:nth-child(4n+3)::before,.kpi-app .metric-card:nth-child(4n+3)::before {background:#16845c}
+.kpi-app .overview-pulse>a:nth-child(4n)::before,.kpi-app .metric-card:nth-child(4n)::before {background:#8a5cc4}
+.kpi-app .overview-pulse>a:hover,.kpi-app a.metric-card:hover,.kpi-app .mini-kpi-grid a:hover,.kpi-app .cost-kpi-grid a:hover {
+  transform:translateY(-2px);border-color:#b8c5d1;box-shadow:0 7px 20px rgba(15,23,42,.10);
+}
+.kpi-app .overview-pulse strong,.kpi-app .metric-card>strong,.kpi-app .mini-kpi-grid strong,.kpi-app .cost-kpi-grid strong {
+  font-weight:850;letter-spacing:-.035em;font-variant-numeric:tabular-nums;color:#172331;
+}
+.kpi-app .overview-pulse span,.kpi-app .metric-card>span,.kpi-app .mini-kpi-grid span {color:#465569;font-weight:750}
+.kpi-app .metric-card small,.kpi-app .overview-pulse small {font-size:11px;color:#607086}
+.kpi-app .metrics-grid {gap:9px;margin-top:10px}
+.kpi-app .metric-card {padding:13px 14px}
+.kpi-app .overview-pulse {gap:9px;margin-bottom:12px}
+.kpi-app .overview-pulse>a {padding:13px 15px}
+.kpi-app .panel-head h2 {font-weight:800;letter-spacing:-.025em;color:#172331}
+.kpi-app .panel {border-radius:12px}
+.kpi-app .section-kicker {font-weight:800;letter-spacing:.035em}
+}
+@media screen and (max-width:600px) {
+.kpi-app .overview-pulse strong,.kpi-app .metric-card>strong {font-size:clamp(16px,4vw,20px)}
+.kpi-app .overview-pulse>a,.kpi-app .metric-card {padding:11px 12px}
+}
