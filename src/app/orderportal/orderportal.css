@@ -102,3 +102,23 @@ body:has(.op-root) > .shell > .main{padding:0;max-width:none;width:100%;min-widt
 .op-customer-fields{display:grid;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--op-line)}
 .op-customer-settings .op-customer-checkbox{flex-direction:row;align-items:center}
 .op-customer-settings input:not([type=checkbox]){width:100%}
+
+.op-order-workspace{min-height:100dvh;max-width:1480px;margin:auto;padding:16px clamp(12px,3vw,44px) 28px}
+.op-workspace-toolbar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.op-order-workspace form{background:#fff;border:1px solid var(--op-line);border-radius:8px}
+.op-order-workspace .op-editorhead{align-items:center;flex-wrap:wrap}
+.op-order-workspace h1{font-size:clamp(24px,4vw,34px)}
+.op-order-workspace .op-workspace-subtitle{font-size:15px;color:var(--op-ink)}
+.op-order-workspace .op-editorbody{overflow:visible}
+.op-order-workspace .op-order-section-nav{position:sticky;top:0;z-index:4;margin:0;padding:10px clamp(12px,3vw,28px);background:#fff;border-bottom:1px solid var(--op-line)}
+.op-order-workspace [id^=op-order-]{scroll-margin-top:110px}
+@media(max-width:760px){
+ .op-order-workspace .op-editorhead .op-actions{justify-content:flex-start}
+ .op-order-workspace .op-order-section-nav a{padding:8px 9px}
+}
+.op-order-workspace .op-editorhead .op-actions{align-items:end}
+.op-workspace-status select{min-width:132px}
+.op-workspace-save{margin-left:auto}
+@media(max-width:760px){
+ .op-order-workspace [id^=op-order-]{scroll-margin-top:155px}
+}
