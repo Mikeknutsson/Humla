@@ -6,7 +6,7 @@ import {STATUSES,emptyOrder,conflicts,type Order,type Resource,type Line} from '
 import ResourcePicker from './resource-picker';
 import PlanningDialog from './planning-dialog';
 import CalendarDrag from './calendar-drag';
-import {canPlan,moveOrderDay,copyOrderForTest} from '@/lib/orderportal/planning';
+import {canPlan,moveOrderDay,copyOrderForTest,appearsOnResource,overlapsCalendarDay} from '@/lib/orderportal/planning';
 import PricingPanel,{type Catalog,fetchCatalog,pricingAction} from './pricing-panel';
 const money=(v:number)=>new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:2}).format(v);
 const sourceName=(o:Order)=>o.source==='fordonskontrollen'?'Fordonskontrollen · ej debiterbar':o.source==='workify'?'Workify-import':'Humla · testorder';
@@ -38,14 +38,14 @@ export default function Portal(){
  const unambiguous=filtered.filter(o=>o.source!=='fordonskontrollen'&&!o.issues.length);const risky=filtered.filter(o=>o.issues.length>0).length;
  const [calendarView,setCalendarView]=useState<'auto'|'grid'|'agenda'>('auto');
  const planDays=Array.from({length:days},(_,i)=>dayAdd(planDate,i));
- const planOrders=orders.filter(o=>o.status!=='Avbruten'&&!!o.start&&date(o.start)<=planDays[planDays.length-1]&&date(o.end||o.start)>=planDate&&(!planStatus||o.status===planStatus)&&(!planSearch||[o.vehicle,o.driver,o.customer,o.title,o.number].join(' ').toLocaleLowerCase('sv-SE').includes(planSearch.toLocaleLowerCase('sv-SE'))));
+ const planOrders=orders.filter(o=>o.status!=='Avbruten'&&appearsOnResource(o,planResource)&&planDays.some(day=>overlapsCalendarDay(o,day))&&(!planStatus||o.status===planStatus)&&(!planSearch||[o.vehicle,o.driver,o.customer,o.title,o.number].join(' ').toLocaleLowerCase('sv-SE').includes(planSearch.toLocaleLowerCase('sv-SE'))));
  const laneKind=(lane:string)=>planResource==='both'?lane.split('|')[0]:planResource;
  const laneId=(lane:string)=>planResource==='both'?lane.slice(lane.indexOf('|')+1):lane;
  const resourceKey=(o:Order,kind=planResource)=>kind==='vehicle'?(o.vehicleId||o.vehicle||'Ej tilldelad'):(o.driverId||o.driver||'Ej tilldelad');
- const laneMatches=(o:Order,lane:string)=>resourceKey(o,laneKind(lane))===laneId(lane);
+ const laneMatches=(o:Order,lane:string)=>appearsOnResource(o,laneKind(lane))&&resourceKey(o,laneKind(lane))===laneId(lane);
  const kinds=planResource==='both'?['driver','vehicle']:[planResource];
- const lanes=kinds.flatMap(kind=>[...new Set([...planOrders.map(o=>resourceKey(o,kind)).filter(k=>k!=='Ej tilldelad'),...(showEmpty?resources.filter(r=>kind==='vehicle'?['Vehicle','vehicle'].includes(r.kind):r.kind==='Person').map(r=>r.id):[])])].sort((a,b)=>(resources.find(r=>r.id===a)?.label||a).localeCompare(resources.find(r=>r.id===b)?.label||b,'sv-SE')).map(id=>planResource==='both'?kind+'|'+id:id));
- const unassigned=planOrders.filter(o=>resourceKey(o)==='Ej tilldelad');
+ const lanes=kinds.flatMap(kind=>[...new Set([...planOrders.filter(o=>appearsOnResource(o,kind)).map(o=>resourceKey(o,kind)).filter(k=>k!=='Ej tilldelad'),...(showEmpty?resources.filter(r=>kind==='vehicle'?['Vehicle','vehicle'].includes(r.kind):r.kind==='Person').map(r=>r.id):[])])].sort((a,b)=>(resources.find(r=>r.id===a)?.label||a).localeCompare(resources.find(r=>r.id===b)?.label||b,'sv-SE')).map(id=>planResource==='both'?kind+'|'+id:id));
+ const unassigned=planOrders.filter(o=>kinds.some(kind=>appearsOnResource(o,kind)&&resourceKey(o,kind)==='Ej tilldelad'));
  const resourceColor=(key:string)=>{let hash=0;for(const char of key)hash=(hash*31+char.charCodeAt(0))>>>0;return `hsl(${hash%360} 44% 36%)`;};
  const canDrop=(lane:string)=>laneId(lane)==='Ej tilldelad'||resources.some(r=>r.id===laneId(lane)&&(laneKind(lane)==='vehicle'?['Vehicle','vehicle'].includes(r.kind):r.kind==='Person'));
  const createAt=(day:string,lane?:string)=>{
@@ -63,7 +63,7 @@ export default function Portal(){
   ...lanes.filter(l=>planResource!=='both'||laneKind(l)===kind),
  ];
  const laneLabel=(lane:string)=>resources.find(r=>r.id===laneId(lane))?.label||laneId(lane);
- const ordersAt=(lane:string,day:string)=>planOrders.filter(o=>laneMatches(o,lane)&&date(o.start)<=day&&date(o.end||o.start)>=day).sort((a,b)=>a.start.localeCompare(b.start)||a.number.localeCompare(b.number,'sv-SE',{numeric:true}));
+ const ordersAt=(lane:string,day:string)=>planOrders.filter(o=>laneMatches(o,lane)&&overlapsCalendarDay(o,day)).sort((a,b)=>a.start.localeCompare(b.start)||a.number.localeCompare(b.number,'sv-SE',{numeric:true}));
  const orderCard=(o:Order,day:string,lane:string)=><button className={'op-event '+(o.source==='fordonskontrollen'?'maintenance':statusTone(o.status))+(collisions.has(o.id)?' conflict':'')} style={planColor==='resource'&&o.source!=='fordonskontrollen'?{'--tone':resourceColor(laneId(lane))} as CSSProperties:undefined} onClick={()=>setSelected(o)}><div className="op-event-top"><b>{date(o.start)<day?'Fortsätter':o.start.slice(11,16)||'Tid saknas'}{date(o.end)===day&&' – '+o.end.slice(11,16)}</b><span>{o.source==='fordonskontrollen'?'UNDERHÅLL':o.source==='humla'?'TEST':'IMPORT'}</span></div><strong>{o.number} · {o.title||'Utan rubrik'}</strong>{showCustomers&&<span>{o.customer||'Kund saknas'}</span>}{showLocations&&o.location&&<span>⌖ {o.location}</span>}<div className="op-event-bottom"><span>{o.status}</span>{o.source==='fordonskontrollen'&&o.issues.length>0&&<b>⚠ Kontrollera uppgifter</b>}{collisions.has(o.id)&&<b>⚠ Resurskonflikt</b>}</div></button>;
  const eventCard=(o:Order,anchor:string,lane:string)=><CalendarDrag key={o.id} id={o.id} anchor={anchor} enabled={canPlan(o)||o.source==='workify'} copy={o.source==='workify'} active={dragging?.id===o.id} onStart={()=>{setDragging({id:o.id,anchor});setPlanMessage(o.source==='workify'?'Dra till en gul målcell för att skapa en testkopia.':'Dra till en annan dag eller resurs. Släpp för att granska flytten.');}} onEnd={()=>{setDragging(null);setDropTarget('');}} onDrop={(lane,day)=>dropOrder(lane,day,{id:o.id,anchor})} onHover={setDropTarget} onOpen={()=>o.source==='workify'?copy(o):setPlanning({original:o,draft:o})}>{orderCard(o,anchor,lane)}{canPlan(o)&&<button className="op-plan-event" aria-label={'Planera '+o.number} onClick={()=>setPlanning({original:o,draft:o})}>Planera / tilldela</button>}</CalendarDrag>;
 
