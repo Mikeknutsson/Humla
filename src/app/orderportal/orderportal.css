@@ -36,3 +36,8 @@
 .op-app .op-event.maintenance{--tone:#6d3993;background:#6d3993;color:#fff;border:2px solid #42205c}.op-app .op-event.maintenance .op-event-top span{background:#fff;color:#42205c;font-weight:900}
 
 .op-root .maintenance{--tone:#a51d75}.op-mobile-order.maintenance header{background:#a51d75;color:white}.op-orderrow.maintenance{border-left:6px solid #a51d75}.op-event.maintenance{background:#a51d75!important;color:white!important}
+/* The order portal owns its navigation, including login and received reports. */
+body:has(.op-root) > .shell{display:block;min-width:0}
+body:has(.op-root) > .shell > .sidebar{display:none}
+body:has(.op-root) > .shell > .main{padding:0;max-width:none;width:100%;min-width:0}
+.op-root .op-main{min-width:0}
