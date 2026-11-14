@@ -140,3 +140,34 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-app .overview-pulse strong,.kpi-app .metric-card>strong {font-size:clamp(16px,4vw,20px)}
 .kpi-app .overview-pulse>a,.kpi-app .metric-card {padding:11px 12px}
 }
+
+/* Consistent visual hierarchy for overview, financial summaries and reports. */
+@media screen {
+.kpi-app .overview-hero {background:linear-gradient(110deg,#18232d 0%,#283b48 65%,#315269 100%);border:1px solid #3d5968}
+.kpi-app .overview-hero h2 {font-weight:850;letter-spacing:-.035em}
+.kpi-app .overview-hero p {color:#d8e5ec}
+.kpi-app .overview-pulse>a:focus-visible,.kpi-app .metric-card:focus-visible,.kpi-app .mini-kpi-grid a:focus-visible,.kpi-app .cost-kpi-grid a:focus-visible {
+ outline:3px solid #1676b6;outline-offset:3px;
+}
+.kpi-app .cost-kpi-grid a {padding:13px 15px}
+.kpi-app .cost-kpi-grid a:nth-child(4n+2)::before {background:#2877ad}
+.kpi-app .cost-kpi-grid a:nth-child(4n+3)::before {background:#16845c}
+.kpi-app .cost-kpi-grid a:nth-child(4n)::before {background:#8a5cc4}
+.kpi-app .mini-kpi-grid a:nth-child(3n+2)::before {background:#2877ad}
+.kpi-app .mini-kpi-grid a:nth-child(3n)::before {background:#16845c}
+.kpi-app .cost-kpi-grid strong {font-size:clamp(17px,1.65vw,24px)}
+.kpi-app .panel-head h2 {font-size:clamp(16px,1.4vw,20px)}
+.kpi-app .overview-pulse>a,.kpi-app .mini-kpi-grid a,.kpi-app .cost-kpi-grid a {min-width:0}
+.kpi-app .overview-pulse strong,.kpi-app .mini-kpi-grid strong,.kpi-app .cost-kpi-grid strong {overflow-wrap:anywhere}
+.kpi-app .table-wrap thead th,.kpi-app .monthly-scroll thead th {font-weight:800}
+.kpi-app .table-wrap tbody tr:hover,.kpi-app .monthly-scroll tbody tr:hover {background:#f0f6fa}
+.kpi-app .table-wrap tfoot,.kpi-app .monthly-scroll tfoot {font-weight:800}
+}
+@media screen and (max-width:600px) {
+.kpi-app .overview-hero {padding:18px}
+.kpi-app .cost-kpi-grid a {padding:11px 12px}
+.kpi-app .cost-kpi-grid strong {font-size:17px}
+}
+@media (prefers-reduced-motion:reduce) {
+.kpi-app .overview-pulse>a,.kpi-app .metric-card,.kpi-app .mini-kpi-grid a,.kpi-app .cost-kpi-grid a {transition:none}
+}
