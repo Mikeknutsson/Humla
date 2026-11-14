@@ -171,3 +171,25 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 @media (prefers-reduced-motion:reduce) {
 .kpi-app .overview-pulse>a,.kpi-app .metric-card,.kpi-app .mini-kpi-grid a,.kpi-app .cost-kpi-grid a {transition:none}
 }
+
+/* Monthly reporting and unit-level drilldown: compact visual consistency. */
+@media screen {
+.kpi-app .monthly-panel,.kpi-app .economic-units,.kpi-app .cost-breakdown {border:1px solid #dce4eb;border-radius:12px}
+.kpi-app .monthly-panel h2,.kpi-app .economic-units h2,.kpi-app .cost-breakdown h2 {font-weight:850;letter-spacing:-.025em;color:#172331}
+.kpi-app .cost-breakdown-grid a {position:relative;overflow:hidden;border-radius:11px;padding:13px 15px;border-color:#dce4eb;box-shadow:0 2px 8px rgba(15,23,42,.045);transition:box-shadow .15s ease,transform .15s ease}
+.kpi-app .cost-breakdown-grid a::before {content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#d4a01d}
+.kpi-app .cost-breakdown-grid a:nth-child(3n+2)::before {background:#2877ad}
+.kpi-app .cost-breakdown-grid a:nth-child(3n)::before {background:#16845c}
+.kpi-app .cost-breakdown-grid a:hover {transform:translateY(-2px);box-shadow:0 7px 18px rgba(15,23,42,.09)}
+.kpi-app .cost-breakdown-grid strong {font-weight:850;letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:#172331}
+.kpi-app .cost-breakdown-grid span {font-weight:750;color:#465569}
+.kpi-app .unit-metrics-table thead th {background:#eaf0f5;color:#233447;font-weight:800}
+.kpi-app .unit-metrics-table tbody tr:hover {background:#eef6fa}
+.kpi-app .unit-metrics-table td:not(:first-child) {font-variant-numeric:tabular-nums}
+.kpi-app .unit-metrics-table tfoot {background:#eaf0f5;font-weight:850}
+.kpi-app .fiscal-months button:focus-visible,.kpi-app .cost-breakdown-grid a:focus-visible {outline:3px solid #1676b6;outline-offset:2px}
+}
+@media screen and (max-width:640px) {
+.kpi-app .cost-breakdown-grid a {padding:11px 12px}
+.kpi-app .monthly-panel h2 {font-size:17px}
+}
