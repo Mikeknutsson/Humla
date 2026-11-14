@@ -82,3 +82,9 @@
 .area[data-target-status="on-target"] > .areaSummary { border-left-color:#19865d; background:#f4fbf6; }
 .area[data-target-status="unknown"] > .areaSummary { border-left-color:#94a3b8; background:#fff; }
 @media (prefers-reduced-motion:reduce) { .card { transition:none; } }
+
+.explanation {margin:8px 0;border:1px solid #dce4eb;border-radius:9px;background:#f8fafc;padding:0 11px}
+.explanation>summary {cursor:pointer;padding:9px 2px;color:#305779;font-size:.78rem;font-weight:750}
+.explanation[open]>summary {border-bottom:1px solid #dce4eb}
+.explanation>p {margin:9px 2px;font-size:.78rem;line-height:1.5;color:#465569}
+.explanation>summary:focus-visible {outline:3px solid #1676b6;outline-offset:2px}
