@@ -29,10 +29,9 @@ function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foreman
  <dt>Fg. år · resultat</dt><dd>{money(previous?.result)}</dd>
  </dl>
  {foremanMode&&<><ForemanMileage value={mileage}/><ForemanTime value={timeMetrics}/></>}
- {analysis&&analysis.insights.length>0&&<aside className={styles.analysis} aria-label={`Avvikelse – ${label}`} data-status="warning">
- <strong>{analysis.insights[0].title}</strong>
- <details><summary>Visa jämförelse</summary>{analysis.insights[0].evidence.map(e=><p key={e}>{e}</p>)}</details>
- </aside>}
+ {analysis&&analysis.insights.length>0&&<details className={styles.explanation} aria-label={`Avvikelse – ${label}`}>
+ <summary>{analysis.insights[0].title} · Visa jämförelse</summary>{analysis.insights[0].evidence.map(e=><p key={e}>{e}</p>)}
+ </details>}
  </article>;
 }
 
@@ -63,7 +62,7 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
  {selectedGroup&&<Link href={'/kpi/transportledare?'+all}>← Alla verksamhetsområden</Link>}
  <div className={styles.cards}>{report.groups.map(g=><BalanceCard key={g.business_group} label={g.business_group} metrics={g} previous={prior?.groups.find(p=>p.business_group===g.business_group)} analysis={analyses?.groups[g.business_group]} href={selectedUnit?undefined:link('group',g.business_group)}/>)}</div>
  </section>}
- <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Arbetsdagar: {number.format(dailyPeriod.days)} · {dailyPeriod.from}–{dailyPeriod.to}</p>}{foremanMode&&dailyPeriod&&<details><summary>Beräkning av dagsbehov</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<p>Dagsbehovets historiska underlag kunde inte hämtas.</p>}{groupUnits?<div className={styles.areaList}>
+ <section className="panel"><h2>Enheternas balans</h2>{foremanMode&&dailyPeriod&&<p>Arbetsdagar: {number.format(dailyPeriod.days)} · {dailyPeriod.from}–{dailyPeriod.to}</p>}{foremanMode&&dailyPeriod&&<details className={styles.explanation}><summary>Beräkning av dagsbehov</summary><p>{dailyPeriod.workdays} arbetsdagar efter avdrag för helger, röda dagar samt jul-, nyårs- och midsommarafton. Därefter dras {number.format(dailyPeriod.vacationDays)} dagar av för semester: bilen antas stå 25 arbetsdagar per kalenderår. Semesteravdraget fördelas proportionellt över årets arbetsdagar eftersom faktiska semesterdatum saknas. Dagar utan registrerad intäkt ingår i underlaget. Intäktsbehov = periodens nettokostnad inklusive fördelad overhead ÷ (1 − målmarginal) ÷ arbetsdagar efter semesteravdrag. Alla periodens intäkter ingår. Historiskt riktvärde vid samma kostnadsnivå; ingen prognos för återstående dagar. Periodens intäktsvägda mål används. Kortare ansvarstid eller ofullständiga importer kan påverka snittet.</p></details>}{foremanMode&&!dailyPeriod&&<details className={styles.explanation}><summary>Dagsbehov saknar underlag</summary><p>Dagsbehovets historiska underlag kunde inte hämtas.</p></details>}{groupUnits?<div className={styles.areaList}>
  <label className={styles.areaFilter}><input type="checkbox"/> Visa bara områden under mål</label>
  <p className={styles.areaFilterEmpty}>Inga områden ligger under mål i perioden.</p>
  {Array.from(unitGroups,([group,units])=>{
