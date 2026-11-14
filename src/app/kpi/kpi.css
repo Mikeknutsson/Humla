@@ -203,3 +203,11 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-app .kpi-help ul {margin:10px 0 12px;padding-left:20px}
 .kpi-app .kpi-help>summary:focus-visible {outline:3px solid #1676b6;outline-offset:3px}
 }
+
+@media screen {
+.kpi-app .kpi-help-warning {border-color:#e8d3a2;background:#fffaf0}
+.kpi-app .kpi-help-warning>summary {color:#875b12;display:list-item}
+.kpi-app .kpi-help-warning>summary svg {display:inline-block;vertical-align:-3px;margin-right:5px}
+.kpi-app .kpi-help-warning[open]>summary {border-color:#e8d3a2}
+.kpi-app .kpi-help-warning a {font-weight:750}
+}
