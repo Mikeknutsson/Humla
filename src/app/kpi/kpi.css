@@ -193,3 +193,13 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-app .cost-breakdown-grid a {padding:11px 12px}
 .kpi-app .monthly-panel h2 {font-size:17px}
 }
+
+/* Optional explanations stay collapsed, but important warnings remain visible. */
+@media screen {
+.kpi-app .kpi-help {margin:8px 0 12px;border:1px solid #dce4eb;border-radius:9px;background:#f8fafc;padding:0 12px;color:#465569}
+.kpi-app .kpi-help>summary {display:list-item;cursor:pointer;padding:10px 3px;font-size:12px;font-weight:800;color:#305779}
+.kpi-app .kpi-help[open]>summary {border-bottom:1px solid #dce4eb;color:#172331}
+.kpi-app .kpi-help p {font-size:12px;line-height:1.55;margin:10px 2px}
+.kpi-app .kpi-help ul {margin:10px 0 12px;padding-left:20px}
+.kpi-app .kpi-help>summary:focus-visible {outline:3px solid #1676b6;outline-offset:3px}
+}
