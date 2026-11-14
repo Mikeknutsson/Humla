@@ -32,7 +32,9 @@ export function KpiCostBreakdown({ values, total, query, personnelBasis }: {
     <div className="cost-breakdown-grid"><details className="cost-breakdown-overhead"><summary><span>Overhead</span><strong>{amount(overheadTotal)}</strong><small>Visa detaljer och arbetsledning →</small></summary><div><Link prefetch={false} href={detail("management")}>Arbetsledning<strong>{amount(values.management)}</strong></Link><Link prefetch={false} href={detail("overhead")}>Övrig overhead<strong>{amount(values.overhead)}</strong></Link><a href="#overhead-settings" onClick={e=>{const target=e.currentTarget.ownerDocument.getElementById("overhead-settings");if(target instanceof HTMLDetailsElement)target.open=true;}}>Visa och ändra underlag →</a></div></details>{categories.map(([key, label]) => <Link prefetch={false} key={key} href={detail(key)}>
       <span>{label}</span><strong>{amount(values[key])}</strong><small>Visa underlag →</small>
     </Link>)}</div>
+    <details className="kpi-help"><summary>Om kostnadskategorierna</summary>
     <p>Beloppen ingår redan i total kostnad. Klicka på en kategori för detaljer med samma period, kostnadsställe, verksamhetsgrupp och enhetsurval.</p>
     {personnelBasis && <p>{personnelBasis}</p>}
+    </details>
   </section>;
 }
