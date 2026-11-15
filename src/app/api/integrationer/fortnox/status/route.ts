@@ -1,0 +1,2 @@
+import {owner,admin,configuration} from "@/lib/fortnox/server";
+export async function GET(){const member=await owner();if(!member)return Response.json({error:"Behörighet saknas"},{status:403});if(!configuration())return Response.json({configured:false,connected:false});const {data}=await admin().from("hub_fortnox_connections").select("connected_at,updated_at,scopes").eq("tenant_id",member.tenant_id).maybeSingle();return Response.json({configured:true,connected:!!data,connectedAt:data?.connected_at,scopes:data?.scopes},{headers:{"Cache-Control":"no-store"}});}
