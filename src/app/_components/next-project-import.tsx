@@ -5,8 +5,12 @@ import {useState} from 'react';
 import {requestImport} from '@/lib/kpi/import-request';
 
 type Project = {project_number:string;project_name:string;cost_center:string;source_business_groups:string};
-type CostCenterWarnings = {count:number;rows:number[]};
-type Preview = {rows:number;preview:Project[];warnings?:CostCenterWarnings};
+type RowWarnings = {count:number;rows:number[]};
+type Preview = {rows:number;preview:Project[];warnings?:{costCenter:RowWarnings;incomplete:RowWarnings}};
+
+function rowNumbers(warning:RowWarnings){
+  return `Excelrad${warning.rows.length===1?'':'er'} ${warning.rows.join(', ')}${warning.count>warning.rows.length?', …':'.'}`;
+}
 
 export function NextProjectImport(){
   const [file,setFile]=useState<File|null>(null);
@@ -25,8 +29,11 @@ export function NextProjectImport(){
       if(mode==='preview')setPreview(result);
       else {
         setPreview(null);
-        const warning=result.warnings?.count? ` Kostnadsstället lämnades orört på ${result.warnings.count} projektrader med ogiltigt nummer.`:'';
-        setMessage(result.duplicate?'Filen finns redan i importhistoriken.':`${result.rows} projekt har lästs in i projektregistret.${warning}`);
+        const costCenter=result.warnings?.costCenter?.count;
+        const incomplete=result.warnings?.incomplete?.count;
+        const warning=costCenter?` Ogiltiga kostnadsställen ignorerades på ${costCenter} rader.`:'';
+        const skipped=incomplete?` ${incomplete} ${incomplete===1?'ofullständig rad':'ofullständiga rader'} hoppades över.`:'';
+        setMessage(result.duplicate?'Filen finns redan i importhistoriken.':`${result.rows} projekt har lästs in i projektregistret.${warning}${skipped}`);
       }
     } catch (failure) {
       setError(failure instanceof Error?failure.message:'Projektfilen kunde inte läsas.');
@@ -44,9 +51,13 @@ export function NextProjectImport(){
       <button type="button" className="secondary" disabled={!file} onClick={()=>void run('preview')}>Förhandsgranska</button>
       {preview&&<>
         <p>{preview.rows} projekt hittades. Här visas de första {preview.preview.length}.</p>
-        {!!preview.warnings?.count&&<p role="status">
-          {preview.warnings.count===1?'En rad har ogiltigt kostnadsställenummer.':`${preview.warnings.count} rader har ogiltigt kostnadsställenummer.`}
-          {' '}Excelrad{preview.warnings.rows.length===1?'':'er'} {preview.warnings.rows.join(', ')}{preview.warnings.count>preview.warnings.rows.length?', …':'.'}
+        {!!preview.warnings?.incomplete.count&&<p role="status">
+          {preview.warnings.incomplete.count===1?'En rad saknar projektnummer eller projektnamn och hoppas över.':`${preview.warnings.incomplete.count} rader saknar projektnummer eller projektnamn och hoppas över.`}
+          {' '}{rowNumbers(preview.warnings.incomplete)}
+        </p>}
+        {!!preview.warnings?.costCenter.count&&<p role="status">
+          {preview.warnings.costCenter.count===1?'En rad har ogiltigt kostnadsställenummer.':`${preview.warnings.costCenter.count} rader har ogiltigt kostnadsställenummer.`}
+          {' '}{rowNumbers(preview.warnings.costCenter)}
           {' '}Projekten kan importeras. Befintliga kostnadsställen behålls och nya projekt får inget kostnadsställe på dessa rader.
         </p>}
         <div className="table-wrap"><table className="data-table">

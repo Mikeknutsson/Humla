@@ -4,6 +4,10 @@ import { readNextProjectFile } from '@/lib/kpi/next-project-file';
 
 export const runtime='nodejs';
 
+function summarizeRows(rows:number[]){
+  return {count:rows.length,rows:rows.slice(0,10)};
+}
+
 export async function POST(request:Request){
   if(request.headers.get('origin')!==new URL(request.url).origin)return Response.json({error:'Ogiltigt ursprung.'},{status:403});
   const db=await createClient();
@@ -23,10 +27,10 @@ export async function POST(request:Request){
       return Response.json({error:'Välj en Excel-fil (.xlsx eller .xls) på högst 4 MB.'},{status:400});
     if(mode!=='preview'&&mode!=='import')return Response.json({error:'Ogiltig importåtgärd.'},{status:400});
     const bytes=new Uint8Array(await file.arrayBuffer());
-    const {projects,invalidCostCenterRows}=readNextProjectFile(bytes);
+    const {projects,invalidCostCenterRows,incompleteProjectRows}=readNextProjectFile(bytes);
     const warnings={
-      count:invalidCostCenterRows.length,
-      rows:invalidCostCenterRows.slice(0,10),
+      costCenter:summarizeRows(invalidCostCenterRows),
+      incomplete:summarizeRows(incompleteProjectRows),
     };
     if(mode==='preview')return Response.json({rows:projects.length,preview:projects.slice(0,5),warnings});
     const hash=createHash('sha256').update(bytes).digest('hex');
