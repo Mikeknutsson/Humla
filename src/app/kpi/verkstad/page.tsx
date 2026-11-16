@@ -33,6 +33,23 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  const {data,error}=await (period.mode==='months'?access.db.rpc('hub_kpi_overview_months_v1',{p_tenant_id:access.tenantId,p_fiscal_year:period.fiscalYear,p_selected_months:period.months,p_cost_center:'40',p_filters:{}}):access.db.rpc('hub_kpi_cost_center_dashboard_v1',{p_tenant_id:access.tenantId,p_from:from,p_to:to,p_cost_center:'40'})).abortSignal(AbortSignal.timeout(48_000));
  const report=data as WorkshopReport|null;
  const valid=!error&&report?.cost_center_scope==='40';
+ const objects=valid?(report.economic_units??[]).flatMap(unit=>unit.children.map(child=>({unit:unit.key,child}))):[];
+ const projectNumbers=[...new Set(objects.flatMap(({child})=>!child.vehicle&&child.project?[child.project]:[]))];
+ const registrations=[...new Set(objects.flatMap(({child})=>child.vehicle?[child.vehicle]:[]))];
+ const [projects,vehicles]=await Promise.all([
+  projectNumbers.length?access.db.from('kpi_next_project_register').select('project_number,project_name')
+   .eq('tenant_id',access.tenantId).in('project_number',projectNumbers):null,
+  registrations.length?access.db.from('hub_identity_keys')
+   .select('identity_value,vehicle:hub_objects!hub_identity_keys_object_id_fkey!inner(make:data->>make,model:data->>model)')
+   .eq('tenant_id',access.tenantId).eq('identity_type','registration_number').in('identity_value',registrations)
+   .eq('vehicle.tenant_id',access.tenantId).eq('vehicle.object_type','Vehicle')
+   .overrideTypes<Array<{identity_value:string;vehicle:{make:string|null;model:string|null}}>,{merge:false}>():null,
+ ]);
+ const projectNames=new Map(projects?.data?.flatMap(p=>p.project_name?.trim()?[[p.project_number,p.project_name.trim()] as const]:[])??[]);
+ const vehicleNames=new Map(vehicles?.data?.flatMap(row=>{
+  const names=[row.vehicle?.make,row.vehicle?.model].filter((value):value is string=>typeof value==='string'&&!!value.trim());
+  return names.length?[[row.identity_value,names.join(' ')] as const]:[];
+ })??[]);
  const previous=valid&&report.comparison_available!==false?report.previous?.metrics:undefined;
  const months=(report?.monthly??[]).filter(p=>p.period_start<=to&&p.period_end>=from&&(period.mode!=='months'||period.months.includes(Number(p.period_start.slice(5,7)))));
  const metric=(key:string)=>valid?report.metrics[key]:null;
@@ -44,7 +61,24 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  <WorkshopTimeKpi query={query}/>
  {months.length>0&&<KpiMonthChart points={months} query={query}/>}
  <section className="panel"><h2>Kostnader – verkstaden</h2><div className="table-wrap"><table><thead><tr><th>Kostnadsslag</th><th>Belopp</th></tr></thead><tbody>{Object.entries(report.cost_categories??{}).map(([key,value])=><tr key={key}><td><Link prefetch={false} href={analysisHref(query,{kind:'cost',category:key})}>{costs[key]??key} →</Link></td><td>{money(value)}</td></tr>)}</tbody><tfoot><tr><th>Total kostnad</th><td>{money(metric('total_cost'))}</td></tr></tfoot></table></div><p>Beloppen ingår redan i totalen. {report.personnel_basis}</p></section>
- <section className="panel"><h2>Projekt och fordon i verkstadens ekonomi</h2><div className="table-wrap"><table><thead><tr><th>Objekt</th><th>Intäkter</th><th>Kostnader</th><th>Resultat</th></tr></thead><tbody>{(report.economic_units??[]).flatMap(u=>u.children.map(c=><tr key={u.key+':'+c.key}><td><Link prefetch={false} href={analysisHref(query,{unit:u.key,vehicle:c.vehicle,project:c.vehicle?null:c.project})}>{c.label} →</Link></td><td>{money(c.revenue)}</td><td>{money(c.cost)}</td><td>{money(c.result)}</td></tr>))}</tbody></table></div><p>Visar poster som hör till KST 40. Verkstadsarbete som redan belastar ett annat kostnadsställe flyttas inte tillbaka hit.</p></section>
+ <section className="panel">
+  <h2>Projekt och fordon i verkstadens ekonomi</h2>
+  <div className="table-wrap"><table>
+   <thead><tr><th scope="col">Objekt</th><th scope="col">Intäkter</th><th scope="col">Kostnader</th><th scope="col">Resultat</th></tr></thead>
+   <tbody>{objects.map(({unit,child})=>{
+    const name=child.vehicle?vehicleNames.get(child.vehicle):child.project?projectNames.get(child.project):null;
+    const reference=child.vehicle??child.project;
+    return <tr key={unit+':'+child.key}>
+     <td><Link prefetch={false} href={analysisHref(query,{unit,vehicle:child.vehicle,project:child.vehicle?null:child.project})}>
+      {name&&reference?<><strong>{name}</strong><br/><small>{child.vehicle?'Regnr':'Projekt'} {reference} →</small></>:<>{child.label} →</>}
+     </Link></td>
+     <td>{money(child.revenue)}</td><td>{money(child.cost)}</td><td>{money(child.result)}</td>
+    </tr>;
+   })}</tbody>
+  </table></div>
+  {(projects?.error||vehicles?.error)&&<p role="status">Vissa projektnamn eller fordonsuppgifter kunde inte hämtas.</p>}
+  <p>Visar poster som hör till KST 40. Verkstadsarbete som redan belastar ett annat kostnadsställe flyttas inte tillbaka hit.</p>
+ </section>
  <section className="panel"><h2>Underlag</h2><p>{number.format(Number(report.quality?.valid_rows??0))} giltiga ekonomirader. Samma publicerade Hub-underlag som Dashboard, avgränsat till KST 40.</p><p>{report.sync?.synced_at?'Senast uppdaterat: '+new Intl.DateTimeFormat('sv-SE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Stockholm'}).format(new Date(report.sync.synced_at)):'Uppdateringstid saknas.'}</p><Link prefetch={false} href={analysisHref(query)}>Visa originalrader →</Link> · <Link prefetch={false} href={'/kpi/projekt?'+new URLSearchParams({from,to,center:'40',...selection})}>Projektuppföljning →</Link></section>
  </>}
  </div></KpiDetailShell>;
