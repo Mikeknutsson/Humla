@@ -9,6 +9,18 @@ begin
  insert into public.hub_objects(id,tenant_id,object_type,status,data,source_of_truth) values(person,t,'Person','active','{"display_name":"QA driver rollback"}','humla');
  update private.hub_driver_account_links set valid_to=now() where tenant_id=t and user_id=auth.uid() and (valid_to is null or valid_to>now());
  insert into private.hub_driver_account_links(tenant_id,user_id,person_object_id,valid_from,confirmed_by) values(t,auth.uid(),person,now()-interval '1 second',auth.uid());
+ -- The driver's private draft can span midnight and never becomes a submitted report.
+ execute 'set local role authenticated';
+ if public.hub_transport_time_draft(t) is not null then raise exception 'fresh driver draft leaked';end if;
+ result=public.hub_transport_time_draft(t,'{"start":"2099-01-01T22:00","end":"2099-01-02T06:00","breakMinutes":30,"vehicle":"QA","note":"draft"}');
+ if result->>'start' is distinct from '2099-01-01T22:00' or public.hub_transport_time_draft(t) is distinct from result then raise exception 'time draft not persisted';end if;
+ begin
+  perform public.hub_transport_time_draft(t,'{"start":"2099-01-01T22:00","end":"2099-01-01T23:00","breakMinutes":60,"vehicle":"","note":""}');
+  raise exception 'invalid break accepted';
+ exception when check_violation then null;end;
+ if public.hub_transport_time_draft(t) is distinct from result then raise exception 'invalid draft replaced saved draft';end if;
+ if has_table_privilege('authenticated','private.transport_time_drafts','select') or has_function_privilege('anon','public.hub_transport_time_draft(uuid,jsonb)','execute') then raise exception 'time draft permission leak';end if;
+ execute 'reset role';
  p=jsonb_build_object('title','QA driver','customerId',(select id from public.hub_objects where tenant_id=t and object_type='Customer' and status='active' limit 1),'status','Planerad','start','2099-01-01T07:00','end','2099-01-01T09:00','driverId',person,'internalNote','SECRET internal','lines',jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'date','2099-01-01','label','QA article','quantity',2,'price',999,'purchasePrice',400,'unit','Tim')));
  oid=public.hub_transport_save(t,null,0,gen_random_uuid(),p);
  result=public.hub_transport_driver_orders(t);
@@ -91,4 +103,4 @@ begin
  if has_function_privilege('anon','public.hub_transport_driver_orders(uuid)','execute') or has_table_privilege('authenticated','private.transport_driver_commands','select') then raise exception 'unsafe grants';end if;
 end $$;
 rollback;
-select 'PASS: own assignments, safe projection, start/pause/resume/report/complete/submit, permanent lock, manager preservation, replay, version conflict, article unit, linked site pricing, price redaction, article comments, audit, reassignment, expired link, tenant isolation and grants. Rolled back.' result;
+select 'PASS: own assignments, safe projection, start/pause/resume/report/complete/submit, permanent lock, manager preservation, replay, version conflict, article unit, linked site pricing, price redaction, article comments, private time drafts, audit, reassignment, expired link, tenant isolation and grants. Rolled back.' result;

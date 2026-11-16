@@ -11,3 +11,12 @@ body:has(.driver-app)>.shell{display:block}body:has(.driver-app)>.shell>.sidebar
 .driver-item-comment{white-space:pre-wrap;font-size:.875rem;color:#434a52}
 .driver-item-actions{display:flex;flex-wrap:wrap;gap:8px}
 .driver-app .driver-item-actions button{width:auto;margin:0}
+.driver-home-summary{border:1px solid #cbd0d5;border-left:4px solid #bd9500;border-radius:10px;padding:12px;background:#fff;margin:0 0 18px}
+.driver-home-summary h2{margin:0}
+.driver-home-summary dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:8px;margin:10px 0}
+.driver-home-summary dl div{padding:8px;background:#f0f2f3;border-radius:6px}
+.driver-home-summary dt{font-size:.85rem;color:#41484e}
+.driver-home-summary dd{margin:0;font-weight:700}
+.driver-home-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.driver-home-actions .driver-link{margin:0}
+.driver-home-summary summary{cursor:pointer;font-weight:700;padding:6px 0}
