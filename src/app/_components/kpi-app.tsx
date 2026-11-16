@@ -10,6 +10,7 @@ import {KpiCostCenterFilter} from './kpi-cost-center-filter';
 import {WorkshopTimeKpi} from './workshop-time-kpi';
 
 import { KpiCostBreakdown } from "./kpi-cost-breakdown";
+import {NextProjectImport} from "./next-project-import";
 import {KpiWorkspace,KpiSidebarToggle} from './kpi-workspace';
 import workspaceStyles from './kpi-workspace.module.css';
 import { KpiMonthPeriod } from "./kpi-month-period";
@@ -144,18 +145,19 @@ export type KpiAppProps = {
   overviewPrevious: Dashboard | null;
   overviewPeriod: {current:{from:string;to:string};previous:{from:string;to:string};label:string};
   batches: Batch[];
+  importHistory?: React.ReactNode;
   accountMappings?: AccountMapping[];
   tenantName: string;
   userName: string;
   from: string;
   to: string;
   canManage: boolean;
-  initialView?: "overview" | "kpi" | "import" | "definitions" | "accounts" | "units" | "transpa" | "review" | "internal" | "monthly";
+  initialView?: "overview" | "kpi" | "import" | "importhistorik" | "definitions" | "accounts" | "units" | "transpa" | "review" | "internal" | "monthly";
   serverIssues?: string[];
   onPeriodChange?: (query:string)=>Promise<void>;
 };
 
-export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, activeFilters, dashboard, overviewPrevious, overviewPeriod, batches, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "kpi", serverIssues = [], onPeriodChange }: KpiAppProps) {
+export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, activeFilters, dashboard, overviewPrevious, overviewPeriod, batches, importHistory, units, unitReport, transpaEvidence, transpaVehicleTime, efficiency, hiredCapacity, driverProductivity, hubReviews, tenantName, userName, from, to, canManage, initialView = "kpi", serverIssues = [], onPeriodChange }: KpiAppProps) {
   const liveQuery=useSearchParams();
   const financialView=initialView==='overview'||initialView==='kpi';
   const view=financialView?(liveQuery.get('view')==='overview'?'overview':'kpi'):initialView;
@@ -374,10 +376,11 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
           {canManage&&<Link prefetch={false} href="/kpi/betalningsprognos" onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Betalningsprognos</Link>}
           </div>
         </details>
-        <details className="report-nav-group" open={view === "import" || view === "review"} style={{margin:"4px 0"}}>
+        <details className="report-nav-group" open={view === "import" || view === "importhistorik" || view === "review"} style={{margin:"4px 0"}}>
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><Settings2 size={18}/>Administration <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>
             <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
+            {canManage&&<Link prefetch={false} className={view === "importhistorik" ? "active" : ""} href={kpiHref("importhistorik")} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Importhistorik</Link>}
             <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
             <Link href={`/kpi/avstamning?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Avstämning &amp; regler</Link>
           </div>
@@ -396,7 +399,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
     </aside>
 
     <main className="app-main">
-      <header className="topbar"><KpiSidebarToggle/><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "monthly" ? "Månadsrapport – Transport" : view === "internal" ? "Interna körningar" : view === "overview" ? "Översikt" : view === "kpi" ? "Enhetsuppföljning" : view === "import" ? "Dataimport" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div>{canManage&&<Link prefetch={false} className="secondary" href={`/kpi/kontrollpanel?${periodQuery}`}><ListTree size={16}/>Kopplingar & inställningar</Link>}{view!=='monthly'&&<div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div>}</header>
+      <header className="topbar"><KpiSidebarToggle/><button className="icon-button mobile-nav" onClick={() => setMobileMenu(true)} aria-label="Öppna meny"><Menu size={20}/></button><div><span className="breadcrumb">Humla Dashboard / Transport</span><h1>{view === "monthly" ? "Månadsrapport – Transport" : view === "internal" ? "Interna körningar" : view === "overview" ? "Översikt" : view === "kpi" ? "Enhetsuppföljning" : view === "import" ? "Dataimport" : view === "importhistorik" ? "Importhistorik" : view === "review" ? "Granskning & mappning" : view === "accounts" ? "Kontomappning" : view === "units" ? "Enhetsmappning" : view === "transpa" ? "TransPA-underlag" : "KPI-definitioner"}</h1></div>{canManage&&<Link prefetch={false} className="secondary" href={`/kpi/kontrollpanel?${periodQuery}`}><ListTree size={16}/>Kopplingar & inställningar</Link>}{view!=='monthly'&&<div className="topbar-badge"><ShieldCheck size={16}/>Säker KPI-arbetsyta</div>}</header>
       {view==='monthly'&&<div className="content"><KpiMonthlyReport query={periodQuery}/></div>}
       {view==='internal'&&<div className="content"><form className="period-form"><input type="hidden" name="view" value="internal"/><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button>Visa period</button></form><details className="kpi-help"><summary>Om period och urval</summary><p>Urval: {from} – {to}{monthPeriod?` · månader ${monthPeriod.months.join(', ')}`:''}. Fliken visar Entreprenad → Transport och Entreprenad → Sortergården; övriga Dashboard-filter påverkar inte dessa summor.</p></details><InternalTransfers query={periodQuery} canManage={canManage}/></div>}
       {(view === "overview" || view === "kpi") && <div className="content">{monthPeriod ? <KpiMonthPeriod onReportChange={onPeriodChange} period={monthPeriod} costCenter={costCenter} costCenters={dashboard.cost_centers??[]} groups={dashboard.group_options??[]} unitName={dashboard.economic_units?.find(u=>u.key===activeFilters?.unit)?.label}/> : <form className="period-form"><input type="hidden" name="from" value={from}/><input type="hidden" name="to" value={to}/><input type="hidden" name="view" value={view}/><KpiCostCenterFilter value={costCenter} options={dashboard.cost_centers??[]}/><input type="hidden" name="cost_center" value={costCenter}/><button>Visa</button></form>}{costCenter&&<details className="kpi-help"><summary>Om kostnadsställets fördelning</summary><p>Projektregistrets kopplingar gäller från {dashboard.classification_valid_from??"registrerad giltighetsdag"}. Hela belopp följer daterade kopplingar. Osäkra kostnadsställen ligger under Ej klassificerat. Importer, granskning och administration gäller hela arbetsytan.</p></details>}{numeric(dashboard.unclassified_summary?.rows)>0&&<details className="kpi-help kpi-help-warning"><summary>Ej klassificerade kostnadsställen ({numeric(dashboard.unclassified_summary?.rows)})</summary><p><Link prefetch={false} href={`/kpi/analys?${periodQuery.replace(/&cost_center=[^&]*/,"")}&cost_center=unclassified`}>Ej klassificerat kostnadsställe: {currency.format(numeric(dashboard.unclassified_summary?.revenue))} intäkter · {currency.format(numeric(dashboard.unclassified_summary?.cost))} kostnader</Link>. Dessa belopp ingår i Alla kostnadsställen och inväntar säker fördelning.</p></details>}{scopedOperationsUnavailable&&<details className="kpi-help"><summary>Timnyckeltal saknar underlag</summary><p>Beläggning, kapacitet och timnyckeltal per kostnadsställe inväntar verifierad fördelning. Finansiella belopp är beräknade i Hubben.</p></details>}</div>}
@@ -443,7 +446,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
 
       {view === "import" && <div className="content import-layout">
         {!canManage ? <section className="empty-state"><AlertTriangle size={28}/><div><h2>Du saknar importbehörighet</h2><p>Behörigheten <code>kpi.manage</code> krävs för att lägga in underlag.</p></div></section> : <>
-          <Link prefetch={false} className="secondary" href="/kpi/importhistorik">Visa importhistorik</Link>
+          <Link prefetch={false} className="secondary" href="/kpi?view=importhistorik">Visa importhistorik</Link>
           <section className="panel"><h2>Släpp filen här</h2><details className="kpi-help"><summary>Så fungerar filimporten</summary><p>Humla läser filen och försöker känna igen Workify, NEXT, Stena och övriga underlag. Du kontrollerar resultatet innan något sparas.</p></details><label className={`dropzone ${file ? "has-file" : ""}`} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(!busy&&!stenaBusy)selectFiles(Array.from(event.dataTransfer.files));}}><input type="file" multiple disabled={busy||stenaBusy} accept=".pdf,.xlsx,.xls,.csv" onChange={event=>selectFiles(Array.from(event.target.files??[]))}/><UploadCloud size={30}/><strong>{busy?'Läser filen…':file?file.name:'Dra in filer eller klicka för att välja'}</strong><span>PDF · Excel · CSV. Max 4 MB per fil, Stena max 3 MB.</span></label>{pendingFiles.length>0&&<p>{pendingFiles.length} filer väntar. Filerna granskas och sparas en i taget. <button className="secondary" disabled={busy||stenaBusy} onClick={()=>selectFiles(pendingFiles)}>Hoppa till nästa fil</button></p>}</section>
           <details className="panel" open={Boolean(file&&!busy&&!stenaImport&&!kindConfirmed)}><summary>Ändra underlagstyp / fler importinställningar</summary><p>Vanligtvis känner Humla igen filen automatiskt. Välj manuellt om identifieringen är osäker.</p><label><input type="checkbox" checked={automatic} disabled={busy||stenaBusy} onChange={event=>{setAutomatic(event.target.checked);setKindConfirmed(!event.target.checked);}}/> Identifiera underlag automatiskt</label>
           <p><label>Underlagstyp <select value={stenaImport?'stena':dataKind} disabled={busy||stenaBusy} onChange={event=>{if(event.target.value==='stena'){setStenaFile(file);setStenaImport(true);}else chooseKind(event.target.value as DataKind);}}><optgroup label="Ekonomi"><option value="revenue">Intäkter – Workify</option><option value="next_revenue">Intäkter – NeXT</option><option value="cost">Kostnader – NEXT</option><option value="stena">Stena – historik och avräkningar</option></optgroup><optgroup label="Kompletterande underlag">{(['fuel','vehicle_activity','driver_time','next_historical_time'] as DataKind[]).map(key=><option key={key} value={key}>{DATA_KINDS[key].label}</option>)}</optgroup></select></label></p>
@@ -455,8 +458,11 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
           {preview && <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 3</span><h2>Kontrollera kolumnmappningen</h2></div><span className="row-count">{preview.totalRows} rader hittades</span></div><div className="mapping-grid">{selectedDefinition.fields.map((field) => <label key={field.key}><span>{field.label}{field.required && <b>*</b>}</span><select disabled={dataKind === "next_revenue"} value={mapping[field.key] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Inte mappad</option>{preview.headers.map((header) => <option value={header} key={header}>{header}</option>)}</select></label>)}</div><div className="preview-table"><table><thead><tr>{preview.headers.slice(0,8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.rows.slice(0,6).map((row, index) => <tr key={index}>{preview.headers.slice(0,8).map((header) => <td key={header}>{row[header] || "–"}</td>)}</tr>)}</tbody></table></div><div className="import-confirm"><div><ShieldCheck size={19}/><p><strong>Fail-closed import</strong><span>Ogiltiga eller osäkert mappade rader påverkar inte nyckeltalen.</span></p></div><button className="primary" disabled={!requiredComplete || !kindConfirmed || !!rulePreview.error || busy} onClick={importFile}>{busy ? "Importerar…" : "Importera och spara"}</button></div></section>}
           {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}{message.reconnect&&<a className="secondary" href="/kpi?view=import" target="_blank" rel="noopener noreferrer">Återanslut i ny flik</a>}</div>}
           </>}
+          <NextProjectImport/>
         </>}
       </div>}
+
+      {view === "importhistorik" && <div className="content import-layout">{canManage?importHistory:<section className="panel"><p>Du saknar behörighet att se importhistoriken.</p></section>}</div>}
 
       {view === "accounts" && <div className="content"><section className="panel"><h2>Konton & kostnader</h2><details className="kpi-help"><summary>Om kontoreglerna</summary><p>KPI använder de daterade kontoreglerna i Humla Hub. Där styrs kostnadskategori och om kostnaden hör till fordonsresultatet.</p></details>{canManage ? <Link prefetch={false} className="primary" href={`/kpi/kontrollpanel?${periodQuery}&section=cost`}>Visa och hantera aktuella kontoregler</Link> : <p>En KPI-administratör kan hantera kontoreglerna i Kontrollpanelen.</p>}</section></div>}
       {view === "units" && <div className="content"><form className="period-form"><input type="hidden" name="view" value="units"/><label>Från<input type="date" name="from" defaultValue={from}/></label><label>Till<input type="date" name="to" defaultValue={to}/></label><button>Visa period</button></form>{canManage&&<CompoundUnitBuilder from={from}/>}<UnitManager units={units} report={unitReport} canManage={canManage} from={from} to={to}/></div>}

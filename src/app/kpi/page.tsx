@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { KpiImportHistory } from "../_components/kpi-import-history";
 import { redirect } from "next/navigation";
 import {cachedKpiReport} from "@/lib/kpi/report-cache";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +19,7 @@ function fiscalPeriod(month = 9, day = 1) {
   return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ period_mode?:string;from?: string; to?: string; view?: string; cost_center?: string; fiscal_year?: string; months?: string; group?:string; unit?:string; vehicle?:string; project?:string; category?:string; kind?:string; source?:string; date_from?:string; date_to?:string; auth_retry?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ period_mode?:string;from?: string; to?: string; view?: string; cost_center?: string; fiscal_year?: string; months?: string; group?:string; unit?:string; vehicle?:string; project?:string; category?:string; kind?:string; source?:string; date_from?:string; date_to?:string; auth_retry?: string; import_source?:string; history_kind?:string; history_page?:string; api_page?:string }> }) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (!user) redirect("/kpi/login");
@@ -40,7 +42,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
   if (!canRead) return <main className="access-denied"><div><span>403</span><h1>Du saknar åtkomst till KPI-appen</h1><p>Be en administratör aktivera din KPI-behörighet.</p></div></main>;
   const internalDefaultPeriod = previousInternalMonth();
   const fallback = query.view === 'internal' ? internalDefaultPeriod : fiscalPeriod(settings?.financial_year_start_month ?? 9, settings?.financial_year_start_day ?? 1);
-  const initialView = query.view === "monthly" || query.view === "internal" || query.view === "kpi" || query.view === "import" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : query.view==="overview"?"overview":"kpi";
+  const initialView = query.view === "monthly" || query.view === "internal" || query.view === "kpi" || query.view === "import" || query.view === "importhistorik" || query.view === "definitions" || query.view === "accounts" || query.view === "units" || query.view === "review" || (query.view === "transpa" && canManage) ? query.view : query.view==="overview"?"overview":"kpi";
   const legacyMonths = monthPeriodFromDates(query.from,query.to);
   const useMonths = initialView !== 'internal' && (initialView === "overview" || initialView === "monthly" || query.months !== undefined || query.fiscal_year !== undefined || Boolean(legacyMonths) || (initialView === "kpi" && !query.from && !query.to));
   let monthPeriod;
@@ -76,6 +78,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
   const serverIssues = [readError, manageError, dashboardError, batchesError, unitsError, unitReportError, transpaError, hubReviewError].filter(Boolean).map((error) => error!.message);
   if (serverIssues.length) console.error("[kpi] data lookup failed", { codes: [readError, manageError, dashboardError, batchesError].filter(Boolean).map((error) => error!.code) });
   return <KpiLiveReport key={initialView}
+    importHistory={initialView==='importhistorik'&&canManage?<Suspense fallback={<section className="panel" id="importhistorik"><h2>Importhistorik</h2><p>Hämtar senaste importer…</p></section>}>
+      <KpiImportHistory db={supabase} tenantId={member.tenant_id} query={{kind:query.history_kind,page:query.history_page,apiPage:query.api_page}}/>
+    </Suspense>:undefined}
     internalDefaultPeriod={internalDefaultPeriod}
     monthPeriod={useMonths?monthPeriod:undefined}
     overviewMonthly={(displayDashboard.monthly??[]) as never}
