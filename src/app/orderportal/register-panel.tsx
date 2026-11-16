@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Order, Resource } from '@/lib/orderportal/model';
+import ReportArticleSettings from './report-article-settings';
 import RegisterSettings from './register-settings';
 import CustomerCardPanel from './customer-card';
 import { fetchCatalog, type Catalog } from './pricing-panel';
@@ -102,6 +103,7 @@ export default function RegisterPanel({section,resources,orders,onOrder,onPrices
       matchingLists.length?<ul>{matchingLists.map(list=><li key={list.id}>{list.name}</li>)}</ul>:<p>Ingen särskild prislista kopplad.</p>}
      <button type="button" className="op-secondary" onClick={onPrices}>Öppna prislistor</button>
     </section>}
+    {selected.kind==='Article'&&<ReportArticleSettings key={selected.id} id={selected.id} unit={selected.settings?.unit||selected.details?.unit||selected.details?.unit_of_measure}/>}
     {section!=='customers'&&<RegisterSettings key={selected.id} resource={selected} onSaved={onRegisterSaved}/>}
     {selected.kind==='Customer'&&<CustomerCardPanel key={selected.id} id={selected.id}/>}
     <section><h4>Senaste kopplade order i portalen</h4>

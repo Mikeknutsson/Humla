@@ -4,7 +4,7 @@ insert into public.hub_member_permission_overrides(tenant_id,user_id,permission_
 select '944597b6-9c46-4bef-998d-f19e23c4245b','5a6fa4c4-5427-47fa-9835-d997fe81c7d5',p,true from unnest(array['transport.assignments.read','transport.orders.manage'])p
 on conflict(tenant_id,user_id,permission_code) do update set allowed=true;
 do $$
-declare t uuid='944597b6-9c46-4bef-998d-f19e23c4245b';person uuid=gen_random_uuid();oid uuid;req uuid=gen_random_uuid();p jsonb;v integer;result jsonb;action text;
+declare t uuid='944597b6-9c46-4bef-998d-f19e23c4245b';person uuid=gen_random_uuid();oid uuid;req uuid=gen_random_uuid();p jsonb;v integer;result jsonb;action text;article uuid;site uuid;items jsonb;submission jsonb;
 begin
  insert into public.hub_objects(id,tenant_id,object_type,status,data,source_of_truth) values(person,t,'Person','active','{"display_name":"QA driver rollback"}','humla');
  update private.hub_driver_account_links set valid_to=now() where tenant_id=t and user_id=auth.uid() and (valid_to is null or valid_to>now());
@@ -27,10 +27,35 @@ begin
  -- Completed work remains editable until the explicit final handover.
  v=public.hub_transport_driver_command(t,oid,6,gen_random_uuid(),'report','{"hours":2.5,"note":"Corrected draft"}');
  if v<>7 then raise exception 'completed draft not editable';end if;
+ select id into article from public.hub_objects where tenant_id=t and object_type='Article' and status='active' limit 1;
+ perform public.hub_transport_report_article_save(t,article,'ton','delivery',true,
+  '[{"name":"QA tapp A","price":125},{"name":"QA tapp B","price":200}]');
+ select row into result from jsonb_array_elements(public.hub_transport_report_catalog(t)) as row where row->>'id'=article::text;
+ if result->>'unit' is distinct from 'ton' or jsonb_array_length(result->'sites') is distinct from 2
+  or result::text like '%price%' then raise exception 'report catalog invalid';end if;
+ site=(result#>>'{sites,1,id}')::uuid;
+ items=jsonb_build_array(jsonb_build_object('articleId',article,'siteId',site,'quantity',2.5,'unit','tim','price',999));
+ begin
+  perform public.hub_transport_driver_command(t,oid,7,gen_random_uuid(),'report',
+   jsonb_build_object('items',jsonb_build_array(items->0||jsonb_build_object('siteId',gen_random_uuid()))));
+  raise exception 'unlinked site accepted';
+ exception when others then if sqlerrm<>'invalid_report_site' then raise;end if;end;
+ begin
+  perform public.hub_transport_driver_command(t,oid,7,gen_random_uuid(),'report',jsonb_build_object('items',items||items));
+  raise exception 'duplicate article and site accepted';
+ exception when others then if sqlerrm<>'duplicate_report_article' then raise;end if;end;
+ submission=jsonb_build_object('items',items,'note','Final report');
  req=gen_random_uuid();
- v=public.hub_transport_driver_command(t,oid,7,req,'submit','{"hours":2.5,"note":"Final report"}');
- if v<>8 or public.hub_transport_driver_command(t,oid,7,req,'submit','{"hours":2.5,"note":"Final report"}')<>8 then raise exception 'submission replay failed';end if;
+ v=public.hub_transport_driver_command(t,oid,7,req,'submit',submission);
+ if v<>8 or public.hub_transport_driver_command(t,oid,7,req,'submit',submission)<>8 then raise exception 'submission replay failed';end if;
  select payload into p from public.hub_transport_orders where id=oid;
+ if p#>>'{driverReport,items,0,unit}' is distinct from 'ton'
+  or (p#>>'{driverReport,pricing,0,unitPrice}')::numeric is distinct from 200::numeric
+  or (p#>>'{driverReport,pricing,0,amount}')::numeric is distinct from 500::numeric
+  then raise exception 'canonical unit or site price lost';end if;
+ result=public.hub_transport_driver_orders(t);
+ if result#>>'{0,report,items,0,siteLabel}' is distinct from 'QA tapp B'
+  or result::text like '%pricing%' or result::text like '%unitPrice%' then raise exception 'unsafe report projection';end if;
  if p->>'status'<>'Rapporterad' or p->>'driverSubmittedAt' is null or p->>'driverSubmittedBy'<>auth.uid()::text then raise exception 'handover missing';end if;
  if (select count(*) from public.hub_transport_history where order_id=oid)<>8 then raise exception 'handover audit duplicated';end if;
  foreach action in array array['start','pause','resume','report','complete','submit'] loop
@@ -59,4 +84,4 @@ begin
  if has_function_privilege('anon','public.hub_transport_driver_orders(uuid)','execute') or has_table_privilege('authenticated','private.transport_driver_commands','select') then raise exception 'unsafe grants';end if;
 end $$;
 rollback;
-select 'PASS: own assignments, safe projection, start/pause/resume/report/complete/submit, permanent lock, manager preservation, replay, version conflict, immutable prices, audit, reassignment, expired link, tenant isolation and grants. Rolled back.' result;
+select 'PASS: own assignments, safe projection, start/pause/resume/report/complete/submit, permanent lock, manager preservation, replay, version conflict, article unit, linked site pricing, price redaction, audit, reassignment, expired link, tenant isolation and grants. Rolled back.' result;
