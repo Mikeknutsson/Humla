@@ -10,7 +10,16 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCw, MessageSquare,RotateCcw } from "lucide-react";
 
-export function KpiRefresh() {
+export function KpiRefresh({foremanOwner=false}:{foremanOwner?:boolean}) {
+  const pathname=usePathname();
+  const search=useSearchParams();
+  const isForeman=pathname==="/kpi/mina-enheter";
+  const isWidget=["month","ytd"].includes(search.get("widget")??"");
+  if(isForeman&&!isWidget&&!foremanOwner)return null;
+  return <KpiRefreshBar/>;
+}
+
+function KpiRefreshBar() {
   const pathname = usePathname();
   const search = useSearchParams();
   const params = new URLSearchParams(search.toString());
