@@ -15,8 +15,14 @@ const labels:Record<string,string> = {management:'Arbetsledning',overhead:'Övri
 const costCategories=['personnel','fuel','service_repair','fixed','depreciation','hired','management','overhead','material','tipp_deponi','other','unclassified'];
 const costCategoryOrder=(category:string)=>{const index=costCategories.indexOf(category);return index<0?costCategories.length:index;};
 
+function foremanCardStatus(metrics?: TransportMetrics) {
+ if(metrics?.result!=null&&metrics.result<0)return 'loss';
+ if(metrics?.deviation_pp!=null&&metrics.deviation_pp>=0)return 'on-target';
+ return 'neutral';
+}
+
 function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foremanMode=false,dailyTarget,mileage,timeMetrics}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis;costBreakdown?:TransportCostBreakdown[];foremanMode?:boolean;dailyTarget?:DailyRevenueTarget;mileage?:TransportMileage;timeMetrics?:TransportTime}) {
- const status=metrics.deviation_pp==null?"unknown":metrics.deviation_pp<0?"below":"on-target";
+ const status=foremanMode?foremanCardStatus(metrics):metrics.deviation_pp==null?"unknown":metrics.deviation_pp<0?"below":"on-target";
  return <article className={styles.card} data-target-status={status}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
  <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
  <dl className={styles.facts}>
@@ -69,11 +75,11 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
   const totals=report.groups.find(area=>area.business_group===(group==='Utan verksamhetsområde'?'Ej klassificerat':group));
   const deviation=totals?.deviation_pp;
   const underTarget=deviation!=null&&deviation<0;
-  return <details key={group} className={styles.area} data-under-target={underTarget} data-target-status={deviation==null?"unknown":underTarget?"below":"on-target"}>
+  return <details key={group} className={styles.area} data-under-target={underTarget} data-target-status={foremanCardStatus(totals)}>
    <summary className={styles.card+' '+styles.areaSummary}>
     <div>
      <h3>{group}</h3>
-     {deviation!=null&&<p className={styles.areaStatus} data-under-target={underTarget}>{deviation===0?'På mål':(underTarget?'Under mål':'Över mål')+' · '+(deviation>0?'+':'')+number.format(deviation)+' procentenheter'}</p>}
+     {deviation!=null&&<p className={styles.areaStatus}>{deviation===0?'På mål':(underTarget?'Under mål':'Över mål')+' · '+(deviation>0?'+':'')+number.format(deviation)+' procentenheter'}</p>}
      {totals?<dl className={styles.facts}>
       <dt>Intäkter</dt><dd>{money(totals.revenue)}</dd>
       <dt>Kostnader</dt><dd>{money(totals.cost)}</dd>
