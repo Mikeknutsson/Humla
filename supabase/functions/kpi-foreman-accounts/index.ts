@@ -36,7 +36,7 @@ Deno.serve(async (request: Request) => {
     if (error) return fail(503, "unavailable");
     const accounts = await Promise.all((members ?? []).map(async (member) => {
       const account = await admin.auth.admin.getUserById(member.user_id);
-      return { ...member, email: account.data.user?.email ?? null };
+      return { ...member, email: account.data.user?.email ?? null, emailConfirmed: Boolean(account.data.user?.email_confirmed_at) };
     }));
     return reply(200, { members: accounts });
   }
@@ -67,7 +67,7 @@ Deno.serve(async (request: Request) => {
     return reply(200, { ok: true });
   }
 
-  if (input.action !== "status" && input.action !== "reset") return fail(400, "validation");
+  if (input.action !== "status" && input.action !== "reset" && input.action !== "confirm_email") return fail(400, "validation");
   if (typeof input.id !== "string" || !uuid.test(input.id)) return fail(400, "validation");
   const { data: member, error: memberError } = await admin.from("hub_tenant_members")
     .select("user_id").eq("tenant_id", tenantId).eq("user_id", input.id).eq("role", "supervisor").maybeSingle();
@@ -85,6 +85,15 @@ Deno.serve(async (request: Request) => {
     .select("user_id").eq("user_id", member.user_id).neq("tenant_id", tenantId).limit(1);
   if (otherMemberError) return fail(503, "unavailable");
   if (otherMemberships.length) return fail(403, "shared_account");
+  if (input.action === "confirm_email") {
+    const { data: account, error: accountError } = await admin.auth.admin.getUserById(member.user_id);
+    if (accountError) return fail(503, "unavailable");
+    if (!account.user?.email || account.user.email !== input.email) return fail(409, "email_changed");
+    if (account.user.email_confirmed_at) return reply(200, { ok: true });
+    const { error } = await admin.auth.admin.updateUserById(member.user_id, { email_confirm: true });
+    return error ? fail(500, "confirm_email") : reply(200, { ok: true });
+  }
+
   const { error } = await admin.auth.admin.updateUserById(member.user_id, { password });
   return error ? fail(500, "reset") : reply(200, { ok: true });
 });

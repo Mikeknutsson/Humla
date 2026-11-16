@@ -15,7 +15,7 @@ async function ownerContext() {
 }
 
 type OwnerContext = NonNullable<Awaited<ReturnType<typeof ownerContext>>>;
-type Member = {user_id:string; display_name:string|null; role:string; status:string; email:string|null};
+type Member = {user_id:string; display_name:string|null; role:string; status:string; email:string|null; emailConfirmed:boolean};
 const errors:Record<string,string> = {
   access:"Du saknar behörighet att hantera det här kontot.",
   duplicate:"E-postadressen används redan av ett konto.",
@@ -24,7 +24,9 @@ const errors:Record<string,string> = {
   membership:"Arbetsledarkontot kunde inte knytas till arbetsytan.",
   update:"Kontostatusen kunde inte ändras.",
   reset:"Lösenordet kunde inte ändras.",
-  shared_account:"Kontot används i flera arbetsytor. Användaren behöver själv återställa sitt lösenord.",
+  confirm_email:"E-postadressen kunde inte bekräftas.",
+  email_changed:"E-postadressen har ändrats. Uppdatera sidan och kontrollera adressen igen.",
+  shared_account:"Kontot används i flera arbetsytor. Användaren behöver själv använda en inloggningslänk.",
   unavailable:"Kontohanteringen kunde inte nås. Försök igen.",
 };
 
@@ -57,6 +59,10 @@ async function changeStatus(formData:FormData) {
   "use server";
   await changeAccount("status","updated",{id:formData.get("id"),status:formData.get("status")});
 }
+async function confirmEmail(formData:FormData) {
+  "use server";
+  await changeAccount("confirm_email","email_confirmed",{id:formData.get("id"),email:formData.get("email")});
+}
 async function resetPassword(_previous:PasswordResult, formData:FormData):Promise<PasswordResult> {
   "use server";
   const owner=await ownerContext();
@@ -78,7 +84,7 @@ export default async function UsersPage({searchParams}:{searchParams:Promise<{er
     <p>Skapa arbetsledarkonton med e-postadress och lösenord. Kontona får rollen arbetsledare, inte administratör.</p>
     {accounts.error&&<p role="alert">Användarlistan kunde inte hämtas. Uppdatera sidan för att försöka igen.</p>}
     {params.error&&<p role="alert">{Object.hasOwn(errors,params.error)?errors[params.error]:"Åtgärden kunde inte genomföras."}</p>}
-    {params.success&&<p role="status">{params.success==="created"?"Arbetsledarkontot har skapats.":"Ändringen har sparats."}</p>}
+    {params.success&&<p role="status">{params.success==="created"?"Arbetsledarkontot har skapats.":params.success==="email_confirmed"?"E-postadressen har bekräftats.":"Ändringen har sparats."}</p>}
     <section className="panel"><h2>Skapa arbetsledare</h2><form action={createForeman} style={{display:"grid",gap:12,maxWidth:440}}>
       <label>Namn<input name="name" required maxLength={120}/></label>
       <label>E-postadress<input name="email" type="email" autoComplete="off" required/></label>
@@ -89,6 +95,15 @@ export default async function UsersPage({searchParams}:{searchParams:Promise<{er
       <summary><strong>{m.display_name??"Utan namn"}</strong> · {m.email??"E-post saknas"} · {m.role==="owner"?"Ägare":m.role==="supervisor"?"Arbetsledare":m.role} · {m.status==="active"?"Aktiv":"Spärrad"}</summary>
       {m.role==="supervisor"&&<div style={{display:"grid",gap:12,padding:12}}>
         <form action={changeStatus}><input type="hidden" name="id" value={m.user_id}/><input type="hidden" name="status" value={m.status==="active"?"inactive":"active"}/><button>{m.status==="active"?"Spärra konto":"Aktivera konto"}</button></form>
+        {m.email&&<div>
+          <p>{m.emailConfirmed?"E-post bekräftad":"E-post väntar på bekräftelse"}</p>
+          {!m.emailConfirmed&&<form action={confirmEmail}>
+            <input type="hidden" name="id" value={m.user_id}/>
+            <input type="hidden" name="email" value={m.email}/>
+            <p>Bekräfta adressen när du har kontrollerat att den tillhör arbetsledaren.</p>
+            <button type="submit" className="secondary">Bekräfta e-postadress</button>
+          </form>}
+        </div>}
         <ForemanPasswordForm accountId={m.user_id} action={resetPassword}/>
       </div>}
     </details>)}</section>

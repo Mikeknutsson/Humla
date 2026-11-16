@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export async function login(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const returnTo = foremanWidgetReturn(formData.get("return_to"));
   const params = new URLSearchParams(returnTo ? { return_to: returnTo } : {});
@@ -16,7 +16,12 @@ export async function login(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    params.set("error", "Inloggningen misslyckades. Kontrollera uppgifterna.");
+    const message=error.code==="email_not_confirmed"
+      ? "E-postadressen behöver bekräftas. Kontakta din Humla-administratör eller begär en inloggningslänk."
+      : error.code==="invalid_credentials"
+      ? "E-postadressen eller lösenordet stämmer inte. Kontrollera adressen och använd det senast sparade lösenordet."
+      : "Inloggningen misslyckades. Försök igen.";
+    params.set("error",message);
     redirect("/kpi/login?" + params);
   }
   // The new request receives the session cookie before loading the report.
