@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { FunctionsHttpError } from "@supabase/supabase-js";
+import { ForemanPasswordForm, type PasswordResult } from "./foreman-password-form";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +57,15 @@ async function changeStatus(formData:FormData) {
   "use server";
   await changeAccount("status","updated",{id:formData.get("id"),status:formData.get("status")});
 }
-async function resetPassword(formData:FormData) {
+async function resetPassword(_previous:PasswordResult, formData:FormData):Promise<PasswordResult> {
   "use server";
-  await changeAccount("reset","reset",{id:formData.get("id"),password:formData.get("password")});
+  const owner=await ownerContext();
+  if(!owner)return {success:false,message:errors.access};
+  const result=await accountRequest(owner,{
+    action:"reset",id:formData.get("id"),password:formData.get("password"),
+  });
+  if(result.error)return {success:false,message:errors[result.error]??errors.unavailable};
+  return {success:true,message:"Lösenordet har ändrats. Arbetsledaren kan logga in med det nya lösenordet."};
 }
 
 export default async function UsersPage({searchParams}:{searchParams:Promise<{error?:string;success?:string}>}) {
@@ -82,7 +89,7 @@ export default async function UsersPage({searchParams}:{searchParams:Promise<{er
       <summary><strong>{m.display_name??"Utan namn"}</strong> · {m.email??"E-post saknas"} · {m.role==="owner"?"Ägare":m.role==="supervisor"?"Arbetsledare":m.role} · {m.status==="active"?"Aktiv":"Spärrad"}</summary>
       {m.role==="supervisor"&&<div style={{display:"grid",gap:12,padding:12}}>
         <form action={changeStatus}><input type="hidden" name="id" value={m.user_id}/><input type="hidden" name="status" value={m.status==="active"?"inactive":"active"}/><button>{m.status==="active"?"Spärra konto":"Aktivera konto"}</button></form>
-        <form action={resetPassword} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input type="hidden" name="id" value={m.user_id}/><label>Nytt lösenord <input type="password" name="password" minLength={12} required autoComplete="new-password"/></label><button>Byt lösenord</button></form>
+        <ForemanPasswordForm accountId={m.user_id} action={resetPassword}/>
       </div>}
     </details>)}</section>
     <p>Områdesbehörigheter styrs fortsatt av Humlas befintliga tilldelningar. Kontoskapandet ger inte automatiskt åtkomst till alla verksamhetsområden.</p>
