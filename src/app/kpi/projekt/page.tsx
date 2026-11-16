@@ -9,6 +9,7 @@ import {ProjectInternalEvidence} from '@/app/_components/project-internal-eviden
 import {ProjectCostCenterSelect} from '@/app/_components/project-cost-center-select';
 import {ProjectReportExport} from '@/app/_components/project-report-export';
 import {ProjectList} from '@/app/_components/project-list';
+import {ProjectRegisterOverview,ProjectNextBookedRevenue} from '@/app/_components/project-register-overview';
 import {ProjectReportLoading} from '@/app/_components/project-report-loading';
 import {ProjectCumulativeRevenue} from '@/app/_components/project-cumulative-revenue';
 import type {ProjectReport} from '@/lib/hub/project-report';
@@ -28,20 +29,33 @@ export default async function Page({searchParams}:{searchParams:Promise<Record<s
  const raw=await searchParams,q=Object.fromEntries(Object.entries(raw).map(([k,v])=>[k,Array.isArray(v)?v[0]:v])),groups=[...new Set((Array.isArray(raw.group)?raw.group:raw.group?[raw.group]:[]).filter(Boolean))];
  let selection:ProjectPeriod;
  try{selection=parseProjectPeriod(q);}catch{return <main className="content"><h1>Ogiltig period</h1><Link prefetch={false} href="/kpi/projekt">Återställ urval</Link></main>;}
+ const showRegister=q.register==='1';
+ const registerPage=typeof q.register_page==='string'&&/^\d{1,5}$/.test(q.register_page)?Math.min(Number(q.register_page),10000):0;
+ const registerSearch=q.search?.trim().slice(0,150)??'';
  const center=q.center||null,manager=q.manager||null,project=q.project||null,page=Number(q.page??0),kind=q.kind||null;
  if(!Number.isInteger(page)||page<0||page>10000||groups.length>50||center&&!['10','20','30','40','50','60','90'].includes(center)||kind&&!['revenue','cost'].includes(kind)||project&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(project))return <main className="content"><h1>Ogiltigt projekturval</h1><Link prefetch={false} href="/kpi/projekt">Återställ urval</Link></main>;
  const query=projectPeriodParams(selection);
  for(const [k,v] of Object.entries({center,manager,project,kind,search:q.search}))if(v)query.set(k,v);
  for(const g of groups)query.append('group',g);
+ const registerHref=projectReportHref(projectPeriodParams(selection),{register:'1',search:registerSearch||null});
+ const financialHref=projectReportHref(projectPeriodParams(selection),{search:registerSearch||null});
  const firstMonth=selection.from.slice(0,7)+'-01',lastDay=new Date(Date.UTC(Number(firstMonth.slice(0,4)),Number(firstMonth.slice(5,7)),0)).toISOString().slice(0,10);
  const monthHref=projectReportHref(query,{from:firstMonth,to:lastDay});
  return <KpiDetailShell query="" title="Projektuppföljning" breadcrumb="Humla Dashboard / Projekt" extraNavigation={<><Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanel</Link><Link href="/kpi?view=internal" prefetch={false}>Interna körningar</Link></>}>
   {selection.custom&&<p className="panel">Eget datumintervall: {selection.from}–{selection.to}. Månadsval nedan ersätter intervallet med hela månader.</p>}
   <KpiMonthPeriod period={selection.period} costCenter="" costCenters={[]} pathname="/kpi/projekt" showFilters={false}/>
+  <nav className={styles.pager} aria-label="Projektvyer">
+   <Link prefetch={false} className={showRegister?'secondary':'primary'} aria-current={!showRegister?'page':undefined} href={financialHref}>Projektuppföljning</Link>
+   <Link prefetch={false} className={showRegister?'primary':'secondary'} aria-current={showRegister?'page':undefined} href={registerHref}>Alla projekt i NeXT-registret</Link>
+  </nav>
+  {showRegister?<Suspense key={query.toString()+':register:'+registerPage} fallback={<p className="panel">Hämtar projektregistret…</p>}>
+   <ProjectRegisterOverview db={db} tenant={member.tenant_id} selection={selection} search={registerSearch} page={registerPage}/>
+  </Suspense>:<>
   {project&&<Suspense fallback={null}><ProjectCumulativeRevenue tenant={member.tenant_id} project={project}/></Suspense>}
   <Suspense key={query.toString()+':'+page} fallback={<ProjectReportLoading monthHref={monthHref}/>}>
    <ProjectReportBody db={db} tenant={member.tenant_id} selection={selection} query={query.toString()} q={q} groups={groups} center={center} manager={manager} project={project} page={page} kind={kind}/>
   </Suspense>
+  </>}
  </KpiDetailShell>;
 }
 async function ProjectReportBody({db,tenant,selection,query,q,groups,center,manager,project,page,kind}:{db:Awaited<ReturnType<typeof createClient>>;tenant:string;selection:ProjectPeriod;query:string;q:Record<string,string|undefined>;groups:string[];center:string|null;manager:string|null;project:string|null;page:number;kind:string|null}){
@@ -59,6 +73,7 @@ async function ProjectReportBody({db,tenant,selection,query,q,groups,center,mana
    <form className={styles.filters} key={JSON.stringify([from,to,months,center,manager,groups,project])}>{Array.from(projectPeriodParams(selection)).map(([key,value])=><input type="hidden" key={key} name={key} value={value}/>)} <ProjectCostCenterSelect value={center}/><label>Projektledare<select name="manager" defaultValue={manager??''}><option value="">Alla projektledare</option>{report.managers.map(m=><option key={m} value={m}>{m}</option>)}</select></label><fieldset className={styles.groupFilter}><legend>Verksamhetsgrupper</legend><div className={styles.groupChoices}>{groupOptions.map(g=><label key={g}><input type="checkbox" name="group" value={g} defaultChecked={groups.includes(g)}/>{g}</label>)}</div>{!groupOptions.length&&<p>Inga verksamhetsgrupper har belopp i urvalet.</p>}{inactiveGroups.length>0&&<p>Valda grupper utan belopp i urvalet: {inactiveGroups.join(', ')}.{inactiveGroups.map(g=><input type="hidden" key={g} name="group" value={g}/>)}</p>}<small>Visar grupper med intäkter eller kostnader i valt KST, period och projektledarurval. Inga kryss = alla grupper.</small> <Link prefetch={false} href={href({group:null,project:null,kind:null})}>Visa alla grupper</Link></fieldset><label>Sök i projektlistan<input name="search" defaultValue={q.search??''} placeholder="Projektnummer, namn eller grupp"/></label>{project&&<input type="hidden" name="project" value={project}/>}<button className="primary">Visa urval</button><Link prefetch={false} href={href({project:null,kind:null})}>Alla projekt i urvalet</Link></form>
    <p className={styles.note}>Senaste NeXT-bokföringsdatum i underlaget: {report.latest_source_date??'Underlag saknas'}. {report.excluded_rows} felaktiga poster undantagna. {report.summary.vehicle_allocation_pending??0} poster väntar på fordonsfördelning men ingår på säkert identifierat projekt. {report.hub_unmapped_rows} Workify/TransPA-rader saknar entydigt registerprojekt och är undantagna. {report.summary.unclassified_rows??0} kostnadsrader saknar kategori men ingår i kostnaden.</p><ProjectReportExport report={report}/>
   </section>
+  {selected&&<Suspense fallback={null}><ProjectNextBookedRevenue db={db} tenant={tenant} selection={selection} projectNumber={selected.project_number}/></Suspense>}
   {company&&<section className="panel">
    <h2>Bolagstotal för projekt efter internavräkning</h2>
    <dl>
