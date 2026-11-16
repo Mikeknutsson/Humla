@@ -1,6 +1,3 @@
-import {ForemanWidget} from '@/app/_components/foreman-widget';
-import {ForemanWidgetActions} from '@/app/_components/foreman-widget-actions';
-import {foremanWidgetHref,foremanWidgetReturn} from '@/lib/kpi/foreman-widget';
 import Link from 'next/link';
 import {Suspense} from 'react';
 import {unitDailyRevenueTargets,productiveDayBasis} from '@/lib/hub/daily-revenue-target';
@@ -34,17 +31,18 @@ function ForemanDashboard({owner=false,query='',children}:{owner?:boolean;query?
 
 export default async function MyUnits({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}) {
  const q=await searchParams,today=stockholmToday();
- const widgetPeriod=q.widget==='month'||q.widget==='ytd'?q.widget:null;
+ if(q.widget==='month'||q.widget==='ytd'){
+  const period=new URLSearchParams({period_mode:q.widget==='month'?'month':'revenue'});
+  if(q.user_id)period.set('user_id',q.user_id);
+  redirect('/kpi/mina-enheter?'+period);
+ }
  const db=await createClient();
  const {data:{user}}=await db.auth.getUser();
- if(!user){
-  const resume=widgetPeriod?foremanWidgetReturn(foremanWidgetHref(widgetPeriod,q.user_id)):null;
-  redirect(resume?'/kpi/login?'+new URLSearchParams({return_to:resume}):'/kpi/login');
- }
+ if(!user)redirect('/kpi/login');
  const {data:member}=await db.from('hub_tenant_members').select('tenant_id,role,display_name').eq('user_id',user.id).eq('status','active').limit(1).maybeSingle();
  if(!member)return <ForemanDashboard><div className="content"><h2>Ingen aktiv arbetsyta</h2></div></ForemanDashboard>;
  const owner=member.role==='owner';
- const periodQuery=widgetPeriod?{period_mode:widgetPeriod==='month'?'month':'revenue'}:q;
+ const periodQuery=q;
  let fiscalYear:number;
  try{fiscalYear=foremanFiscalYear(periodQuery.fiscal_year,today);}catch{return <ForemanDashboard owner={owner}><div className="content"><p>Ogiltigt verksamhetsår.</p><Link href="/kpi/mina-enheter">Återställ</Link></div></ForemanDashboard>;}
  const [people,cutoff]=await Promise.all([
@@ -56,19 +54,14 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  try{chosen=resolveForemanPeriod({...periodQuery,period_mode:periodQuery.period_mode===undefined||periodQuery.period_mode==='ytd'?'revenue':periodQuery.period_mode},cutoff.error?null:cutoff.data?.revenue_through??null,today);}catch{return <ForemanDashboard owner={owner}><div className="content"><p>Ogiltigt periodval.</p><Link href="/kpi/mina-enheter">Återställ</Link></div></ForemanDashboard>;}
  const {from,to}=chosen;
  const continuous=foremanMonthsContiguous(chosen);
- const target=owner?(q.user_id??(widgetPeriod?'transport':null)):user.id;
+ const target=owner?(q.user_id??null):user.id;
  const period=new URLSearchParams({from,...(to?{to}:{}),...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})});
  const combinedTransport=owner&&target==='transport';
  const controls=<ForemanPeriodPicker period={chosen} userId={owner?target:null} cutoffError={Boolean(cutoff.error)}/>;
  const profiles=owner&&<section className="panel">{!target&&<><h2>Välj arbetsledarvy</h2><p>Förhandsvisa det underlag respektive läsprofil får se.</p></>}<Link prefetch={false} className={target?'secondary':'metric-card'} aria-current={combinedTransport?'page':undefined} href={'/kpi/mina-enheter?'+foremanPeriodQuery(chosen,'transport')}><strong>Transport</strong>{!target&&<span>Marcus, Ola och Pierre</span>}</Link>{people.error?<p role="alert">Profilerna kunde inte hämtas. Försök igen.</p>:<div className={target?undefined:"metrics-grid"} style={target?{display:"flex",flexWrap:"wrap",gap:8}:undefined}><Link prefetch={false} className={target?"secondary":"metric-card"} href={"/kpi/verkstad?"+foremanPeriodQuery(chosen.mode==='revenue'?{...chosen,mode:'ytd'}:chosen)}><strong>Verkstaden</strong>{!target&&<><span>KST 40 · Ekonomi och verkstadstid</span><small>Visa arbetsledarvy →</small></>}</Link>{profileRows.map(p=><Link key={p.user_id} prefetch={false} className={target?"secondary":"metric-card"} aria-current={target===p.user_id?'page':undefined} style={{textDecoration:'none',border:target===p.user_id?'2px solid #e1ad27':undefined}} href={'/kpi/mina-enheter?'+foremanPeriodQuery(chosen,p.user_id)}><strong>{p.display_name??'Arbetsledare'}</strong>{!target&&<><span>Läsåtkomst</span><small>Visa arbetsledarvy →</small></>}</Link>)}</div>}{!people.error&&!profileRows.length&&<p>Inga arbetsledarprofiler finns att förhandsvisa.</p>}</section>;
  if(owner&&!target)return <ForemanDashboard owner query={period.toString()}><div className="content">{profiles}<section className="panel">{controls}</section></div></ForemanDashboard>;
  if(!target)return <ForemanDashboard owner={owner}><div className="content"><p>Ingen profil vald.</p></div></ForemanDashboard>;
- const profile=owner?target:null;
- const widgetHref=foremanWidgetHref('month',profile);
- const detailHref='/kpi/mina-enheter?'+foremanPeriodQuery(chosen,profile);
- const widgetTitle=combinedTransport?'Transport totalt':'Mitt område';
- if(widgetPeriod&&to===null)return <ForemanWidget period={widgetPeriod} profile={profile} report={null} detailHref={detailHref} dates="" title={widgetTitle}/>;
- if(to===null){const empty=<div className="content">{profiles}<section className="panel">{controls}<ForemanWidgetActions href={widgetHref}/><p>Giltigt intäktsunderlag saknas. Välj en annan period.</p></section></div>;return <ForemanDashboard owner={owner}>{empty}</ForemanDashboard>;}
+ if(to===null){const empty=<div className="content">{profiles}<section className="panel">{controls}<p>Giltigt intäktsunderlag saknas. Välj en annan period.</p></section></div>;return <ForemanDashboard owner={owner}>{empty}</ForemanDashboard>;}
  if(!validTransportDate(from)||!validTransportDate(to)||from>to||Date.parse(to)-Date.parse(from)>366*86400000||(!combinedTransport&&!/^[0-9a-f-]{36}$/i.test(target)))return <ForemanDashboard owner={owner}><div className="content"><p>Ogiltigt urval.</p><Link href="/kpi/mina-enheter">Återställ</Link></div></ForemanDashboard>;
  const args={p_tenant:member.tenant_id,p_from:from,p_to:to,p_user:combinedTransport?'00000000-0000-0000-0000-000000000030':target,...(chosen.mode==='months'?{p_months:chosen.months}:{})};
  if(owner&&!combinedTransport&&!profileRows.some(p=>p.user_id===target))return <ForemanDashboard owner><div className="content">{profiles}<p role="alert">Välj en av arbetsledarprofilerna ovan.</p></div></ForemanDashboard>;
@@ -78,14 +71,13 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  const current=await db.rpc('hub_transport_leader_scorecard_v4',args);
  if(current.error)console.error('foreman_report_failed',{rpc:'hub_transport_leader_scorecard_v4',code:current.error.code,from,to});
  const report=current.data as TransportScorecard|null;
- if(widgetPeriod)return <ForemanWidget period={widgetPeriod} profile={profile} report={!current.error&&report?.units.length?report:null} detailHref={detailHref} dates={from+' – '+to} title={widgetTitle}/>;
  const name=combinedTransport?'Transport':owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
  const groupUnits=combinedTransport||/^ola(?:\s|$)/i.test(name?.trim()??'');
  const base=new URLSearchParams({from,to,user_id:target,...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})}).toString();
  const view=<div className="content">{profiles}
  <header className="panel"><h2>{owner?name??'Arbetsledarvy':'Mitt område'}</h2><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> {combinedTransport?'Du ser Marcus, Olas och Pierres tilldelade underlag.':'Du ser profilens avgränsade underlag.'} <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
- {controls}<ForemanWidgetActions href={widgetHref}/></header>
+ {controls}</header>
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
 
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>

@@ -12,10 +12,7 @@ import { ArrowLeft, RefreshCw, MessageSquare,RotateCcw } from "lucide-react";
 
 export function KpiRefresh({foremanOwner=false}:{foremanOwner?:boolean}) {
   const pathname=usePathname();
-  const search=useSearchParams();
-  const isForeman=pathname==="/kpi/mina-enheter";
-  const isWidget=["month","ytd"].includes(search.get("widget")??"");
-  if(isForeman&&!isWidget&&!foremanOwner)return null;
+  if(pathname==="/kpi/mina-enheter"&&!foremanOwner)return null;
   return <KpiRefreshBar/>;
 }
 
@@ -23,7 +20,6 @@ function KpiRefreshBar() {
   const pathname = usePathname();
   const search = useSearchParams();
   const params = new URLSearchParams(search.toString());
-  const isWidget = pathname === "/kpi/mina-enheter" && ["month","ytd"].includes(params.get("widget") ?? "");
   for (const key of ['view','level','grain','page','auth_retry']) params.delete(key);
   const dashboardHref = `/kpi?${params}`;
   const [refreshing, setRefreshing] = useState(false);
@@ -54,7 +50,7 @@ function KpiRefreshBar() {
         if(generation.current&&version&&generation.current!==version){
           setUpdatePending(true);
           const editing=document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
-          if((isWidget||canAutoRefreshKpi(pathname,query))&&!editing){
+          if(canAutoRefreshKpi(pathname,query)&&!editing){
             // A document refresh clears client report snapshots too, including
             // monthly reports and forecast period caches. URL filters survive.
             window.location.reload();
@@ -79,9 +75,9 @@ function KpiRefreshBar() {
     window.addEventListener('humla:kpi-imported',recheck);
     document.addEventListener('visibilitychange',recheck);
     return ()=>{controller.abort();if(timer)clearTimeout(timer);window.removeEventListener('focus',recheck);window.removeEventListener('humla:kpi-imported',recheck);document.removeEventListener('visibilitychange',recheck);};
-  },[pathname,query,isWidget]);
+  },[pathname,query]);
   const lastSync=sync?.synced_at?new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',dateStyle:'short',timeStyle:'short'}).format(new Date(sync.synced_at)):null;
-  if (isWidget || pathname === "/kpi/login" || pathname === "/kpi/fordon") return null;
+  if (pathname === "/kpi/login" || pathname === "/kpi/fordon") return null;
 
   return <div className="kpi-refresh-bar no-print">
     {pathname !== "/kpi" && <Link href={dashboardHref} prefetch={false}><ArrowLeft size={16}/>Dashboard</Link>}
