@@ -23,8 +23,12 @@ export async function POST(request:Request){
       return Response.json({error:'Välj en Excel-fil (.xlsx eller .xls) på högst 4 MB.'},{status:400});
     if(mode!=='preview'&&mode!=='import')return Response.json({error:'Ogiltig importåtgärd.'},{status:400});
     const bytes=new Uint8Array(await file.arrayBuffer());
-    const projects=readNextProjectFile(bytes);
-    if(mode==='preview')return Response.json({rows:projects.length,preview:projects.slice(0,5)});
+    const {projects,invalidCostCenterRows}=readNextProjectFile(bytes);
+    const warnings={
+      count:invalidCostCenterRows.length,
+      rows:invalidCostCenterRows.slice(0,10),
+    };
+    if(mode==='preview')return Response.json({rows:projects.length,preview:projects.slice(0,5),warnings});
     const hash=createHash('sha256').update(bytes).digest('hex');
     const batchId=randomUUID();
     const path=`${tenantId}/${batchId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-120)}`;
@@ -38,7 +42,7 @@ export async function POST(request:Request){
       console.error('[next-project-import]',{code:error.code});
       return Response.json({error:'Projektimporten kunde inte slutföras. Kontrollera Importhistorik innan du försöker igen.'},{status:422});
     }
-    return Response.json(data);
+    return Response.json({...data,warnings});
   }catch(error){
     return Response.json({error:error instanceof Error?error.message:'Projektfilen kunde inte läsas.'},{status:422});
   }

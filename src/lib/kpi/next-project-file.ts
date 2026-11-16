@@ -22,17 +22,22 @@ export function readNextProjectFile(bytes:Uint8Array){
     const indexes=Object.fromEntries(Object.entries(columns).map(([key,names])=>[key,names.map(label=>labels.indexOf(label.toLocaleLowerCase('sv'))).find(index=>index>=0)??-1]));
     if(indexes.project_number<0||indexes.project_name<0)continue;
     if(indexes.cost_center_name===indexes.cost_center)indexes.cost_center_name=-1;
+    const invalidCostCenterRows:number[]=[];
     const projects=rows.flatMap((values,index)=>{
       if(!values.some(value=>String(value).trim()))return [];
       const project=Object.fromEntries(Object.entries(indexes).map(([key,column])=>[key,String(values[column]??'').trim()]));
       if(!project.project_number||!project.project_name)throw Error(`Rad ${index+2} saknar projektnummer eller projektnamn.`);
       if(seen.has(project.project_number))throw Error(`Rad ${index+2} har ett projektnummer som redan finns i filen.`);
-      if(project.cost_center&&!/^\d{1,8}$/.test(project.cost_center))throw Error(`Rad ${index+2} har ett ogiltigt kostnadsställenummer.`);
+      if(project.cost_center&&!/^\d{1,8}$/.test(project.cost_center)){
+        invalidCostCenterRows.push(index+2);
+        project.cost_center='';
+        project.cost_center_name='';
+      }
       seen.add(project.project_number);
       return [project];
     });
     if(!projects.length||projects.length>10000)throw Error('Filen måste innehålla 1–10 000 projekt.');
-    return projects;
+    return {projects,invalidCostCenterRows};
   }
   throw Error('Inget blad med Projektnr och Projektnamn hittades.');
 }
