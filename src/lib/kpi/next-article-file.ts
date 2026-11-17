@@ -84,3 +84,13 @@ export function readNextArticleFile(bytes:Uint8Array) {
   if(articles.size>10000)throw Error('Exporten har fler än 10 000 artikelvarianter. Exportera en kortare period.');
   return {articles:[...articles.values()],sourceRows,skipped,periodStart,periodEnd};
 }
+
+export function nextArticleImportSummary({articles,sourceRows,skipped,periodStart,periodEnd}:ReturnType<typeof readNextArticleFile>) {
+  return {rows:articles.length,sourceRows,skipped:skipped.length,skippedExamples:skipped.slice(0,5),periodStart,periodEnd};
+}
+
+export function nextArticleImportPreview(parsed:ReturnType<typeof readNextArticleFile>) {
+  return {...nextArticleImportSummary(parsed),preview:parsed.articles.slice(0,8)};
+}
+
+export type NextArticlePreview=ReturnType<typeof nextArticleImportPreview>;

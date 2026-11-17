@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
-import { readNextArticleFile } from '@/lib/kpi/next-article-file';
+import { nextArticleImportPreview, nextArticleImportSummary, readNextArticleFile } from '@/lib/kpi/next-article-file';
 
 export const runtime='nodejs';
 
@@ -27,9 +27,8 @@ export async function POST(request:Request) {
   } catch(error) {
     return Response.json({error:error instanceof Error?error.message:'Excel-filen kunde inte läsas.'},{status:422});
   }
-  const {articles,sourceRows,skipped,periodStart,periodEnd}=parsed;
-  const summary={rows:articles.length,sourceRows,skipped:skipped.length,skippedExamples:skipped.slice(0,5),periodStart,periodEnd};
-  if(mode==='preview')return Response.json({...summary,preview:articles.slice(0,8)});
+  if(mode==='preview')return Response.json(nextArticleImportPreview(parsed));
+  const {articles,sourceRows,periodStart,periodEnd}=parsed;
 
   const hash=createHash('sha256').update(bytes).digest('hex'), batchId=randomUUID();
   const path=`${tenantId}/${batchId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-120)}`;
@@ -46,5 +45,5 @@ export async function POST(request:Request) {
     console.error('[next-article-import]',{code:error?.code});
     return Response.json({error:'NeXT-artiklarna kunde inte sparas. Kontrollera Importhistorik innan du försöker igen.'},{status:422});
   }
-  return Response.json({...summary,...data});
+  return Response.json({...nextArticleImportSummary(parsed),...data});
 }

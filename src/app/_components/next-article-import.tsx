@@ -3,18 +3,14 @@
 import Link from 'next/link';
 import {useState} from 'react';
 import {requestImport} from '@/lib/kpi/import-request';
+import type {NextArticlePreview} from '@/lib/kpi/next-article-file';
 
-type ImportSummary = {
-  rows:number; sourceRows:number; skipped:number; skippedExamples:string[];
-  periodStart:string|null; periodEnd:string|null;
-};
-type Preview = ImportSummary & {preview:{code:string;name:string;unit:string;price_list:string;source_rows:number}[]};
 const count=new Intl.NumberFormat('sv-SE');
 const history='/kpi?view=importhistorik&history_kind=next_articles';
 
-export function NextArticleImport({initialFile,onBusyChange}:{initialFile?:File;onBusyChange:(busy:boolean)=>void}) {
-  const [file,setFile]=useState<File|null>(initialFile??null);
-  const [preview,setPreview]=useState<Preview|null>(null);
+export function NextArticleImport({initial,onBusyChange}:{initial?:{file:File;preview:NextArticlePreview};onBusyChange:(busy:boolean)=>void}) {
+  const [file,setFile]=useState<File|null>(initial?.file??null);
+  const [preview,setPreview]=useState<NextArticlePreview|null>(initial?.preview??null);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
@@ -41,13 +37,13 @@ export function NextArticleImport({initialFile,onBusyChange}:{initialFile?:File;
 
   return <section className="panel" id="next-artikelimport">
     <div className="panel-head"><h2>Importera artiklar från NeXT</h2><Link prefetch={false} className="secondary" href="/kpi/next-artiklar">Visa NeXT-artiklar</Link></div>
-    <p>Välj Excel-exporten <strong>Arbetsorder – Resursuppföljning</strong>. Humla samlar återkommande rader från arbetsordrar i ett separat NeXT-register.</p>
-    {initialFile&&file&&<p>Vald fil · {file.name}</p>}
+    {initial?<p>Identifierat som <strong>Arbetsorder – Resursuppföljning</strong> · {initial.file.name}</p>:
+      <p>Välj Excel-exporten <strong>Arbetsorder – Resursuppföljning</strong>. Humla samlar återkommande rader från arbetsordrar i ett separat NeXT-register.</p>}
     <fieldset disabled={busy} style={{border:0,padding:0,minWidth:0}}>
-      <label>Resursuppföljning <input type="file" accept=".xlsx,.xls" onChange={event=>{
+      {!initial&&<><label>Resursuppföljning <input type="file" accept=".xlsx,.xls" onChange={event=>{
         setFile(event.target.files?.[0]??null);setPreview(null);setMessage('');setError('');
       }}/></label>{' '}
-      <button type="button" className="secondary" disabled={!file} onClick={()=>void run('preview')}>Förhandsgranska</button>
+      <button type="button" className="secondary" disabled={!file} onClick={()=>void run('preview')}>Förhandsgranska</button></>}
       {preview&&<>
         <p>{count.format(preview.sourceRows)} källrader innehåller {count.format(preview.rows)} artikelvarianter.
           {preview.periodStart&&` Utfört ${preview.periodStart} – ${preview.periodEnd}.`}</p>

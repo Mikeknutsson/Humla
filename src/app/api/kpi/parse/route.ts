@@ -1,4 +1,4 @@
-import { isNextArticleResourceExport } from "@/lib/kpi/next-article-file";
+import { isNextArticleResourceExport, nextArticleImportPreview, readNextArticleFile } from "@/lib/kpi/next-article-file";
 import {detectStenaWorkbook} from "@/lib/hub/stena-import";
 import { parseImportFile } from "@/lib/kpi/parser";
 import { DATA_KINDS, detectDataKind, isNextRevenue, suggestMapping, type DataKind } from "@/lib/kpi/schema";
@@ -25,7 +25,12 @@ export async function POST(request: Request) {
       if(stena)return Response.json({detectedSource:'stena',stena});
     }
     const table = await parseImportFile(file);
-    if(isNextArticleResourceExport(table.headers))return Response.json({detectedSource:'next_articles'});
+    if(isNextArticleResourceExport(table.headers)){
+      if(!/\.xlsx?$/i.test(file.name)||file.size>4_000_000||file.name.length>200)
+        return Response.json({error:'Välj en Excel-fil (.xlsx eller .xls) på högst 4 MB.'},{status:400});
+      const articles=readNextArticleFile(new Uint8Array(await file.arrayBuffer()));
+      return Response.json({detectedSource:'next_articles',articlePreview:nextArticleImportPreview(articles)});
+    }
     const detectedKind = isNextRevenue(table) ? "next_revenue" : detectDataKind(table.headers);
     const kind = requestedKind === "auto" ? detectedKind : requestedKind as DataKind;
     return Response.json({

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { isNextArticleResourceExport } from './next-article-file';
 
 const columns = {
   project_number:['Projektnr','Projektnummer'],
@@ -18,6 +19,7 @@ export function readNextProjectFile(bytes:Uint8Array){
     const sheet=workbook.Sheets[name];
     const [header,...rows]=XLSX.utils.sheet_to_json<string[]>(sheet,{header:1,raw:false,defval:'',blankrows:true});
     if(!header)continue;
+    if(isNextArticleResourceExport(header))throw Error('Det här är Arbetsorder – Resursuppföljning. Släpp filen i den vanliga dropprutan högst upp på Dataimport för att importera NeXT-artiklar.');
     const labels=header.map(value=>String(value).trim().toLocaleLowerCase('sv'));
     const indexes=Object.fromEntries(Object.entries(columns).map(([key,names])=>[key,names.map(label=>labels.indexOf(label.toLocaleLowerCase('sv'))).find(index=>index>=0)??-1]));
     if(indexes.project_number<0||indexes.project_name<0)continue;

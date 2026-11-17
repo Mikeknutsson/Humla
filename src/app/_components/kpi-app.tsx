@@ -11,6 +11,7 @@ import {WorkshopTimeKpi} from './workshop-time-kpi';
 
 import { KpiCostBreakdown } from "./kpi-cost-breakdown";
 import {NextArticleImport} from "./next-article-import";
+import type {NextArticlePreview} from "@/lib/kpi/next-article-file";
 import {NextProjectImport} from "./next-project-import";
 import {KpiWorkspace,KpiSidebarToggle} from './kpi-workspace';
 import workspaceStyles from './kpi-workspace.module.css';
@@ -172,7 +173,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
   const [stenaImport, setStenaImport] = useState(() => liveQuery.get("import_source") === "stena");
   const [stenaFile, setStenaFile] = useState<File | null>(null);
   const [stenaBusy, setStenaBusy] = useState(false);
-  const [nextArticleFile, setNextArticleFile] = useState<File | null>(null);
+  const [nextArticleImport, setNextArticleImport] = useState<{file:File;preview:NextArticlePreview}|null>(null);
   const [nextArticleBusy, setNextArticleBusy] = useState(false);
   const [dataKind, setDataKind] = useState<DataKind>("revenue");
   const [automatic, setAutomatic] = useState(true);
@@ -273,7 +274,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
 
   function selectFiles(files: File[]) {
     if (busy || stenaBusy || nextArticleBusy || !files.length) return;
-    setNextArticleFile(null);
+    setNextArticleImport(null);
     setStenaImport(false);
     setStenaFile(null);
     setFile(files[0]);
@@ -301,9 +302,9 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
     try {
       const result = await requestImport("/api/kpi/parse",body,{readOnly:true,timeout:60000});
       if(result.detectedSource==='next_articles'){
-        setNextArticleFile(file);setPreview(null);setStenaImport(false);setStenaFile(null);return;
+        setNextArticleImport({file,preview:result.articlePreview});setPreview(null);setStenaImport(false);setStenaFile(null);return;
       }
-      setNextArticleFile(null);
+      setNextArticleImport(null);
       if(result.detectedSource==='stena'){setStenaFile(file);setStenaImport(true);setPreview(null);setMessage(null);return;}
       setStenaImport(false);
       setStenaFile(null);
@@ -352,7 +353,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
 
   function chooseKind(next: DataKind) {
     setStenaImport(false);
-    setNextArticleFile(null);
+    setNextArticleImport(null);
     setDataKind(next);
     setAutomatic(false);
     setKindConfirmed(true);
@@ -457,10 +458,10 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
         {!canManage ? <section className="empty-state"><AlertTriangle size={28}/><div><h2>Du saknar importbehörighet</h2><p>Behörigheten <code>kpi.manage</code> krävs för att lägga in underlag.</p></div></section> : <>
           <Link prefetch={false} className="secondary" href="/kpi?view=importhistorik">Visa importhistorik</Link>
           <section className="panel"><h2>Släpp filen här</h2><details className="kpi-help"><summary>Så fungerar filimporten</summary><p>Humla läser filen och försöker känna igen Workify, NEXT, Stena och övriga underlag. Du kontrollerar resultatet innan något sparas.</p></details><label className={`dropzone ${file ? "has-file" : ""}`} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();if(!busy&&!stenaBusy&&!nextArticleBusy)selectFiles(Array.from(event.dataTransfer.files));}}><input type="file" multiple disabled={busy||stenaBusy||nextArticleBusy} accept=".pdf,.xlsx,.xls,.csv" onChange={event=>selectFiles(Array.from(event.target.files??[]))}/><UploadCloud size={30}/><strong>{busy?'Läser filen…':file?file.name:'Dra in filer eller klicka för att välja'}</strong><span>PDF · Excel · CSV. Max 4 MB per fil, Stena max 3 MB.</span></label>{pendingFiles.length>0&&<p>{pendingFiles.length} filer väntar. Filerna granskas och sparas en i taget. <button className="secondary" disabled={busy||stenaBusy||nextArticleBusy} onClick={()=>selectFiles(pendingFiles)}>Hoppa till nästa fil</button></p>}</section>
-          <details className="panel" open={Boolean(file&&!busy&&!stenaImport&&!nextArticleFile&&!kindConfirmed)}><summary>Ändra underlagstyp / fler importinställningar</summary><p>Vanligtvis känner Humla igen filen automatiskt. Välj manuellt om identifieringen är osäker.</p><label><input type="checkbox" checked={automatic} disabled={busy||stenaBusy||nextArticleBusy} onChange={event=>{setAutomatic(event.target.checked);setKindConfirmed(!event.target.checked);}}/> Identifiera underlag automatiskt</label>
-          <p><label>Underlagstyp <select value={nextArticleFile?'next_articles':stenaImport?'stena':dataKind} disabled={busy||stenaBusy||nextArticleBusy} onChange={event=>{if(event.target.value==='stena'){setNextArticleFile(null);setStenaFile(file);setStenaImport(true);}else if(event.target.value!=='next_articles')chooseKind(event.target.value as DataKind);}}><optgroup label="Ekonomi"><option value="revenue">Intäkter – Workify</option><option value="next_revenue">Intäkter – NeXT</option><option value="cost">Kostnader – NEXT</option><option value="stena">Stena – historik och avräkningar</option></optgroup><optgroup label="Kompletterande underlag">{nextArticleFile&&<option value="next_articles">Artiklar – NeXT</option>}{(['fuel','vehicle_activity','driver_time','next_historical_time'] as DataKind[]).map(key=><option key={key} value={key}>{DATA_KINDS[key].label}</option>)}</optgroup></select></label></p>
+          <details className="panel" open={Boolean(file&&!busy&&!stenaImport&&!nextArticleImport&&!kindConfirmed)}><summary>Ändra underlagstyp / fler importinställningar</summary><p>Vanligtvis känner Humla igen filen automatiskt. Välj manuellt om identifieringen är osäker.</p><label><input type="checkbox" checked={automatic} disabled={busy||stenaBusy||nextArticleBusy} onChange={event=>{setAutomatic(event.target.checked);setKindConfirmed(!event.target.checked);}}/> Identifiera underlag automatiskt</label>
+          <p><label>Underlagstyp <select value={nextArticleImport?'next_articles':stenaImport?'stena':dataKind} disabled={busy||stenaBusy||nextArticleBusy} onChange={event=>{if(event.target.value==='stena'){setNextArticleImport(null);setStenaFile(file);setStenaImport(true);}else if(event.target.value!=='next_articles')chooseKind(event.target.value as DataKind);}}><optgroup label="Ekonomi"><option value="revenue">Intäkter – Workify</option><option value="next_revenue">Intäkter – NeXT</option><option value="cost">Kostnader – NEXT</option><option value="stena">Stena – historik och avräkningar</option></optgroup><optgroup label="Kompletterande underlag">{nextArticleImport&&<option value="next_articles">Artiklar – NeXT</option>}{(['fuel','vehicle_activity','driver_time','next_historical_time'] as DataKind[]).map(key=><option key={key} value={key}>{DATA_KINDS[key].label}</option>)}</optgroup></select></label></p>
           </details>
-          {nextArticleFile ? <NextArticleImport key={`${nextArticleFile.name}:${nextArticleFile.lastModified}:${nextArticleFile.size}`} initialFile={nextArticleFile} onBusyChange={setNextArticleBusy}/>
+          {nextArticleImport ? <NextArticleImport key={`${nextArticleImport.file.name}:${nextArticleImport.file.lastModified}:${nextArticleImport.file.size}`} initial={nextArticleImport} onBusyChange={setNextArticleBusy}/>
           : stenaImport ? <StenaImport key={stenaFile?`${stenaFile.name}:${stenaFile.lastModified}:${stenaFile.size}`:"manual"} initialFile={stenaFile??undefined} onBusyChange={setStenaBusy}/> : <>
           {file&&<section className="panel"><h2>{preview?`Identifierat: ${selectedDefinition.label}`:'Kontrollera underlagstyp'}</h2><p>{file.name}{preview?` · ${preview.totalRows} rader`:''}</p><button className="secondary" disabled={busy} onClick={()=>void analyse()}>Läs om filen</button></section>}
           {preview && dataKind === "next_revenue" && <details className="kpi-help kpi-help-warning"><summary>Om dubbletter mellan NeXT och Workify</summary><p>NeXT-rader som redan importerats hoppas över. Workify och NeXT har separata fakturareferenser. Överförda intäkter behöver stämmas av mellan systemen innan bolagstotalen verifieras.</p></details>}
@@ -468,8 +469,8 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
           {preview && <section className="panel"><div className="panel-head"><div><span className="section-kicker">Steg 3</span><h2>Kontrollera kolumnmappningen</h2></div><span className="row-count">{preview.totalRows} rader hittades</span></div><div className="mapping-grid">{selectedDefinition.fields.map((field) => <label key={field.key}><span>{field.label}{field.required && <b>*</b>}</span><select disabled={dataKind === "next_revenue"} value={mapping[field.key] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Inte mappad</option>{preview.headers.map((header) => <option value={header} key={header}>{header}</option>)}</select></label>)}</div><div className="preview-table"><table><thead><tr>{preview.headers.slice(0,8).map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{preview.rows.slice(0,6).map((row, index) => <tr key={index}>{preview.headers.slice(0,8).map((header) => <td key={header}>{row[header] || "–"}</td>)}</tr>)}</tbody></table></div><div className="import-confirm"><div><ShieldCheck size={19}/><p><strong>Fail-closed import</strong><span>Ogiltiga eller osäkert mappade rader påverkar inte nyckeltalen.</span></p></div><button className="primary" disabled={!requiredComplete || !kindConfirmed || !!rulePreview.error || busy} onClick={importFile}>{busy ? "Importerar…" : "Importera och spara"}</button></div></section>}
           {message && <div className={`message ${message.type}`}>{message.type === "success" ? <CheckCircle2 size={18}/> : <AlertTriangle size={18}/>} {message.text}{message.reconnect&&<a className="secondary" href="/kpi?view=import" target="_blank" rel="noopener noreferrer">Återanslut i ny flik</a>}</div>}
           </>}
-          <NextProjectImport/>
-          {!nextArticleFile&&<NextArticleImport key="manual-next-articles" onBusyChange={setNextArticleBusy}/>}
+          {!nextArticleImport&&<NextProjectImport/>}
+          {!nextArticleImport&&<NextArticleImport key="manual-next-articles" onBusyChange={setNextArticleBusy}/>}
         </>}
       </div>}
 
