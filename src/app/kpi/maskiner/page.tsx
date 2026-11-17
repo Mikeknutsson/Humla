@@ -54,7 +54,7 @@ function MachineMonthlyTrend({months}:{months:Report['months']}){
    {months.map(({month_key:month,value},index)=>{
     const x=8+(index+.5)*(width-16)/months.length;
     return <g key={month}>
-     {value!==null&&<rect x={x-barWidth/2} y={Math.min(y(0),y(value))} width={barWidth} height={Math.max(1,Math.abs(y(0)-y(value)))} fill="#1769aa"><title>{month} · {money(value)}</title></rect>}
+     {value!==null&&<rect x={x-barWidth/2} y={Math.min(y(0),y(value))} width={barWidth} height={Math.max(1,Math.abs(y(0)-y(value)))} fill="#1769aa"><title>{`${month} · ${money(value)}`}</title></rect>}
      <text x={x} y="146" textAnchor="middle" className={trendStyles.axis}>{month}</text>
     </g>;
    })}
