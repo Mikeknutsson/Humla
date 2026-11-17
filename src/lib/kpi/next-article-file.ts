@@ -54,12 +54,13 @@ export function isNextArticleResourceExport(headers:unknown[]) {
   return ['ao nr',columns.code,columns.name,columns.unit].every(label=>labels.has(label));
 }
 
-export function readNextArticleFile(bytes:Uint8Array,{includeWorkshop=false}={}) {
+export function readNextArticleFile(bytes:Uint8Array,{includeWorkshop=false,includeMachines=false}={}) {
   if(!((bytes[0]===0x50&&bytes[1]===0x4b)||(bytes[0]===0xd0&&bytes[1]===0xcf)))throw Error('Välj originalexporten i Excel-format.');
   const workbook=XLSX.read(bytes,{type:'array'});
   const articles=new Map<string,Article>();
   const skipped:string[]=[];
   const workshopRows:WorkshopResourceRow[]=[];
+  const machineRows:WorkshopResourceRow[]=[];
   let workshopColumns=false;
   let matched=false, sourceRows=0, periodStart:string|null=null, periodEnd:string|null=null;
   for(const sheetName of workbook.SheetNames) {
@@ -84,7 +85,9 @@ export function readNextArticleFile(bytes:Uint8Array,{includeWorkshop=false}={})
       if(!code&&!name&&!unit&&!account&&!price_list&&!cell('performed')?.v&&!cell('price')?.v&&!cell('cost')?.v)continue;
       if(++sourceRows>30000)throw Error('Exporten har fler än 30 000 rader. Exportera en kortare period.');
       const performed=readDate(cell('performed')?.v);
-      if(includeWorkshop&&canReadWorkshop&&account==='4630')workshopRows.push({
+      const workshop=includeWorkshop&&account==='4630';
+      const machine=includeMachines&&account!=='4630'&&/^(M|IN|RE|UT|EL)\d/i.test(code);
+      if(canReadWorkshop&&(workshop||machine))(workshop?workshopRows:machineRows).push({
         sheet:sheetName,source_row:r+1,project:label('project'),project_name:label('project_name'),
         work_order:label('work_order'),order_name:label('order_name'),center:label('center'),
         code,article:name,unit,performed_on:performed,quantity:readAmount(cell('quantity')?.v),
@@ -111,7 +114,7 @@ export function readNextArticleFile(bytes:Uint8Array,{includeWorkshop=false}={})
   if(!matched)throw Error('Inget blad för Arbetsorder – Resursuppföljning hittades. Exporten behöver innehålla AO nr, Kod, Benämning och Enhet.');
   if(!articles.size)throw Error('Inga giltiga rader med artikelkod och benämning hittades.');
   if(articles.size>10000)throw Error('Exporten har fler än 10 000 artikelvarianter. Exportera en kortare period.');
-  return {articles:[...articles.values()],sourceRows,skipped,periodStart,periodEnd,workshopRows,workshopColumns};
+  return {articles:[...articles.values()],sourceRows,skipped,periodStart,periodEnd,workshopRows,workshopColumns,machineRows};
 }
 
 export function nextArticleImportSummary({articles,sourceRows,skipped,periodStart,periodEnd}:ReturnType<typeof readNextArticleFile>) {

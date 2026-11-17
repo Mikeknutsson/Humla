@@ -1,7 +1,10 @@
 import Link from 'next/link';
+import {Suspense} from 'react';
+import {WorkshopInternalJobs} from './workshop-internal-jobs';
+import {validTransportDate} from '@/lib/kpi/transport-leader';
 import {reviewAccess} from '@/lib/hub/review-access';
 import {stockholmToday} from '@/lib/kpi/period';
-import {resolveForemanPeriod} from '@/lib/kpi/foreman-period';
+import {foremanPeriodQuery,resolveForemanPeriod} from '@/lib/kpi/foreman-period';
 import {analysisHref} from '@/lib/kpi/analysis';
 import type {Dashboard} from '@/app/_components/kpi-app';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
@@ -24,12 +27,21 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  if(!access)return <main className="content"><h1>Du saknar åtkomst till verkstadens uppföljning.</h1></main>;
  const raw=await searchParams;
  let period:ReturnType<typeof resolveForemanPeriod>;
- try{period=resolveForemanPeriod(raw,null,stockholmToday());if(!period.to)throw new Error('Missing date');}
+ try{
+  period=resolveForemanPeriod(raw,null,stockholmToday());
+  if(!raw.period_mode&&!raw.fiscal_year&&raw.from&&raw.to){
+   if(!validTransportDate(raw.from)||!validTransportDate(raw.to)||raw.from>raw.to)throw new Error('Invalid period');
+   period={...period,from:raw.from,to:raw.to};
+  }
+  if(!period.to)throw new Error('Missing date');
+ }
  catch{return <main className="content"><h1>Ogiltigt periodval</h1><Link href="/kpi/verkstad">Återställ</Link></main>;}
  const from=period.from,to=period.to!;
  // Always request the fixed workshop scope from Hub; URL filters cannot widen it.
  const selection:Record<string,string>=period.mode==='months'?{fiscal_year:String(period.fiscalYear),months:period.months.join(',')}:{};
  const query=new URLSearchParams({from,to,cost_center:'40',...selection}).toString();
+ const resourcePeriodQuery=new URLSearchParams({from,to,cost_center:'40'});
+ if(raw.period_mode||raw.fiscal_year)for(const [key,value] of foremanPeriodQuery(period))resourcePeriodQuery.set(key,value);
  const {data,error}=await (period.mode==='months'?access.db.rpc('hub_kpi_overview_months_v1',{p_tenant_id:access.tenantId,p_fiscal_year:period.fiscalYear,p_selected_months:period.months,p_cost_center:'40',p_filters:{}}):access.db.rpc('hub_kpi_cost_center_dashboard_v1',{p_tenant_id:access.tenantId,p_from:from,p_to:to,p_cost_center:'40'})).abortSignal(AbortSignal.timeout(48_000));
  const report=data as WorkshopReport|null;
  const valid=!error&&report?.cost_center_scope==='40';
@@ -54,7 +66,7 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  const months=(report?.monthly??[]).filter(p=>p.period_start<=to&&p.period_end>=from&&(period.mode!=='months'||period.months.includes(Number(p.period_start.slice(5,7)))));
  const metric=(key:string)=>valid?report.metrics[key]:null;
  return <KpiDetailShell title="Verkstaden – arbetsledarvy" breadcrumb="Humla Dashboard / Verkstad / KST 40" query={query} extraNavigation={<Link prefetch={false} href="/kpi/mina-enheter">Arbetsledarvyer</Link>}>
- <div className="content"><section className="panel"><div className="panel-head"><div><h2>Verkstaden · KST 40</h2><p>Ekonomi, kostnadsfördelning och registrerad verkstadstid · Läsåtkomst</p></div><div><Link prefetch={false} className="primary" href="/kpi/verkstad/internjobb">Internjobb · NeXT</Link>{' '}<KpiPrint/></div></div><ForemanPeriodPicker period={period} pathname="/kpi/verkstad" showRevenueShortcut={false}/></section>
+ <div className="content"><section className="panel"><div className="panel-head"><div><h2>Verkstaden · KST 40</h2><p>Ekonomi, kostnadsfördelning och registrerad verkstadstid · Läsåtkomst</p></div><div><Link prefetch={false} className="primary" href="#internjobb">Internjobb · NeXT</Link>{' '}<KpiPrint/></div></div><ForemanPeriodPicker period={period} pathname="/kpi/verkstad" showRevenueShortcut={false}/></section>
  {!valid?<section className="panel" role="alert"><h2>Verkstadsunderlaget kunde inte hämtas</h2><p>Försök igen med samma period. Saknade belopp visas inte som noll.</p></section>:<>
  <section className="metrics-grid">{([['Intäkter','revenue'],['Kostnader','total_cost'],['Resultat','result']]as const).map(([label,key])=><article className="metric-card" key={key}><span>{label}</span><strong>{money(metric(key))}</strong><small>Samma period föregående år: {money(previous?.[key])}</small></article>)}<article className="metric-card"><span>Marginal</span><KpiMarginGauge label="Verkstaden" margin={metric('margin_pct')==null?null:Number(metric('margin_pct'))} target={20}/><small>Standardmål 20 % · Skala −50 till +50 %</small></article></section>
  {Number(metric('revenue'))===0&&<section className="panel" role="status"><p>Inga intäkter finns registrerade på KST 40 i valt underlag. Resultatet visar därför kostnadsbelastningen. Marginal kan inte beräknas utan intäkter. Internt debiterbar verkstadstid visas separat och räknas inte automatiskt som intäkt.</p></section>}
@@ -81,5 +93,8 @@ export default async function Workshop({searchParams}:{searchParams:Promise<Reco
  </section>
  <section className="panel"><h2>Underlag</h2><p>{number.format(Number(report.quality?.valid_rows??0))} giltiga ekonomirader. Samma publicerade Hub-underlag som Dashboard, avgränsat till KST 40.</p><p>{report.sync?.synced_at?'Senast uppdaterat: '+new Intl.DateTimeFormat('sv-SE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Stockholm'}).format(new Date(report.sync.synced_at)):'Uppdateringstid saknas.'}</p><Link prefetch={false} href={analysisHref(query)}>Visa originalrader →</Link> · <Link prefetch={false} href={'/kpi/projekt?'+new URLSearchParams({from,to,center:'40',...selection})}>Projektuppföljning →</Link></section>
  </>}
+ <Suspense fallback={<section id="internjobb" className="panel"><h2>Internjobb · NeXT</h2><p role="status">Hämtar internjobb…</p></section>}>
+  <WorkshopInternalJobs access={access} q={raw} from={from} to={to} months={period.months} periodQuery={resourcePeriodQuery.toString()}/>
+ </Suspense>
  </div></KpiDetailShell>;
 }
