@@ -2,7 +2,7 @@ import 'server-only';
 import {cookies} from 'next/headers';
 import {createClient} from '@/lib/supabase/server';
 import {cachedKpiReport} from '@/lib/kpi/report-cache';
-import {parseMonthPeriod,periodFilters,previousYearDate} from '@/lib/kpi/period';
+import {monthPeriodFromDates,parseMonthPeriod,periodFilters,previousYearDate} from '@/lib/kpi/period';
 import {filterKeys} from '@/lib/kpi/analysis';
 import {selectionCookie,selectionFromQuery,readSavedSelection} from '@/lib/kpi/selection';
 import type {KpiAppProps,Dashboard} from '@/app/_components/kpi-app';
@@ -19,7 +19,9 @@ type Report = Dashboard & {
 export async function loadKpiPeriod(query:string) {
  if(query.length>4000)throw new Error('Ogiltigt urval.');
  const p=new URLSearchParams(query);
- const monthPeriod=parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined,new Date(),p.get('period_mode')??undefined);
+ const dateScope=!p.has('fiscal_year')&&!p.has('months')&&!p.has('period_mode')?monthPeriodFromDates(p.get('from')??undefined,p.get('to')??undefined,new Date(),true):undefined;
+ if(dateScope){p.set('date_from',p.get('from')!);p.set('date_to',p.get('to')!);}
+ const monthPeriod=dateScope??parseMonthPeriod(p.get('fiscal_year')??undefined,p.get('months')??undefined,new Date(),p.get('period_mode')??undefined);
  if(monthPeriod.mode==='ytd'){p.delete('date_from');p.delete('date_to');}
  const activeFilters=periodFilters(monthPeriod,Object.fromEntries(filterKeys.filter(k=>p.get(k)).map(k=>[k,p.get(k)!])));
  const costCenter=p.get('cost_center')?.trim()||null;

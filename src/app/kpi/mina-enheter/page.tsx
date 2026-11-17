@@ -1,3 +1,4 @@
+import { KpiDriverCount, type DriverCount } from '@/app/_components/kpi-driver-count';
 import Link from 'next/link';
 import {Suspense} from 'react';
 import {unitDailyRevenueTargets,productiveDayBasis} from '@/lib/hub/daily-revenue-target';
@@ -84,6 +85,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
  <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
+ <KpiDriverCount data={(report as TransportScorecard & {driver_count?:DriverCount}).driver_count}/>
  {!continuous?<section className="panel"><h2>Resultatets utveckling</h2><p>Trenddiagrammet visas inte för ett urval av separata månader.</p></section>:
  <Suspense key={target+from+to+report.generation} fallback={<section className="panel" role="status"><h2>Resultatets utveckling</h2><p>Hämtar trenden …</p></section>}>
   <ResultTrend db={db} args={args} generation={report.generation}/>
