@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import {costColumns,costShare,costShade} from '@/app/_components/kpi-cost-palette';
+import unitStyles from '@/app/_components/kpi-economic-units.module.css';
 import {ForemanPeriodPicker} from '@/app/_components/foreman-period-picker';
 import {foremanFiscalYear,foremanPeriodQuery,resolveForemanPeriod} from '@/lib/kpi/foreman-period';
 import {stockholmToday} from '@/lib/kpi/period';
@@ -39,11 +41,22 @@ type MachineCosts={
  booked_cost:number|null; personnel_cost:number|null; personnel_hours:number|null; total_cost:number|null;
  categories?:Record<string,number>|null; internal_ao?:number|null;
 };
-const costLabels:Record<string,string>={
- personnel:'Personal',fuel:'Bränsle',service_repair:'Service & reparation',fixed:'Fasta kostnader',
- depreciation:'Avskrivning',hired:'Inhyrt',material:'Material',transport:'Transport och maskinflytt',management:'Arbetsledning',other:'Övrigt',internal_ao:'Interna AO-överföringar',
-};
-function costLabel(category:string){return costLabels[category]??costLabels.other;}
+const machineCostColumns=[
+ ...costColumns,{key:'transport',label:'Transport och maskinflytt',color:'148,105,69'},
+];
+function costLabel(category:string){
+ return machineCostColumns.find(item=>item.key===category)?.label??(category==='internal_ao'?'Interna AO-överföringar':category);
+}
+function machineCost(machine:MachineCosts,category:string){
+ return sumPresent([machine.categories?.[category]??null,category==='personnel'?machine.personnel_cost:null]);
+}
+function MachineCostCell({machine,category,color,href}:{machine:Machine;category:string;color:string;href:string}){
+ const amount=machineCost(machine,category);
+ const share=costShare(amount,machine.value??0);
+ return <div className={unitStyles.costCell} style={{background:costShade(color,share)}} title={money(amount)}>
+  {amount===null?'–':<Link href={href} prefetch={false}><strong>{share===null?'–':percent.format(share/100)}</strong><small>{money(amount)}</small></Link>}
+ </div>;
+}
 type Machine=Metrics & MachineCosts & MachinePerformance & {machine_id:string;name:string;codes:string[];machine_reference?:string|null;order_count?:number;order_refs?:string[];usage?:Partial<Record<Usage,UsageTotals>>};
 type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null;drivers?:string[];usage?:Usage;personnel_hours?:number|null;personnel_cost?:number|null};
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
@@ -51,7 +64,7 @@ type Report={
  machines:Machine[];
  drivers?:{name:string;hours:number|null;rows:number;orders:number}[];
  months:(Metrics & MachinePerformance & {month_key:string})[];
- cost_accounts?:{category:string;account:string|null;source:string;amount:number;row_count:number}[];
+ cost_accounts?:{category:string;account:string|null;source:string;asset_reference?:string|null;asset_source?:string|null;amount:number;row_count:number}[];
  jobs:Job[];
  others:Other[];
  details:{sheet:string;source_row:number;performed_on:string|null;code:string;article:string;unit?:string;quantity:number|null;value:number|null;driver_name?:string;usage?:Usage}[];
@@ -195,12 +208,15 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     {!machine&&<section className="panel">
      <h2>Egna maskiner</h2>
      <p>Nyttjandegrad jämför registrerade maskintimmar med Humlas kapacitet per arbetsdag under exportens period. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT.</p>
-     {all.length?<div className="table-wrap"><table className="data-table">
-      <thead><tr><th scope="col">Maskinprojekt</th><th scope="col">Maskin</th><th scope="col">Registrerade tim</th><th scope="col">Dagar</th><th scope="col">Debiterade tim</th><th scope="col">Nyttjandegrad</th><th scope="col">Upparbetat värde</th><th scope="col">Maskinkostnad</th><th scope="col">Kostnad/debiterad tim</th></tr></thead>
+     {all.length?<div className={'table-wrap '+unitStyles.panel}><table className={unitStyles.table}>
+      <thead><tr><th scope="col">Maskinprojekt</th><th scope="col">Maskin</th><th scope="col">Maskintid</th><th scope="col">Matchad arbetstid</th><th scope="col">Dagar</th><th scope="col">Debiterade tim</th><th scope="col">Nyttjandegrad</th><th scope="col">Upparbetat värde</th><th scope="col">Maskinkostnad</th>{machineCostColumns.slice(0,5).map(c=><th key={c.key} scope="col" style={{borderTop:'3px solid rgb('+c.color+')'}}>{c.label}</th>)}<th scope="col">Kostnad/debiterad tim</th></tr></thead>
       <tbody>{all.map(m=><tr key={m.machine_id}>
        <td>{m.machine_reference??'–'}</td><th scope="row"><Link prefetch={false} href={href({machine:m.machine_id})}>{m.name} →</Link><br/><small>{m.codes.join(', ')}</small></th>
-       <td>{number(m.hours)}</td><td>{number(m.days??null)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td>
-       <td>{money(m.value)}</td><td>{money(m.total_cost)}</td><td>{costPerBilledHour(m)}</td>
+       <td>{number(m.hours)}</td><td>{number(m.personnel_hours)}</td><td>{number(m.days??null)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td>
+       <td>{money(m.value)}</td><td>{money(m.total_cost)}</td>
+       {machineCostColumns.slice(0,5).map(c=><td key={c.key} className={unitStyles.cost}>
+        <MachineCostCell machine={m} category={c.key} color={c.color} href={href({machine:m.machine_id})+'#kostnad-'+c.key}/>
+       </td>)}<td>{costPerBilledHour(m)}</td>
       </tr>)}</tbody>
      </table></div>:<p>Inga bekräftade egna maskiner har underlag i urvalet.</p>}
     </section>}
@@ -213,29 +229,31 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     {current&&<section className="panel">
      <h2>Kostnader och arbetstid</h2>
      <dl className={styles.facts}>
-      <dt>Bokfört på maskinprojektet, netto</dt><dd>{money(current.booked_cost??null)}</dd>
+      <dt>Kostnader enligt bokföring och avskrivningsregister</dt><dd>{money(current.booked_cost??null)}</dd>
       {current.internal_ao!=null&&<><dt>Interna AO-överföringar</dt><dd>{money(current.internal_ao)}</dd></>}
       <dt>Personalkostnad tilldelad från tidrapporter</dt><dd>{money(current.personnel_cost??null)}</dd>
       <dt>Matchad arbetstid</dt><dd>{current.personnel_hours==null?'–':number(current.personnel_hours)+' tim'}</dd>
      </dl>
-     <p>NeXT-kostnaderna hämtas från senaste publicerade bokföringsimporten i Humla. Interna AO-överföringar redovisas separat från maskinkostnaden. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT. Nyttjandegraden jämför registrerade maskintimmar med Humlas normala kapacitet under exportens period.</p>
+     <p>Avskrivningar hämtas från Humlas avskrivningsregister. – betyder att underlag saknas. NeXT-kostnaderna hämtas från senaste publicerade bokföringsimporten i Humla. Interna AO-överföringar redovisas separat från maskinkostnaden. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT. Nyttjandegraden jämför registrerade maskintimmar med Humlas normala kapacitet under exportens period.</p>
      <p>Humla matchar tidrapporter mot förare, utförandedag och maskinartikel i NeXT. Om tidrapporten anger ett projekt behöver projektet också stämma. Om föraren kört flera maskiner fördelas kostnaden efter matchade timmar. Sammanställda arbetstidsrader från NeXT räknas bort för att undvika dubbelräkning.</p>
      {current.personnel_hours==null&&<p>Ingen personalkostnad från tidrapporter kunde matchas i urvalet. Kostnaden per debiterad timme bygger på de kostnader som finns i underlaget.</p>}
      <div className="table-wrap"><table className="data-table">
       <caption>Maskinkostnader per kategori</caption>
-      <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Bokfört</th><th scope="col">Från tidrapporter</th><th scope="col">Totalt</th></tr></thead>
-      <tbody>{[...new Set([...Object.keys(costLabels).filter(key=>key!=='internal_ao'),...Object.keys(current.categories??{})])].map(category=>{
+      <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Bokföring och register</th><th scope="col">Från tidrapporter</th><th scope="col">Totalt</th></tr></thead>
+      <tbody>{[...new Set([...machineCostColumns.map(item=>item.key),...Object.keys(current.categories??{})])].map(category=>{
        const booked=current.categories?.[category]??null;
        const allocated=category==='personnel'?current.personnel_cost:null;
-       return <tr key={category}><th scope="row">{costLabel(category)}</th><td>{money(booked)}</td><td>{money(allocated)}</td><td>{money(sumPresent([booked,allocated]))}</td></tr>;
+       const amount=machineCost(current,category);
+       const column=machineCostColumns.find(item=>item.key===category);
+       return <tr key={category} id={'kostnad-'+category}><th scope="row">{costLabel(category)}</th><td>{money(booked)}</td><td>{money(allocated)}</td><td style={{background:column?costShade(column.color,costShare(amount,current.value??0)):undefined}}>{money(amount)}</td></tr>;
       })}</tbody>
       <tfoot><tr><th scope="row">Summa maskinkostnader</th><td>{money(current.booked_cost)}</td><td>{money(current.personnel_cost)}</td><td>{money(current.total_cost)}</td></tr></tfoot>
      </table></div>
      {!!report.cost_accounts?.length&&<details><summary>Visa konton och källor</summary>
       <div className="table-wrap"><table className="data-table">
        <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Konto</th><th scope="col">Källa</th><th scope="col">Poster</th><th scope="col">Belopp</th></tr></thead>
-       <tbody>{report.cost_accounts.map(a=><tr key={JSON.stringify([a.category,a.account,a.source])}>
-        <th scope="row">{costLabel(a.category)}</th><td>{a.account??'–'}</td><td>{a.source}</td><td>{a.row_count}</td><td>{money(a.amount)}</td>
+       <tbody>{report.cost_accounts.map(a=><tr key={JSON.stringify([a.category,a.account,a.source,a.asset_reference,a.asset_source])}>
+        <th scope="row">{costLabel(a.category)}</th><td>{a.account??'–'}</td><td>{a.source}{a.asset_reference&&<><br/><small>{a.asset_reference} · {a.asset_source}</small></>}</td><td>{a.row_count}</td><td>{money(a.amount)}</td>
        </tr>)}</tbody>
       </table></div>
      </details>}

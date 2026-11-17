@@ -7,6 +7,7 @@ import {analysisHref} from '@/lib/kpi/analysis';
 import {useRouter} from 'next/navigation';
 import {useKpiReportSelection} from './kpi-report-selection';
 import styles from './kpi-economic-units.module.css';
+import {costColumns,costShare,costShade} from './kpi-cost-palette';
 import type {MaterialRow} from '@/lib/hub/material-reconciliation';
 export type EconomicUnit={key:string;label:string;revenue:number;cost:number;result:number;rows:number;is_fallback?:boolean;
  cost_categories?:Record<string,number|null>;margin_pct?:number|null;worked_hours?:number|null;productive_hours?:number|null;
@@ -28,22 +29,7 @@ function EconomicGroupFilter({query,groups}:{query:string;groups:string[]}){
  return <KpiGroupFilter value={selectedGroup} groups={groups} disabled={pending} onChange={change}/>;
 }
 export function economicUnitHref(query:string,unit:string){const p=new URLSearchParams(query);p.set('unit',unit);for(const k of ['vehicle','project','category','kind','source','page','view','level','grain'])p.delete(k);return '/kpi/enhet?'+p;}
-const costColumns=[
- {key:'personnel',label:'Personal',color:'59,130,246'},
- {key:'fuel',label:'Bränsle',color:'217,119,6'},
- {key:'service_repair',label:'Service/Rep',color:'168,85,247'},
- {key:'fixed',label:'Fasta',color:'100,116,139'},
- {key:'depreciation',label:'Avskrivning',color:'20,140,140'},
- {key:'management',label:'Arbetsledning',color:'99,102,241'},
- {key:'overhead',label:'Overhead',color:'107,114,128'},
- {key:'other',label:'Övrigt',color:'148,105,69'},
- {key:'material',label:'Material',color:'22,163,74'},
- {key:'tipp_deponi',label:'Tipp/Deponi',color:'180,83,9'},
- {key:'hired',label:'Inhyrda',color:'219,39,119'},
-] as const;
 function finite(n:unknown):number|null{return typeof n==='number'&&Number.isFinite(n)?n:null;}
-function costShare(amount:number|null,revenue:number){return amount!==null&&revenue>0?amount/revenue*100:null;}
-function costShade(color:string,share:number|null){return share===null||share===0?'transparent':share<0?'#f1f5f9':'rgba('+color+','+(0.04+Math.min(share,100)/100*0.32)+')';}
 const compact=new Intl.NumberFormat('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1});
 export function KpiEconomicUnits({units,query,totals,canManage,groups=[]}:{units:EconomicUnit[];query:string;totals:{revenue:number;cost:number;result:number};canManage:boolean;groups:string[]}){
  const [sort,setSort]=useState('label'),[direction,setDirection]=useState<'asc'|'desc'>('asc');
