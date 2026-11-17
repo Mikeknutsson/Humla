@@ -31,16 +31,34 @@ function sumPresent(values:(number|null)[]){
  return present.length?present.reduce((sum,value)=>sum+value,0):null;
 }
 
-type Machine=Metrics & {machine_id:string;name:string;codes:string[]};
-type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null};
+const usageLabels=['Extern uthyrning','Intern entreprenad','Ej klassificerat'] as const;
+type Usage=typeof usageLabels[number];
+type UsageTotals={rows:number;hours:number|null;value:number|null};
+type Machine=Metrics & {machine_id:string;name:string;codes:string[];machine_reference?:string|null;order_count?:number;order_refs?:string[];usage?:Partial<Record<Usage,UsageTotals>>};
+type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null;drivers?:string[];usage?:Usage};
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
 type Report={
  machines:Machine[];
+ drivers?:{name:string;hours:number|null;rows:number;orders:number}[];
  months:(Metrics & {month_key:string})[];
  jobs:Job[];
  others:Other[];
- details:{sheet:string;source_row:number;performed_on:string|null;code:string;article:string;quantity:number|null;value:number|null}[];
+ details:{sheet:string;source_row:number;performed_on:string|null;code:string;article:string;quantity:number|null;value:number|null;driver_name?:string;usage?:Usage}[];
 };
+
+function MachineReference({machine}:{machine:Machine}){
+ const refs=machine.order_refs??[];
+ return <>
+  <small>{machine.machine_reference?`Maskinprojekt ${machine.machine_reference} · `:''}Artikel {machine.codes.join(', ')}</small>
+  <p>{refs.length?`Arbetsorder i urvalet: ${refs.join(', ')}${(machine.order_count??0)>refs.length?` + ${machine.order_count!-refs.length} till`:''}`:'Arbetsorder saknas i urvalet.'}</p>
+ </>;
+}
+
+function MachineUsage({machine}:{machine:Machine}){
+ return <dl className={styles.facts}>{usageLabels.map(label=><div key={label} style={{display:'contents'}}>
+  <dt>{label}</dt><dd>{money(machine.usage?.[label]?.value??null)}</dd>
+ </div>)}</dl>;
+}
 
 function MachineMonthlyTrend({months}:{months:Report['months']}){
  const values=months.flatMap(month=>month.value===null?[]:[month.value]);
@@ -138,7 +156,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  return <KpiDetailShell title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query="cost_center=10" extraNavigation={<Link href="/kpi/mina-enheter" prefetch={false}>Arbetsledarvyer</Link>}>
   <div className="content">
    <header className="panel">
-    <div className="panel-head"><div><h2>{current?.name??'Entreprenad och maskinuthyrning'}</h2><p>Egna maskiner · NeXT Resursuppföljning</p></div>
+    <div className="panel-head"><div><h2>{current?.name??'Entreprenad och maskinuthyrning'}</h2><p>Egna maskiner · NeXT Resursuppföljning</p>{current&&<MachineReference machine={current}/>}</div>
      {machine&&<Link className="secondary" prefetch={false} href={href({machine:null})}>← Alla maskiner</Link>}</div>
     <ForemanPeriodPicker period={period} pathname={base} showRevenueShortcut={false} keepQuery={machine?new URLSearchParams({machine}).toString():''}/>
     <details><summary>Underlag och export</summary>
@@ -167,23 +185,37 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
      <h2>Egna maskiner</h2>
      {all.length?<div className={styles.cards}>{all.map(m=><article className={styles.card} data-target-status="neutral" key={m.machine_id}>
        <h3><Link prefetch={false} href={href({machine:m.machine_id})}>{m.name} →</Link></h3>
-       <small>{m.codes.join(', ')}</small>
-       <dl className={styles.facts}><MetricValues metrics={m}/></dl>
+       <MachineReference machine={m}/>
+       <dl className={styles.facts}><MetricValues metrics={m}/></dl><MachineUsage machine={m}/>
        <Link prefetch={false} className={styles.areaAction} href={href({machine:m.machine_id})}>Visa månad, projekt och arbetsorder</Link>
      </article>)}</div>:<p>Inga bekräftade egna maskiner har resursrader i urvalet.</p>}
+    </section>}
+    {current&&<section className="panel"><h2>Upparbetat värde per användning</h2>
+     <p>Bygger på utförandedatum och projektets verksamhetsgrupp. Extern uthyrning kräver även en extern kund på resursraden.</p>
+     <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
+      <tbody>{usageLabels.map(label=><tr key={label}><th scope="row">{label}</th><td>{number(current.usage?.[label]?.hours??null)}</td><td>{money(current.usage?.[label]?.value??null)}</td></tr>)}</tbody>
+     </table></div>
+    </section>}
+    {machine&&current&&<section className="panel">
+     <h2>Förare i valt urval</h2>
+     <p>Maskinartikeln identifierar maskinen. Utförd av på resursraden visar vem som körde.</p>
+     {report.drivers?.length?<div className="table-wrap"><table className="data-table">
+      <thead><tr><th scope="col">Förare</th><th scope="col">Registrerad tid</th><th scope="col">Arbetsorder</th><th scope="col">Källrader</th></tr></thead>
+      <tbody>{report.drivers.map((driver,index)=><tr key={index}><th scope="row">{driver.name}</th><td>{number(driver.hours)}</td><td>{driver.orders}</td><td>{driver.rows}</td></tr>)}</tbody>
+     </table></div>:<p>Föraruppgifter saknas i urvalet.</p>}
     </section>}
     {machine&&report.months.length>0&&<section className="panel"><h2>Upparbetat värde per månad</h2><MachineMonthlyTrend months={report.months}/><div className="table-wrap"><table className="data-table">
      <thead><tr><th scope="col">Månad</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Värde/tim</th></tr></thead>
      <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{money(m.value)}</td><td>{money(m.value_per_hour)}</td></tr>)}</tbody>
     </table></div></section>}
     {machine&&!drilling&&report.jobs.length>0&&<section className="panel"><h2>Projekt och arbetsorder</h2><div className="table-wrap"><table className="data-table">
-     <thead><tr><th scope="col">Projekt</th><th scope="col">Arbetsorder</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
-     <tbody>{report.jobs.map(j=><tr key={JSON.stringify([j.project,j.work_order])}><th scope="row">{j.project} {j.project_name}</th><td><Link prefetch={false} href={href({project:j.project,ao:j.work_order})}>AO {j.work_order||'saknas'} {j.order_name} →</Link></td><td>{number(j.hours)}</td><td>{money(j.value)}</td></tr>)}</tbody>
+     <thead><tr><th scope="col">Projekt</th><th scope="col">Arbetsorder</th><th scope="col">Förare</th><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
+     <tbody>{report.jobs.map(j=><tr key={JSON.stringify([j.project,j.work_order,j.usage])}><th scope="row">{j.project} {j.project_name}</th><td><Link prefetch={false} href={href({project:j.project,ao:j.work_order})}>AO {j.work_order||'saknas'} {j.order_name} →</Link></td><td>{j.drivers?.join(', ')||'–'}</td><td>{j.usage??'–'}</td><td>{number(j.hours)}</td><td>{money(j.value)}</td></tr>)}</tbody>
     </table></div></section>}
     {drilling&&<section className="panel"><p><Link prefetch={false} href={href({})}>← Till projekt och arbetsorder</Link></p><h2>Projekt {project||'saknas'} · AO {order||'saknas'}</h2>
      {report.details.length?<div className="table-wrap"><table className="data-table">
-      <thead><tr><th scope="col">Utförd</th><th scope="col">Artikel</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Källrad</th></tr></thead>
-      <tbody>{report.details.map(r=><tr key={r.sheet+':'+r.source_row}><td>{r.performed_on??'–'}</td><th scope="row">{r.code} {r.article}</th><td>{number(r.quantity)}</td><td>{money(r.value)}</td><td>{r.sheet} · {r.source_row}</td></tr>)}</tbody>
+      <thead><tr><th scope="col">Utförd</th><th scope="col">Artikel</th><th scope="col">Förare</th><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Källrad</th></tr></thead>
+      <tbody>{report.details.map(r=><tr key={r.sheet+':'+r.source_row}><td>{r.performed_on??'–'}</td><th scope="row">{r.code} {r.article}</th><td>{r.driver_name??'–'}</td><td>{r.usage??'–'}</td><td>{number(r.quantity)}</td><td>{money(r.value)}</td><td>{r.sheet} · {r.source_row}</td></tr>)}</tbody>
      </table></div>:<p>Inga resursrader i urvalet.</p>}
     </section>}
     {!machine&&categories.map(category=><details className="panel" key={category}><summary>{category}</summary><div className="table-wrap"><table className="data-table">
