@@ -3,7 +3,7 @@ import type { createClient } from '@/lib/supabase/server';
 
 const kinds: Record<string,string> = {
   revenue:'Intäkter',cost:'Kostnader',stena_history:'Stena · Historik',stena_settled:'Stena · Avräknat',
-  next_projects:'NeXT · Projektregister',fuel:'Bränsle',vehicle_activity:'Fordonsaktivitet',driver_time:'Förartid',next_historical_time:'NeXT · Historisk tid',
+  next_projects:'NeXT · Projektregister',next_articles:'NeXT · Artiklar från resursuppföljning',fuel:'Bränsle',vehicle_activity:'Fordonsaktivitet',driver_time:'Förartid',next_historical_time:'NeXT · Historisk tid',
 };
 const sourceNames: Record<string,string> = {stena_portal:'Stena',workify_file:'Workify',next_file:'NeXT',next:'NeXT',next_cost_file:'NeXT',next_revenue_file:'NeXT'};
 const statusNames: Record<string,string> = {completed:'Sparad',needs_review:'Sparad – kontrollera rader',failed:'Misslyckad',processing:'Bearbetning påbörjad',incomplete:'Ofullständig'};

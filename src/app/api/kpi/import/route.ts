@@ -1,3 +1,4 @@
+import { isNextArticleResourceExport } from "@/lib/kpi/next-article-file";
 import {queueImportedKpiData} from '@/lib/kpi/import-publication';
 import { allocateWorkify, isWorkify } from "@/lib/kpi/workify";
 import { createHash, randomUUID } from "node:crypto";
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const table = await parseImportFile(new File([bytes], file.name, { type: file.type }));
+    if(isNextArticleResourceExport(table.headers))return Response.json({error:'Importera resursuppföljningen under Artiklar från NeXT.'},{status:422});
     const nextRevenue = kind === "next_revenue" || (kind === "revenue" && isNextLedger(table));
     const storedKind = nextRevenue ? "revenue" : kind;
     if (nextRevenue && !isNextRevenue(table)) {

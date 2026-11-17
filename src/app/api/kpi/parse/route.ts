@@ -1,3 +1,4 @@
+import { isNextArticleResourceExport } from "@/lib/kpi/next-article-file";
 import {detectStenaWorkbook} from "@/lib/hub/stena-import";
 import { parseImportFile } from "@/lib/kpi/parser";
 import { DATA_KINDS, detectDataKind, isNextRevenue, suggestMapping, type DataKind } from "@/lib/kpi/schema";
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
       if(stena)return Response.json({detectedSource:'stena',stena});
     }
     const table = await parseImportFile(file);
+    if(isNextArticleResourceExport(table.headers))return Response.json({detectedSource:'next_articles'});
     const detectedKind = isNextRevenue(table) ? "next_revenue" : detectDataKind(table.headers);
     const kind = requestedKind === "auto" ? detectedKind : requestedKind as DataKind;
     return Response.json({
