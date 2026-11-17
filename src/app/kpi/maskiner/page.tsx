@@ -1,4 +1,9 @@
 import Link from 'next/link';
+import {ForemanPeriodPicker} from '@/app/_components/foreman-period-picker';
+import {foremanFiscalYear,foremanPeriodQuery,resolveForemanPeriod} from '@/lib/kpi/foreman-period';
+import {stockholmToday} from '@/lib/kpi/period';
+import styles from '@/app/_components/kpi-margin-gauge.module.css';
+import trendStyles from '@/app/_components/foreman-result-trend.module.css';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
 import {reviewAccess} from '@/lib/hub/review-access';
 import {nextResourceBatches,loadNextResourceFile} from '@/lib/kpi/next-resource-source';
@@ -14,6 +19,18 @@ const money=(value:number|null)=>value===null?'–':currency.format(value);
 const number=(value:number|null)=>value===null?'–':quantity.format(value);
 const text=(value:unknown)=>typeof value==='string'?value.trim().slice(0,250):'';
 type Metrics={rows:number;hours:number|null;value:number|null;value_per_hour:number|null};
+function MetricValues({metrics}:{metrics:Pick<Metrics,'hours'|'value'|'value_per_hour'>}){
+ return <>
+  <dt>Registrerad tid</dt><dd>{metrics.hours===null?'–':number(metrics.hours)+' tim'}</dd>
+  <dt>Upparbetat värde</dt><dd>{money(metrics.value)}</dd>
+  <dt>Värde per timme</dt><dd>{money(metrics.value_per_hour)}</dd>
+ </>;
+}
+function sumPresent(values:(number|null)[]){
+ const present=values.filter((value):value is number=>value!==null);
+ return present.length?present.reduce((sum,value)=>sum+value,0):null;
+}
+
 type Machine=Metrics & {machine_id:string;name:string;codes:string[]};
 type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null};
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
@@ -25,6 +42,26 @@ type Report={
  details:{sheet:string;source_row:number;performed_on:string|null;code:string;article:string;quantity:number|null;value:number|null}[];
 };
 
+function MachineMonthlyTrend({months}:{months:Report['months']}){
+ const values=months.flatMap(month=>month.value===null?[]:[month.value]);
+ if(!values.length)return null;
+ const max=Math.max(0,...values),min=Math.min(0,...values),width=Math.max(480,months.length*62+16);
+ const y=(value:number)=>16+108*(max-value)/(max-min||1);
+ const barWidth=Math.min(44,(width-16)/months.length*.65);
+ return <div className={trendStyles.scroll}>
+  <svg className={trendStyles.chart} viewBox={`0 0 ${width} 154`} role="img" aria-label="Upparbetat värde per månad. Värdena anges i tabellen.">
+   <line x1="8" x2={width-8} y1={y(0)} y2={y(0)} stroke="#96a4b3"/>
+   {months.map(({month_key:month,value},index)=>{
+    const x=8+(index+.5)*(width-16)/months.length;
+    return <g key={month}>
+     {value!==null&&<rect x={x-barWidth/2} y={Math.min(y(0),y(value))} width={barWidth} height={Math.max(1,Math.abs(y(0)-y(value)))} fill="#1769aa"><title>{month} · {money(value)}</title></rect>}
+     <text x={x} y="146" textAnchor="middle" className={trendStyles.axis}>{month}</text>
+    </g>;
+   })}
+  </svg>
+ </div>;
+}
+
 export default async function MachineFollowup({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
  const access=await reviewAccess();
  if(!access)return <main className="content"><h1>Du saknar åtkomst till maskinuppföljningen.</h1></main>;
@@ -34,12 +71,30 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  const drilling=Boolean(machine)&&typeof raw.project==='string'&&typeof raw.ao==='string';
  const project=drilling?text(raw.project):null,order=drilling?text(raw.ao):null;
  const requestedFrom=text(raw.from),requestedTo=text(raw.to);
- const from=validTransportDate(requestedFrom)?requestedFrom:null,to=validTransportDate(requestedTo)?requestedTo:null;
+ const explicitDates=Boolean(requestedFrom||requestedTo)&&!raw.period_mode;
+ const today=stockholmToday();
+ let period=resolveForemanPeriod({},null,today);
+ let invalidPeriod=false;
+ try{
+  if(explicitDates){
+   if((requestedFrom&&!validTransportDate(requestedFrom))||(requestedTo&&!validTransportDate(requestedTo))
+    ||(requestedFrom&&requestedTo&&requestedFrom>requestedTo))throw Error('Invalid dates');
+   const anchor=requestedFrom||requestedTo;
+   const fiscalYear=foremanFiscalYear(undefined,{year:Number(anchor.slice(0,4)),month:Number(anchor.slice(5,7))});
+   period={...period,fiscalYear,from:requestedFrom||period.from,to:requestedTo||period.to};
+  }else {
+   period=resolveForemanPeriod(raw,null,today);
+   if(!period.to)throw Error('Invalid period');
+  }
+ }catch{invalidPeriod=true;}
+ const from=explicitDates?(requestedFrom||null):period.from;
+ const to=explicitDates?(requestedTo||null):period.to;
+ const periodQuery=explicitDates&&!invalidPeriod?new URLSearchParams({from:requestedFrom,to:requestedTo}):foremanPeriodQuery(period);
  const {data,error}=await nextResourceBatches(access);
  const batches=data??[];
  const batch=selected?batches.find(b=>b.id===selected):
   batches.find(b=>(!from||!b.period_end||b.period_end>=from)&&(!to||!b.period_start||b.period_start<=to))??batches[0];
- const viewQuery=new URLSearchParams({from:from??'',to:to??''});
+ const viewQuery=new URLSearchParams(periodQuery);
  if(batch)viewQuery.set('batch',batch.id);
  if(machine)viewQuery.set('machine',machine);
  const href=(changes:Record<string,string|null>)=>{
@@ -54,7 +109,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  let report:Report|null=null;
  let problem='';
  if(error)problem='NeXT-importerna kunde inte hämtas.';
- else if((requestedFrom&&!from)||(requestedTo&&!to)||(from&&to&&from>to))problem='Kontrollera datumintervallet.';
+ else if(invalidPeriod)problem='Ogiltigt periodval. Välj period på nytt.';
  else if(selected&&!batch)problem='Den valda exporten är inte tillgänglig.';
  else if(batch){
   try{
@@ -62,7 +117,8 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
    if(!parsed.workshopColumns)problem='Exporten behöver innehålla Kontonr, Utförd datum och Utf intäkt.';
    else{
     const result=await access.db.rpc('hub_next_machine_followup',{
-     t:access.tenantId,p_batch:batch.id,p_rows:parsed.machineRows,p_from:from,p_to:to,p_machine:machine,p_project:project,p_order:order,
+     t:access.tenantId,p_batch:batch.id,p_rows:period.mode==='months'?parsed.machineRows.filter(row=>row.performed_on&&period.months.includes(Number(row.performed_on.slice(5,7)))):parsed.machineRows,
+     p_from:from,p_to:to,p_machine:machine,p_project:project,p_order:order,
     });
     if(result.error||!result.data)throw Error(result.error?.code??'Empty report');
     report=result.data as Report;
@@ -73,41 +129,50 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
   }
  }
  const current=report?.machines.find(row=>row.machine_id===machine);
+ const all=report?.machines??[];
+ const hours=sumPresent(all.map(row=>row.hours));
+ const value=sumPresent(all.map(row=>row.value));
+ const summary={hours,value,value_per_hour:hours&&value!==null&&all.every(row=>row.value_per_hour!==null)?value/hours:null};
+ const metrics=machine?current:all.length?summary:null;
  const categories=[...new Set(report?.others.map(row=>row.category))];
- return <KpiDetailShell title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query="cost_center=10">
+ return <KpiDetailShell title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query="cost_center=10" extraNavigation={<Link href="/kpi/mina-enheter" prefetch={false}>Arbetsledarvyer</Link>}>
   <div className="content">
-   <section className="panel">
-    <div className="panel-head"><div><h2>Maskiner · NeXT Resursuppföljning</h2><p>Registrerad tid och upparbetat värde efter utförandedatum. Varje urval visar en sparad export.</p></div>
-     <Link className="secondary" prefetch={false} href="/kpi?view=importhistorik&history_kind=next_articles">Importhistorik</Link></div>
-    {batches.length>0&&<form action={base} className="period-form">
-     {machine&&<input type="hidden" name="machine" value={machine}/>}
-     <label>NeXT-export <select name="batch" defaultValue={batch?.id??''}>
-      {!batch&&<option value="" disabled>Välj en export</option>}
-      {batches.map(b=><option key={b.id} value={b.id}>{b.file_name??'Resursuppföljning'}{b.completed_at?' · '+imported.format(new Date(b.completed_at)):''}</option>)}
-     </select></label>
-     <label>Utfört från <input type="date" name="from" defaultValue={from??''}/></label>
-     <label>Utfört till <input type="date" name="to" defaultValue={to??''}/></label>
-     <button type="submit">Visa</button>
-    </form>}
-    {batch?.period_start&&batch.period_end&&<p>Datum i exporten {batch.period_start} – {batch.period_end}.</p>}
-   </section>
+   <header className="panel">
+    <div className="panel-head"><div><h2>{current?.name??'Entreprenad och maskinuthyrning'}</h2><p>Egna maskiner · NeXT Resursuppföljning</p></div>
+     {machine&&<Link className="secondary" prefetch={false} href={href({machine:null})}>← Alla maskiner</Link>}</div>
+    <ForemanPeriodPicker period={period} pathname={base} showRevenueShortcut={false} keepQuery={machine?new URLSearchParams({machine}).toString():''}/>
+    <details><summary>Underlag och export</summary>
+     {batches.length>0&&<form action={base} className="period-form">
+      {machine&&<input type="hidden" name="machine" value={machine}/>}
+      {[...periodQuery].map(([name,value])=><input key={name} type="hidden" name={name} value={value}/>)}
+      <label>NeXT-export <select name="batch" defaultValue={batch?.id??''}>
+       {!batch&&<option value="" disabled>Välj en export</option>}
+       {batches.map(b=><option key={b.id} value={b.id}>{b.file_name??'Resursuppföljning'}{b.completed_at?' · '+imported.format(new Date(b.completed_at)):''}</option>)}
+      </select></label>
+      <button type="submit">Visa</button>
+     </form>}
+     {batch&&<p>{batch.file_name??'Resursuppföljning'}{batch.period_start&&batch.period_end&&` · ${batch.period_start} – ${batch.period_end}`}</p>}
+     <Link className="secondary" prefetch={false} href="/kpi?view=importhistorik&history_kind=next_articles">Importhistorik</Link>
+    </details>
+   </header>
    {problem?<section className="panel" role="alert">{problem}</section>:!report?<section className="panel"><p>Importera Resursuppföljning från NeXT för att börja följa upp maskiner.</p><Link href="/kpi?view=import#next-artikelimport">Öppna Dataimport</Link></section>:<>
-    {machine?<section className="panel">
-     <p><Link prefetch={false} href={href({machine:null})}>← Alla maskiner</Link></p>
-     <h2>{current?.name??'Vald maskin'}</h2>
-     {current?<div className="metrics-grid">
-      <article className="metric-card"><span>Registrerad tid</span><strong>{number(current.hours)} tim</strong></article>
-      <article className="metric-card"><span>Upparbetat värde</span><strong>{money(current.value)}</strong></article>
-      <article className="metric-card"><span>Värde per timme</span><strong>{money(current.value_per_hour)}</strong></article>
-     </div>:<p>Inget underlag för maskinen i urvalet.</p>}
-    </section>:<section className="panel">
-     <h2>Egna maskiner</h2><p>Bekräftade artikelkopplingar i Humla Hub. Välj en maskin för att se månader, projekt och arbetsorder.</p>
-     {report.machines.length?<div className="table-wrap"><table className="data-table">
-      <thead><tr><th scope="col">Maskin</th><th scope="col">NeXT-artikel</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Värde/tim</th></tr></thead>
-      <tbody>{report.machines.map(m=><tr key={m.machine_id}><th scope="row"><Link prefetch={false} href={href({machine:m.machine_id})}>{m.name} →</Link></th><td>{m.codes.join(', ')}</td><td>{number(m.hours)}</td><td>{money(m.value)}</td><td>{money(m.value_per_hour)}</td></tr>)}</tbody>
-     </table></div>:<p>Inga bekräftade egna maskiner har resursrader i urvalet.</p>}
+    {metrics&&<section className="metrics-grid" aria-label={machine?'Nyckeltal för vald maskin':'Nyckeltal för egna maskiner'}>
+      <article className="metric-card"><span>Upparbetat värde</span><strong>{money(metrics.value)}</strong><small>NeXT · Utf intäkt</small></article>
+      <article className="metric-card"><span>Registrerad tid</span><strong>{metrics.hours===null?'–':number(metrics.hours)+' tim'}</strong></article>
+      <article className="metric-card"><span>Värde per timme</span><strong>{money(metrics.value_per_hour)}</strong></article>
+      {!machine&&<article className="metric-card"><span>Egna maskiner i urvalet</span><strong>{number(all.length)}</strong></article>}
     </section>}
-    {machine&&report.months.length>0&&<section className="panel"><h2>Per månad</h2><div className="table-wrap"><table className="data-table">
+    {machine&&!current&&<section className="panel"><p>Inget underlag för maskinen i urvalet.</p></section>}
+    {!machine&&<section className="panel">
+     <h2>Egna maskiner</h2>
+     {all.length?<div className={styles.cards}>{all.map(m=><article className={styles.card} data-target-status="neutral" key={m.machine_id}>
+       <h3><Link prefetch={false} href={href({machine:m.machine_id})}>{m.name} →</Link></h3>
+       <small>{m.codes.join(', ')}</small>
+       <dl className={styles.facts}><MetricValues metrics={m}/></dl>
+       <Link prefetch={false} className={styles.areaAction} href={href({machine:m.machine_id})}>Visa månad, projekt och arbetsorder</Link>
+     </article>)}</div>:<p>Inga bekräftade egna maskiner har resursrader i urvalet.</p>}
+    </section>}
+    {machine&&report.months.length>0&&<section className="panel"><h2>Upparbetat värde per månad</h2><MachineMonthlyTrend months={report.months}/><div className="table-wrap"><table className="data-table">
      <thead><tr><th scope="col">Månad</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Värde/tim</th></tr></thead>
      <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{money(m.value)}</td><td>{money(m.value_per_hour)}</td></tr>)}</tbody>
     </table></div></section>}

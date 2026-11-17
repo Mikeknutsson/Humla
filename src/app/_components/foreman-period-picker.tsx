@@ -12,14 +12,16 @@ function selectedMonths(period:ForemanPeriod){
  return fiscalMonths.filter(m=>period.to&&`${period.fiscalYear+(m<9?1:0)}-${String(m).padStart(2,'0')}-01`<=period.to);
 }
 
-export function ForemanPeriodPicker({period,userId,cutoffError=false,pathname='/kpi/mina-enheter',showRevenueShortcut=true}:{period:ForemanPeriod;userId?:string|null;cutoffError?:boolean;pathname?:string;showRevenueShortcut?:boolean}) {
+export function ForemanPeriodPicker({period,userId,cutoffError=false,pathname='/kpi/mina-enheter',showRevenueShortcut=true,keepQuery=''}:{period:ForemanPeriod;userId?:string|null;cutoffError?:boolean;pathname?:string;showRevenueShortcut?:boolean;keepQuery?:string}) {
  const router=useRouter(),[pending,start]=useTransition();
  const [draft,setDraft]=useState({base:period,months:selectedMonths(period)});
  const months=draft.base===period?draft.months:selectedMonths(period);
  const label=months.map(m=>monthLabels[fiscalMonths.indexOf(m)]).join(' + ');
  function choose(mode:ForemanPeriod['mode'],month=period.month,year=period.fiscalYear){
   const next={...period,months:mode==='months'?months:[],mode:mode==='ytd'&&year>period.currentFiscalYear?'year' as const:mode,month,fiscalYear:year};
-  start(()=>router.replace(pathname+'?'+foremanPeriodQuery(next,userId),{scroll:false}));
+  const query=new URLSearchParams(keepQuery);
+  for(const [name,value] of foremanPeriodQuery(next,userId))query.set(name,value);
+  start(()=>router.replace(pathname+'?'+query,{scroll:false}));
  }
  function toggleMonth(m:number){
   setDraft({base:period,months:fiscalMonths.filter(n=>n===m?!months.includes(n):months.includes(n))});
