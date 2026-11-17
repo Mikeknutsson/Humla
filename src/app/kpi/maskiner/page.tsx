@@ -34,8 +34,16 @@ function sumPresent(values:(number|null)[]){
 const usageLabels=['Extern uthyrning','Intern entreprenad','Ej klassificerat'] as const;
 type Usage=typeof usageLabels[number];
 type UsageTotals={rows:number;hours:number|null;value:number|null};
-type Machine=Metrics & {machine_id:string;name:string;codes:string[];machine_reference?:string|null;order_count?:number;order_refs?:string[];usage?:Partial<Record<Usage,UsageTotals>>};
-type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null;drivers?:string[];usage?:Usage};
+type MachineCosts={
+ booked_cost:number|null; personnel_cost:number|null; personnel_hours:number|null; total_cost:number|null;
+ categories?:Record<string,number>|null;
+};
+const costLabels:Record<string,string>={
+ fuel:'Bränsle',service_repair:'Service och reparation',depreciation:'Avskrivningar',
+ fixed:'Fasta kostnader',personnel:'Bokförd personal',material:'Material',hired:'Inhyrt',other:'Övrigt',
+};
+type Machine=Metrics & MachineCosts & {machine_id:string;name:string;codes:string[];machine_reference?:string|null;order_count?:number;order_refs?:string[];usage?:Partial<Record<Usage,UsageTotals>>};
+type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null;drivers?:string[];usage?:Usage;personnel_hours?:number|null;personnel_cost?:number|null};
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
 type Report={
  machines:Machine[];
@@ -135,8 +143,8 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
    if(!parsed.workshopColumns)problem='Exporten behöver innehålla Kontonr, Utförd datum och Utf intäkt.';
    else{
     const result=await access.db.rpc('hub_next_machine_followup',{
-     t:access.tenantId,p_batch:batch.id,p_rows:period.mode==='months'?parsed.machineRows.filter(row=>row.performed_on&&period.months.includes(Number(row.performed_on.slice(5,7)))):parsed.machineRows,
-     p_from:from,p_to:to,p_machine:machine,p_project:project,p_order:order,
+     t:access.tenantId,p_batch:batch.id,p_rows:parsed.machineRows,
+     p_from:from,p_to:to,p_machine:machine,p_project:project,p_order:order,p_months:!explicitDates&&period.mode==='months'?period.months:null,
     });
     if(result.error||!result.data)throw Error(result.error?.code??'Empty report');
     report=result.data as Report;
@@ -151,6 +159,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  const hours=sumPresent(all.map(row=>row.hours));
  const value=sumPresent(all.map(row=>row.value));
  const summary={hours,value,value_per_hour:hours&&value!==null&&all.every(row=>row.value_per_hour!==null)?value/hours:null};
+ const summaryCost=sumPresent(all.map(row=>row.total_cost??null));
  const metrics=machine?current:all.length?summary:null;
  const categories=[...new Set(report?.others.map(row=>row.category))];
  return <KpiDetailShell title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query="cost_center=10" extraNavigation={<Link href="/kpi/mina-enheter" prefetch={false}>Arbetsledarvyer</Link>}>
@@ -178,6 +187,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
       <article className="metric-card"><span>Upparbetat värde</span><strong>{money(metrics.value)}</strong><small>NeXT · Utf intäkt</small></article>
       <article className="metric-card"><span>Registrerad tid</span><strong>{metrics.hours===null?'–':number(metrics.hours)+' tim'}</strong></article>
       <article className="metric-card"><span>Värde per timme</span><strong>{money(metrics.value_per_hour)}</strong></article>
+      <article className="metric-card"><span>Maskinkostnad, netto</span><strong>{money(machine?current?.total_cost??null:summaryCost)}</strong><small>Bokfört på maskinen och matchad arbetstid</small></article>
       {!machine&&<article className="metric-card"><span>Egna maskiner i urvalet</span><strong>{number(all.length)}</strong></article>}
     </section>}
     {machine&&!current&&<section className="panel"><p>Inget underlag för maskinen i urvalet.</p></section>}
@@ -186,15 +196,32 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
      {all.length?<div className={styles.cards}>{all.map(m=><article className={styles.card} data-target-status="neutral" key={m.machine_id}>
        <h3><Link prefetch={false} href={href({machine:m.machine_id})}>{m.name} →</Link></h3>
        <MachineReference machine={m}/>
-       <dl className={styles.facts}><MetricValues metrics={m}/></dl><MachineUsage machine={m}/>
+       <dl className={styles.facts}><MetricValues metrics={m}/><dt>Maskinkostnad, netto</dt><dd>{money(m.total_cost??null)}</dd></dl><MachineUsage machine={m}/>
        <Link prefetch={false} className={styles.areaAction} href={href({machine:m.machine_id})}>Visa månad, projekt och arbetsorder</Link>
      </article>)}</div>:<p>Inga bekräftade egna maskiner har resursrader i urvalet.</p>}
     </section>}
     {current&&<section className="panel"><h2>Upparbetat värde per användning</h2>
-     <p>Bygger på utförandedatum och projektets verksamhetsgrupp. Extern uthyrning kräver även en extern kund på resursraden.</p>
+     <p>Bygger på projektets verksamhetsgrupp vid utförandedatum. NeXT-projektets kategori kan komplettera den första klassningen bakåt i tiden. Extern uthyrning kräver en extern kund på resursraden.</p>
      <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
       <tbody>{usageLabels.map(label=><tr key={label}><th scope="row">{label}</th><td>{number(current.usage?.[label]?.hours??null)}</td><td>{money(current.usage?.[label]?.value??null)}</td></tr>)}</tbody>
      </table></div>
+    </section>}
+    {current&&<section className="panel">
+     <h2>Kostnader och arbetstid</h2>
+     <dl className={styles.facts}>
+      <dt>Bokfört på maskinprojektet, netto</dt><dd>{money(current.booked_cost??null)}</dd>
+      <dt>Personalkostnad tilldelad från tidrapporter</dt><dd>{money(current.personnel_cost??null)}</dd>
+      <dt>Matchad arbetstid</dt><dd>{current.personnel_hours==null?'–':number(current.personnel_hours)+' tim'}</dd>
+     </dl>
+     <p>Humla matchar tidrapporter mot förare, utförandedag och maskinartikel i NeXT. Om tidrapporten anger ett projekt behöver projektet också stämma. Om föraren kört flera maskiner fördelas kostnaden efter matchade timmar. Sammanställda arbetstidsrader från NeXT räknas bort för att undvika dubbelräkning.</p>
+     {current.personnel_hours==null&&<p>Ingen personalkostnad kunde matchas till maskinens resursrader i urvalet.</p>}
+     {current.categories&&<div className="table-wrap"><table className="data-table">
+      <caption>Bokförda poster per kostnadsslag, inklusive krediteringar</caption>
+      <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Netto</th></tr></thead>
+      <tbody>{Object.entries(current.categories).sort(([a],[b])=>(costLabels[a]??a).localeCompare(costLabels[b]??b,'sv')).map(([category,amount])=>
+       <tr key={category}><th scope="row">{costLabels[category]??category}</th><td>{money(amount)}</td></tr>
+      )}</tbody>
+     </table></div>}
     </section>}
     {machine&&current&&<section className="panel">
      <h2>Förare i valt urval</h2>
@@ -209,8 +236,8 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
      <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{money(m.value)}</td><td>{money(m.value_per_hour)}</td></tr>)}</tbody>
     </table></div></section>}
     {machine&&!drilling&&report.jobs.length>0&&<section className="panel"><h2>Projekt och arbetsorder</h2><div className="table-wrap"><table className="data-table">
-     <thead><tr><th scope="col">Projekt</th><th scope="col">Arbetsorder</th><th scope="col">Förare</th><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
-     <tbody>{report.jobs.map(j=><tr key={JSON.stringify([j.project,j.work_order,j.usage])}><th scope="row">{j.project} {j.project_name}</th><td><Link prefetch={false} href={href({project:j.project,ao:j.work_order})}>AO {j.work_order||'saknas'} {j.order_name} →</Link></td><td>{j.drivers?.join(', ')||'–'}</td><td>{j.usage??'–'}</td><td>{number(j.hours)}</td><td>{money(j.value)}</td></tr>)}</tbody>
+     <thead><tr><th scope="col">Projekt</th><th scope="col">Arbetsorder</th><th scope="col">Förare</th><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Matchad arbetstid</th><th scope="col">Tilldelad personalkostnad</th></tr></thead>
+     <tbody>{report.jobs.map(j=><tr key={JSON.stringify([j.project,j.work_order,j.usage])}><th scope="row">{j.project} {j.project_name}</th><td><Link prefetch={false} href={href({project:j.project,ao:j.work_order})}>AO {j.work_order||'saknas'} {j.order_name} →</Link></td><td>{j.drivers?.join(', ')||'–'}</td><td>{j.usage??'–'}</td><td>{number(j.hours)}</td><td>{money(j.value)}</td><td>{number(j.personnel_hours??null)}</td><td>{money(j.personnel_cost??null)}</td></tr>)}</tbody>
     </table></div></section>}
     {drilling&&<section className="panel"><p><Link prefetch={false} href={href({})}>← Till projekt och arbetsorder</Link></p><h2>Projekt {project||'saknas'} · AO {order||'saknas'}</h2>
      {report.details.length?<div className="table-wrap"><table className="data-table">
