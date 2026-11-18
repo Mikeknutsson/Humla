@@ -25,6 +25,16 @@ const percent=new Intl.NumberFormat('sv-SE',{style:'percent',maximumFractionDigi
 function utilization(metrics:MachinePerformance){
  return metrics.available_hours&&metrics.hours!==null?percent.format(metrics.hours/metrics.available_hours):'–';
 }
+const marginText=(value:number|null|undefined)=>value==null?'–':percent.format(value/100);
+
+function MachineResultCells({result,margin_pct}:MachineProfit) {
+ const tone=result==null?undefined:result<0?unitStyles.negative:unitStyles.positive;
+ return <>
+  <td className={tone}><strong>{money(result??null)}</strong>{result!=null&&<small>{result<0?'Förlust':result>0?'Överskott':'I balans'}</small>}</td>
+  <td className={tone}><strong>{marginText(margin_pct)}</strong></td>
+ </>;
+}
+
 function costPerBilledHour(metrics:MachinePerformance){
  return metrics.billed_hours&&metrics.billed_hours>0&&metrics.total_cost!=null?money(metrics.total_cost/metrics.billed_hours):'–';
 }
@@ -38,7 +48,8 @@ function sumPresent(values:(number|null)[]){
 const usageLabels=['Extern uthyrning','Intern entreprenad','Ej klassificerat'] as const;
 type Usage=typeof usageLabels[number];
 type UsageTotals={rows:number;hours:number|null;value:number|null};
-type MachinePerformance={hours:number|null; billed_hours?:number|null; available_hours?:number|null; days?:number|null; total_cost?:number|null};
+type MachineProfit={result?:number|null; margin_pct?:number|null};
+type MachinePerformance=MachineProfit & {hours:number|null; billed_hours?:number|null; available_hours?:number|null; days?:number|null; total_cost?:number|null};
 type MachineCosts={
  booked_cost:number|null; personnel_cost:number|null; personnel_hours:number|null; total_cost:number|null;
  operator_hours?:number|null; operator_cost?:number|null; groundworker_hours?:number|null; groundworker_cost?:number|null;
@@ -85,6 +96,7 @@ const vehicleLinkStatus:Record<string,string>={
 type Report={
  labor_rates?:Record<'operator'|'groundworker',{rate:number;source:string}>;
  person_units?:PersonUnit[];
+ machine_period?:{from:string;to:string}|null;
  machines:Machine[];
  drivers?:{name:string;hours:number|null;rows:number;orders:number}[];
  months:(Metrics & MachinePerformance & {month_key:string})[];
@@ -242,11 +254,13 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
    </header>
    {problem?<section className="panel" role="alert">{problem}</section>:!report?<section className="panel"><p>Importera Resursuppföljning från NeXT för att börja följa upp maskiner.</p><Link href="/kpi?view=import#next-artikelimport">Öppna Dataimport</Link></section>:<>
     {metrics&&<section className="metrics-grid" aria-label={machine?'Nyckeltal för vald maskin':'Nyckeltal för egna maskiner'}>
-      <article className="metric-card"><span>Upparbetat värde</span><strong>{money(metrics.value)}</strong><small>NeXT · Utf intäkt</small></article>
+      <article className="metric-card"><span>Intäkt under perioden</span><strong>{money(metrics.value)}</strong><small>NeXT · Utf intäkt</small></article>
       <article className="metric-card"><span>Registrerad tid</span><strong>{metrics.hours===null?'–':number(metrics.hours)+' tim'}</strong></article>
       <article className="metric-card"><span>Värde per timme</span><strong>{money(metrics.value_per_hour)}</strong></article>
-      <article className="metric-card"><span>Maskinkostnad, netto</span><strong>{money(machine?current?.total_cost??null:summaryCost)}</strong><small>Bokfört på maskinen och matchad arbetstid</small></article>
+      <article className="metric-card"><span>Kostnad under perioden</span><strong>{money(machine?current?.total_cost??null:summaryCost)}</strong><small>Bokfört på maskinen och matchad arbetstid</small></article>
       {current&&<>
+       <article className="metric-card"><span>Resultat under perioden</span><strong>{money(current.result??null)}</strong></article>
+       <article className="metric-card"><span>Marginal</span><strong>{marginText(current.margin_pct)}</strong></article>
        <article className="metric-card"><span>Nyttjandegrad</span><strong>{utilization(current)}</strong><small>{current.available_hours==null?'Kapacitet saknas':number(current.available_hours)+' tim kapacitet'}</small></article>
        <article className="metric-card"><span>Kostnad per debiterad timme</span><strong>{costPerBilledHour(current)}</strong><small>{current.billed_hours==null?'Fakturerade timmar saknas':number(current.billed_hours)+' tim fakturerade i NeXT'}</small></article>
       </>}
@@ -255,15 +269,15 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     {machine&&!current&&<section className="panel"><p>Inget underlag för maskinen i urvalet.</p></section>}
     {!machine&&<section>
      <h2>Egna maskiner</h2>
-     <div className={unitStyles.legend}><span><i style={{background:'#d8e3ff'}}/>Starkare kostnadsfärg = större andel av upparbetat värde</span></div>
+     <div className={unitStyles.legend}><span><i style={{background:'#e9b9b9'}}/>Rött resultat = förlust</span><span><i style={{background:'#d8e3ff'}}/>Starkare kostnadsfärg = större andel av intäkten</span></div>
      {rates&&<p>Schablon för personalkostnad i NeXT-underlaget. Maskinförare {money(rates.operator.rate)}, anläggare {money(rates.groundworker.rate)}.</p>}
-     <details className="kpi-help"><summary>Om tid och kostnader</summary><p className={unitStyles.caption}>Nyttjandegrad jämför registrerad maskintid med kapacitet per arbetsdag. Kostnad per debiterad timme använder fakturerade timmar i NeXT. Klicka på en kostnadsruta för att se underlaget.</p></details>
+     <details className="kpi-help"><summary>Om tid och kostnader</summary><p className={unitStyles.caption}>Intäkten är upparbetat värde i NeXT. Intäkt, kostnad och nyttjandegrad följer samma datumurval inom exportens period. Marginal visas när intäkten är positiv och både intäkt och kostnad finns i underlaget. Klicka på en kostnadsruta för att se underlaget.</p></details>
      {all.length?[...machineTypes.map(type=>type.title),otherMachineType].map(type=>{
       const rows=machineGroups.get(type);
       if(!rows?.length)return null;
       const costs=machineCostColumns.slice(0,5);
       const columns=[
-       {label:'Maskin'},{label:'Upparbetat värde'},{label:'Maskinkostnad'},
+       {label:'Maskin'},{label:'Intäkt'},{label:'Kostnad'},{label:'Resultat'},{label:'Marginal'},
        ...costs,{label:'Maskintid'},{label:'Arbetstid'},{label:'Dagar'},{label:'Debiterad tid'},{label:'Nyttjandegrad'},{label:'Värde / h'},{label:'Kostnad / debiterad h'},
       ];
       const head=<thead><tr>{columns.map(c=><th key={c.label} scope="col" className={unitStyles.headingCell} style={{borderTop:'3px solid '+('color' in c?'rgb('+c.color+')':'#cbd5e1')}}>{c.label}</th>)}</tr></thead>;
@@ -273,7 +287,9 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
         {head}<tbody>{[...rows].sort((a,b)=>a.name.localeCompare(b.name,'sv',{numeric:true})).map(m=><tr className="economic-parent" key={m.machine_id}>
          <td className={unitStyles.name}><Link prefetch={false} href={href({machine:m.machine_id})}><strong>{m.name} →</strong></Link>
           <small>{m.machine_reference?('AO '+m.machine_reference+' · '):''}{m.codes.join(', ')}</small></td>
-         <td>{money(m.value)}</td><td>{money(m.total_cost)}</td>
+         <td><Link prefetch={false} href={href({machine:m.machine_id})+'#maskinintakt'}>{money(m.value)}</Link></td>
+         <td><Link prefetch={false} href={href({machine:m.machine_id})+'#maskinkostnader'}>{money(m.total_cost)}</Link></td>
+         <MachineResultCells result={m.result} margin_pct={m.margin_pct}/>
          {costs.map(c=><td key={c.key} className={unitStyles.cost}>
           <MachineCostCell machine={m} category={c.key} color={c.color} href={href({machine:m.machine_id})+'#kostnad-'+c.key}/>
          </td>)}
@@ -306,13 +322,13 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
       </tr>)}</tbody>
      </table></div>:<p>Ingen arbetstid utan maskinkoppling i urvalet.</p>}
     </section>}
-    {current&&<section className="panel"><h2>Upparbetat värde per användning</h2>
+    {current&&<section className="panel" id="maskinintakt"><h2>Intäkt per användning</h2>
      <p>Bygger på projektets verksamhetsgrupp vid utförandedatum. NeXT-projektets kategori kan komplettera den första klassningen bakåt i tiden. Extern uthyrning kräver en extern kund på resursraden.</p>
      <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
       <tbody>{usageLabels.map(label=><tr key={label}><th scope="row">{label}</th><td>{number(current.usage?.[label]?.hours??null)}</td><td>{money(current.usage?.[label]?.value??null)}</td></tr>)}</tbody>
      </table></div>
     </section>}
-    {current&&<section className="panel">
+    {current&&<section className="panel" id="maskinkostnader">
      <h2>Kostnader och arbetstid</h2>
      <dl className={styles.facts}>
       <dt>Kostnader enligt bokföring och avskrivningsregister</dt><dd>{money(current.booked_cost??null)}</dd>
@@ -355,8 +371,8 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
      </table></div>:<p>Föraruppgifter saknas i urvalet.</p>}
     </section>}
     {machine&&report.months.length>0&&<section className="panel"><h2>Maskinens utveckling per månad</h2><MachineMonthlyTrend months={report.months}/><div className="table-wrap"><table className="data-table">
-     <thead><tr><th scope="col">Månad</th><th scope="col">Registrerade tim</th><th scope="col">Debiterade tim</th><th scope="col">Nyttjandegrad</th><th scope="col">Upparbetat värde</th><th scope="col">Maskinkostnad</th><th scope="col">Kostnad/debiterad tim</th></tr></thead>
-     <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td><td>{money(m.value)}</td><td>{money(m.total_cost??null)}</td><td>{costPerBilledHour(m)}</td></tr>)}</tbody>
+     <thead><tr><th scope="col">Månad</th><th scope="col">Registrerade tim</th><th scope="col">Debiterade tim</th><th scope="col">Nyttjandegrad</th><th scope="col">Intäkt</th><th scope="col">Kostnad</th><th scope="col">Resultat</th><th scope="col">Marginal</th><th scope="col">Kostnad/debiterad tim</th></tr></thead>
+     <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td><td>{money(m.value)}</td><td>{money(m.total_cost??null)}</td><MachineResultCells result={m.result} margin_pct={m.margin_pct}/><td>{costPerBilledHour(m)}</td></tr>)}</tbody>
     </table></div></section>}
     {machine&&!drilling&&report.jobs.length>0&&<section className="panel"><h2>Projekt och arbetsorder</h2><div className="table-wrap"><table className="data-table">
      <thead><tr><th scope="col">Projekt</th><th scope="col">Arbetsorder</th><th scope="col">Förare</th><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Matchad arbetstid</th><th scope="col">Tilldelad personalkostnad</th></tr></thead>
