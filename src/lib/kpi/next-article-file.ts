@@ -18,7 +18,7 @@ type Article = {
 
 type WorkshopResourceRow={
   sheet:string; source_row:number; project:string; project_name:string; work_order:string; order_name:string;
-  center:string; code:string; article:string; unit:string; performed_on:string|null; quantity:number|null;
+  center:string; account:string; code:string; article:string; unit:string; performed_on:string|null; quantity:number|null;
   performed_by?:string; employee_number?:string; customer?:string;
   value:number|null; actual_cost:number|null; invoiced:boolean|null; billable:boolean|null; invoice_number:string;
 };
@@ -88,12 +88,13 @@ export function readNextArticleFile(bytes:Uint8Array,{includeWorkshop=false,incl
       if(++sourceRows>30000)throw Error('Exporten har fler än 30 000 rader. Exportera en kortare period.');
       const performed=readDate(cell('performed')?.v);
       const workshop=includeWorkshop&&account==='4630';
-      const machine=includeMachines&&account!=='4630'&&/^(M|IN|RE|UT|EL)\d/i.test(code);
+      const labor=account==='7010'&&unit==='tim'&&['PE1002','PE1003'].includes(code.toUpperCase());
+      const machine=includeMachines&&account!=='4630'&&(/^(M|IN|RE|UT|EL)\d/i.test(code)||labor);
       if(canReadWorkshop&&(workshop||machine))(workshop?workshopRows:machineRows).push({
         ...(machine?{customer:label('customer'),performed_by:label('performed_by'),employee_number:label('employee_number')}:{}),
         sheet:sheetName,source_row:r+1,project:label('project'),project_name:label('project_name'),
         work_order:label('work_order'),order_name:label('order_name'),center:label('center'),
-        code,article:name,unit,performed_on:performed,quantity:readAmount(cell('quantity')?.v),
+        account,code:labor?code.toUpperCase():code,article:name,unit,performed_on:performed,quantity:readAmount(cell('quantity')?.v),
         value:readAmount(cell('value')?.v),actual_cost:readAmount(cell('actual_cost')?.v),
         invoiced:readFlag(cell('invoiced')?.v),billable:readFlag(cell('billable')?.v),invoice_number:label('invoice_number'),
       });
