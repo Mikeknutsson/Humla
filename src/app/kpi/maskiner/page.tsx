@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {assignPersonVehicle} from './person-vehicle-action';
 import {costColumns,costShare,costShade} from '@/app/_components/kpi-cost-palette';
 import unitStyles from '@/app/_components/kpi-economic-units.module.css';
 import {ForemanPeriodPicker} from '@/app/_components/foreman-period-picker';
@@ -40,6 +41,7 @@ type UsageTotals={rows:number;hours:number|null;value:number|null};
 type MachinePerformance={hours:number|null; billed_hours?:number|null; available_hours?:number|null; days?:number|null; total_cost?:number|null};
 type MachineCosts={
  booked_cost:number|null; personnel_cost:number|null; personnel_hours:number|null; total_cost:number|null;
+ operator_hours?:number|null; operator_cost?:number|null; groundworker_hours?:number|null; groundworker_cost?:number|null;
  categories?:Record<string,number>|null; internal_ao?:number|null;
 };
 // Labels are for display grouping. They do not affect identities, costs or resource rows.
@@ -71,7 +73,18 @@ function MachineCostCell({machine,category,color,href}:{machine:Machine;category
 type Machine=Metrics & MachineCosts & MachinePerformance & {machine_id:string;name:string;codes:string[];machine_reference?:string|null;order_count?:number;order_refs?:string[];usage?:Partial<Record<Usage,UsageTotals>>};
 type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null;drivers?:string[];usage?:Usage;personnel_hours?:number|null;personnel_cost?:number|null};
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
+type PersonUnit={
+ person:string|null; name:string|null; hours:number; operator_hours:number|null; groundworker_hours:number|null;
+ personnel_cost:number; value:number|null; vehicles:string[]; vehicle_cost:number|null; total_cost:number;
+};
+const vehicleLinkStatus:Record<string,string>={
+ saved:'Bilkopplingen sparades.',missing:'Registreringsnumret hittades inte i Humla.',
+ overlap:'Personen eller bilen har redan en koppling som överlappar perioden.',
+ invalid:'Kontrollera registreringsnummer och från-datum.',failed:'Bilkopplingen kunde inte sparas.',
+};
 type Report={
+ labor_rates?:Record<'operator'|'groundworker',{rate:number;source:string}>;
+ person_units?:PersonUnit[];
  machines:Machine[];
  drivers?:{name:string;hours:number|null;rows:number;orders:number}[];
  months:(Metrics & MachinePerformance & {month_key:string})[];
@@ -172,10 +185,12 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
    const parsed=readNextArticleFile(await loadNextResourceFile(access,batch),{includeMachines:true});
    if(!parsed.workshopColumns)problem='Exporten behöver innehålla Kontonr, Utförd datum och Utf intäkt.';
    else{
-    const result=await access.db.rpc('hub_next_machine_followup',{
+    const args={
      t:access.tenantId,p_batch:batch.id,p_rows:parsed.machineRows,
      p_from:from,p_to:to,p_machine:machine,p_project:project,p_order:order,p_months:!explicitDates&&period.mode==='months'?period.months:null,
-    });
+    };
+    const updated=await access.db.rpc('hub_next_machine_followup_v2',args);
+    const result=updated.error?.code==='PGRST202'?await access.db.rpc('hub_next_machine_followup',args):updated;
     if(result.error||!result.data)throw Error(result.error?.code??'Empty report');
     report=result.data as Report;
    }
@@ -198,6 +213,12 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  const summary={hours,value,value_per_hour:hours&&all.every(row=>row.hours===null||row.value_per_hour!==null)?all.reduce((sum,row)=>sum+(row.value_per_hour??0)*(row.hours??0),0)/hours:null};
  const summaryCost=sumPresent(all.map(row=>row.total_cost??null));
  const metrics=machine?current:all.length?summary:null;
+ const rates=report?.labor_rates;
+ const people=report?.person_units;
+ const manage=people?.some(unit=>unit.person!==null)?
+  (await access.db.rpc('hub_has_permission',{p_tenant_id:access.tenantId,p_permission:'kpi.manage'})).data===true:false;
+ const statusKey=text(raw.vehicle_link);
+ const linkStatus=Object.hasOwn(vehicleLinkStatus,statusKey)?vehicleLinkStatus[statusKey]:undefined;
  const categories=[...new Set(report?.others.map(row=>row.category))];
  return <KpiDetailShell followup="machines" title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query={navQuery.toString()}>
   <div className="content">
@@ -235,6 +256,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     {!machine&&<section>
      <h2>Egna maskiner</h2>
      <div className={unitStyles.legend}><span><i style={{background:'#d8e3ff'}}/>Starkare kostnadsfärg = större andel av upparbetat värde</span></div>
+     {rates&&<p>Schablon för personalkostnad i NeXT-underlaget. Maskinförare {money(rates.operator.rate)}, anläggare {money(rates.groundworker.rate)}.</p>}
      <details className="kpi-help"><summary>Om tid och kostnader</summary><p className={unitStyles.caption}>Nyttjandegrad jämför registrerad maskintid med kapacitet per arbetsdag. Kostnad per debiterad timme använder fakturerade timmar i NeXT. Klicka på en kostnadsruta för att se underlaget.</p></details>
      {all.length?[...machineTypes.map(type=>type.title),otherMachineType].map(type=>{
       const rows=machineGroups.get(type);
@@ -262,6 +284,28 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
       </article>;
      }):<p>Inga bekräftade egna maskiner har underlag i urvalet.</p>}
     </section>}
+    {!machine&&people&&<section className="panel" id="personalenheter">
+     <h2>Person + bil</h2>
+     <p>Maskinförar- och anläggartid som saknar entydig maskinkoppling följs upp här. Bilkostnader hämtas för bilens giltiga kopplingsperiod.</p>
+     {linkStatus&&<p role="status">{linkStatus}</p>}
+     {people.length?<div className="table-wrap"><table className="data-table">
+      <thead><tr><th scope="col">Person och bil</th><th scope="col">Anläggartid</th><th scope="col">Maskinförartid</th><th scope="col">Upparbetat värde</th><th scope="col">Personalkostnad</th><th scope="col">Bilkostnad</th><th scope="col">Summa känd kostnad</th>{manage&&<th scope="col">Bilkoppling</th>}</tr></thead>
+      <tbody>{people.map((unit,i)=><tr key={unit.person??i}>
+       <th scope="row">{unit.name??'Person saknas i NeXT'}<br/><small>{unit.vehicles.join(', ')||'Bil saknas'}</small></th>
+       <td>{number(unit.groundworker_hours)}</td><td>{number(unit.operator_hours)}</td><td>{money(unit.value)}</td>
+       <td>{money(unit.personnel_cost)}</td><td>{money(unit.vehicle_cost)}</td><td>{money(unit.total_cost)}</td>
+       {manage&&<td>{unit.person?<details><summary>Koppla bil</summary>
+        <form action={assignPersonVehicle} className="period-form">
+         <input type="hidden" name="person" value={unit.person}/>
+         <input type="hidden" name="selection" value={viewQuery.toString()}/>
+         <label>Registreringsnummer<input name="registration" required maxLength={12}/></label>
+         <label>Gäller från<input name="start" required type="date" defaultValue={from??undefined}/></label>
+         <button type="submit">Spara</button>
+        </form>
+       </details>:'Personen behöver kopplas till Humla'}</td>}
+      </tr>)}</tbody>
+     </table></div>:<p>Ingen arbetstid utan maskinkoppling i urvalet.</p>}
+    </section>}
     {current&&<section className="panel"><h2>Upparbetat värde per användning</h2>
      <p>Bygger på projektets verksamhetsgrupp vid utförandedatum. NeXT-projektets kategori kan komplettera den första klassningen bakåt i tiden. Extern uthyrning kräver en extern kund på resursraden.</p>
      <div className="table-wrap"><table className="data-table"><thead><tr><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th></tr></thead>
@@ -273,15 +317,17 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
      <dl className={styles.facts}>
       <dt>Kostnader enligt bokföring och avskrivningsregister</dt><dd>{money(current.booked_cost??null)}</dd>
       {current.internal_ao!=null&&<><dt>Interna AO-överföringar</dt><dd>{money(current.internal_ao)}</dd></>}
-      <dt>Personalkostnad tilldelad från tidrapporter</dt><dd>{money(current.personnel_cost??null)}</dd>
+      <dt>{rates?'Beräknad personalkostnad':'Personalkostnad tilldelad från tidrapporter'}</dt><dd>{money(current.personnel_cost??null)}</dd>
+      {rates&&<><dt>Maskinförare</dt><dd>{number(current.operator_hours??null)} tim · {money(current.operator_cost??null)}</dd>
+      <dt>Anläggare</dt><dd>{number(current.groundworker_hours??null)} tim · {money(current.groundworker_cost??null)}</dd></>}
       <dt>Matchad arbetstid</dt><dd>{current.personnel_hours==null?'–':number(current.personnel_hours)+' tim'}</dd>
      </dl>
      <p>Avskrivningar hämtas från Humlas avskrivningsregister. – betyder att underlag saknas. NeXT-kostnaderna hämtas från senaste publicerade bokföringsimporten i Humla. Interna AO-överföringar redovisas separat från maskinkostnaden. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT. Nyttjandegraden jämför registrerade maskintimmar med Humlas normala kapacitet under exportens period.</p>
-     <p>Humla matchar tidrapporter mot förare, utförandedag och maskinartikel i NeXT. Om tidrapporten anger ett projekt behöver projektet också stämma. Om föraren kört flera maskiner fördelas kostnaden efter matchade timmar. Sammanställda arbetstidsrader från NeXT räknas bort för att undvika dubbelräkning.</p>
-     {current.personnel_hours==null&&<p>Ingen personalkostnad från tidrapporter kunde matchas i urvalet. Kostnaden per debiterad timme bygger på de kostnader som finns i underlaget.</p>}
+     {rates?<p>Humla använder de registrerade personaltimmarna i NeXT där de går att koppla till maskinen. När en maskinförare har registrerats på en maskinrad används maskintimmarna som underlag i övriga fall. Maskinflytt och maskinrader utan förare ger ingen schablonkostnad.</p>:<p>Humla matchar tidrapporter mot förare, utförandedag och maskinartikel i NeXT. Om tidrapporten anger ett projekt behöver projektet också stämma. Om föraren kört flera maskiner fördelas kostnaden efter matchade timmar. Sammanställda arbetstidsrader från NeXT räknas bort för att undvika dubbelräkning.</p>}
+     {current.personnel_hours==null&&<p>Ingen beräknad personalkostnad kunde kopplas i urvalet. Kostnaden per debiterad timme bygger på de kostnader som finns i underlaget.</p>}
      <div className="table-wrap"><table className="data-table">
       <caption>Maskinkostnader per kategori</caption>
-      <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Bokföring och register</th><th scope="col">Från tidrapporter</th><th scope="col">Totalt</th></tr></thead>
+      <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Bokföring och register</th><th scope="col">{rates?'Beräknad kostnad':'Från tidrapporter'}</th><th scope="col">Totalt</th></tr></thead>
       <tbody>{[...new Set([...machineCostColumns.map(item=>item.key),...Object.keys(current.categories??{})])].map(category=>{
        const booked=current.categories?.[category]??null;
        const allocated=category==='personnel'?current.personnel_cost:null;
