@@ -211,3 +211,5 @@ body:has(.kpi-app) > .shell > .main { max-width: none; padding: 0; }
 .kpi-app .kpi-help-warning[open]>summary {border-color:#e8d3a2}
 .kpi-app .kpi-help-warning a {font-weight:750}
 }
+
+.kpi-app .sidebar{overflow-y:auto}

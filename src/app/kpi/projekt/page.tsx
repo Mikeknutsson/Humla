@@ -41,7 +41,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Record<s
  const financialHref=projectReportHref(projectPeriodParams(selection),{search:registerSearch||null});
  const firstMonth=selection.from.slice(0,7)+'-01',lastDay=new Date(Date.UTC(Number(firstMonth.slice(0,4)),Number(firstMonth.slice(5,7)),0)).toISOString().slice(0,10);
  const monthHref=projectReportHref(query,{from:firstMonth,to:lastDay});
- return <KpiDetailShell query="" title="Projektuppföljning" breadcrumb="Humla Dashboard / Projekt" extraNavigation={<><Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanel</Link><Link href="/kpi?view=internal" prefetch={false}>Interna körningar</Link></>}>
+ return <KpiDetailShell followup="projects" query={projectPeriodParams(selection).toString()} title="Projektuppföljning" breadcrumb="Humla Dashboard / Projekt" extraNavigation={<><Link href="/kpi/kontrollpanel" prefetch={false}>Kontrollpanel</Link><Link href="/kpi?view=internal" prefetch={false}>Interna körningar</Link></>}>
   {selection.custom&&<p className="panel">Eget datumintervall: {selection.from}–{selection.to}. Månadsval nedan ersätter intervallet med hela månader.</p>}
   <KpiMonthPeriod period={selection.period} costCenter="" costCenters={[]} pathname="/kpi/projekt" showFilters={false}/>
   <nav className={styles.pager} aria-label="Projektvyer">
