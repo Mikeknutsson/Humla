@@ -1,0 +1,47 @@
+.followup {
+  margin: 4px 0;
+}
+
+.followup summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  color: #ecedf0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.followup summary::-webkit-details-marker {
+  display: none;
+}
+
+.followup summary:hover,
+.followup summary:focus-visible {
+  background: #25282c;
+}
+
+.chevron {
+  margin-left: auto;
+}
+
+.followup[open] > summary .chevron,
+.area[open] > summary .chevron {
+  transform: rotate(90deg);
+}
+
+.areas {
+  padding-left: 8px;
+}
+
+.area > summary {
+  padding: 9px 12px;
+  font-size: .875rem;
+}
+
+.links {
+  display: grid;
+  padding-left: 12px;
+}

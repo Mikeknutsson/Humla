@@ -1,4 +1,5 @@
 "use client";
+import { KpiFollowupNav } from "./kpi-followup-nav";
 import { KpiDriverCount, type DriverCount } from './kpi-driver-count';
 
 import {requestImport,ImportConnectionError} from "@/lib/kpi/import-request";
@@ -370,18 +371,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       <div className="workspace"><span>Arbetsyta</span><strong>{tenantName}</strong></div>
       <nav className="nav">
         <Link prefetch={false} className={view === "overview" ? "nav-overview active" : "nav-overview"} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
-        <details className="report-nav-group" open={view === "kpi"} style={{margin:"4px 0"}}>
-          <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><BarChart3 size={18}/>Uppföljning <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
-          <div style={{paddingLeft:18,display:"grid"}}>
-            <Link prefetch={false} className={view === "kpi" ? "active" : ""} href={kpiHref("kpi")} onClick={switchFinancialView}><BarChart3 size={18}/>Enhetsuppföljning</Link>
-            <Link prefetch={false} href="/chauffor" onClick={() => setMobileMenu(false)}><Truck size={18}/>Chaufförsvy</Link>
-            <Link prefetch={false} href="/kpi/maskiner" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Maskinuppföljning</Link>
-            <Link prefetch={false} href="/kpi/mina-enheter" onClick={() => setMobileMenu(false)}><Truck size={18}/>Arbetsledarvyer</Link>
-            <Link prefetch={false} href="/kpi/verkstad" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Verkstaden</Link>
-            <Link prefetch={false} href="/kpi/fordon" onClick={() => setMobileMenu(false)}><Gauge size={18}/>Fordon &amp; TCO</Link>
-            <Link prefetch={false} href="/kpi/projekt" onClick={() => setMobileMenu(false)}><BarChart3 size={18}/>Projektuppföljning</Link>
-          </div>
-        </details>
+        <KpiFollowupNav query={periodQuery} expanded={view === "kpi"} active={view === "kpi" ? (costCenter === "20" ? "recycling" : costCenter === "30" ? "trucks" : undefined) : undefined} onNavigate={() => setMobileMenu(false)}/>
         <details className="report-nav-group" open={view === "internal" || view === "monthly"} style={{margin:"4px 0"}}>
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><FileSpreadsheet size={18}/>Rapporter <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>

@@ -6,6 +6,7 @@ import {foremanFiscalYear,foremanPeriodQuery,resolveForemanPeriod} from '@/lib/k
 import {stockholmToday} from '@/lib/kpi/period';
 import styles from '@/app/_components/kpi-margin-gauge.module.css';
 import trendStyles from '@/app/_components/foreman-result-trend.module.css';
+import {KpiTableFrame} from '@/app/_components/kpi-table-frame';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
 import {reviewAccess} from '@/lib/hub/review-access';
 import {nextResourceBatches,loadNextResourceFile} from '@/lib/kpi/next-resource-source';
@@ -41,6 +42,16 @@ type MachineCosts={
  booked_cost:number|null; personnel_cost:number|null; personnel_hours:number|null; total_cost:number|null;
  categories?:Record<string,number>|null; internal_ao?:number|null;
 };
+// Labels are for display grouping. They do not affect identities, costs or resource rows.
+const machineTypes = [
+ {title:'Hjulgrävare', match:/hjulgräv|\b(?:EWR?|PW|DX)\s*\d+[A-Z0-9-]*W\b|\b(?:EWR?|PW)[ -]?\d+|\b(?:170|160)W\b/i},
+ {title:'Bandgrävare och minigrävare', match:/bandgräv|minigräv|\bgrävmaskin|\b(?:EC|SK|DX|R)\s*[- ]?\d{2,}|\bCAT\s*(?:3\d{2}|301\.8)/i},
+ {title:'Grävare med okänd undervagn', match:/\bLiebherr\s+9\d{2}/i},
+ {title:'Hjullastare och kompaktlastare', match:/lastare|\bL\s*\d{2,3}H?\b|\b(?:Ljungby|Kramer|Avant|Manitou\s+MLA|Bobcat\s+T76)\b/i},
+ {title:'Dumpers', match:/dumper|\bTA[ -]?230\b/i},
+ {title:'Vältar', match:/vält|\b(?:Dynapac|Bomag)\b/i},
+];
+const otherMachineType = 'Övriga maskiner';
 const machineCostColumns=[
  ...costColumns,{key:'transport',label:'Transport och maskinflytt',color:'148,105,69'},
 ];
@@ -130,6 +141,15 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  const batches=data??[];
  const batch=selected?batches.find(b=>b.id===selected):
   batches.find(b=>(!from||!b.period_end||b.period_end>=from)&&(!to||!b.period_start||b.period_start<=to))??batches[0];
+ const navQuery=new URLSearchParams({cost_center:'10'});
+ if(from&&to&&!invalidPeriod){
+  navQuery.set('from',from);
+  navQuery.set('to',to);
+  if(!explicitDates&&period.mode==='months'){
+   navQuery.set('fiscal_year',String(period.fiscalYear));
+   navQuery.set('months',period.months.join(','));
+  }
+ }
  const viewQuery=new URLSearchParams(periodQuery);
  if(batch)viewQuery.set('batch',batch.id);
  if(machine)viewQuery.set('machine',machine);
@@ -166,13 +186,20 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  }
  const current=report?.machines.find(row=>row.machine_id===machine);
  const all=report?.machines??[];
+ const machineGroups = new Map<string,Machine[]>();
+ for (const row of all) {
+  const type = machineTypes.find(({match})=>match.test(row.name))?.title??otherMachineType;
+  const group = machineGroups.get(type)??[];
+  group.push(row);
+  machineGroups.set(type,group);
+ }
  const hours=sumPresent(all.map(row=>row.hours));
  const value=sumPresent(all.map(row=>row.value));
  const summary={hours,value,value_per_hour:hours&&all.every(row=>row.hours===null||row.value_per_hour!==null)?all.reduce((sum,row)=>sum+(row.value_per_hour??0)*(row.hours??0),0)/hours:null};
  const summaryCost=sumPresent(all.map(row=>row.total_cost??null));
  const metrics=machine?current:all.length?summary:null;
  const categories=[...new Set(report?.others.map(row=>row.category))];
- return <KpiDetailShell title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query="cost_center=10" extraNavigation={<Link href="/kpi/mina-enheter" prefetch={false}>Arbetsledarvyer</Link>}>
+ return <KpiDetailShell followup="machines" title="Maskinuppföljning" breadcrumb="Humla Dashboard / Entreprenad och maskinuthyrning / Maskiner" query={navQuery.toString()}>
   <div className="content">
    <header className="panel">
     <div className="panel-head"><div><h2>{current?.name??'Entreprenad och maskinuthyrning'}</h2><p>Egna maskiner · NeXT Resursuppföljning</p>{current&&<MachineReference machine={current}/>}</div>
@@ -205,20 +232,35 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
       {!machine&&<article className="metric-card"><span>Egna maskiner i urvalet</span><strong>{number(all.length)}</strong></article>}
     </section>}
     {machine&&!current&&<section className="panel"><p>Inget underlag för maskinen i urvalet.</p></section>}
-    {!machine&&<section className="panel">
+    {!machine&&<section>
      <h2>Egna maskiner</h2>
-     <p>Nyttjandegrad jämför registrerade maskintimmar med Humlas kapacitet per arbetsdag under exportens period. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT.</p>
-     {all.length?<div className={'table-wrap '+unitStyles.panel}><table className={unitStyles.table}>
-      <thead><tr><th scope="col">Maskinprojekt</th><th scope="col">Maskin</th><th scope="col">Maskintid</th><th scope="col">Matchad arbetstid</th><th scope="col">Dagar</th><th scope="col">Debiterade tim</th><th scope="col">Nyttjandegrad</th><th scope="col">Upparbetat värde</th><th scope="col">Maskinkostnad</th>{machineCostColumns.slice(0,5).map(c=><th key={c.key} scope="col" style={{borderTop:'3px solid rgb('+c.color+')'}}>{c.label}</th>)}<th scope="col">Kostnad/debiterad tim</th></tr></thead>
-      <tbody>{all.map(m=><tr key={m.machine_id}>
-       <td>{m.machine_reference??'–'}</td><th scope="row"><Link prefetch={false} href={href({machine:m.machine_id})}>{m.name} →</Link><br/><small>{m.codes.join(', ')}</small></th>
-       <td>{number(m.hours)}</td><td>{number(m.personnel_hours)}</td><td>{number(m.days??null)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td>
-       <td>{money(m.value)}</td><td>{money(m.total_cost)}</td>
-       {machineCostColumns.slice(0,5).map(c=><td key={c.key} className={unitStyles.cost}>
-        <MachineCostCell machine={m} category={c.key} color={c.color} href={href({machine:m.machine_id})+'#kostnad-'+c.key}/>
-       </td>)}<td>{costPerBilledHour(m)}</td>
-      </tr>)}</tbody>
-     </table></div>:<p>Inga bekräftade egna maskiner har underlag i urvalet.</p>}
+     <div className={unitStyles.legend}><span><i style={{background:'#d8e3ff'}}/>Starkare kostnadsfärg = större andel av upparbetat värde</span></div>
+     <details className="kpi-help"><summary>Om tid och kostnader</summary><p className={unitStyles.caption}>Nyttjandegrad jämför registrerad maskintid med kapacitet per arbetsdag. Kostnad per debiterad timme använder fakturerade timmar i NeXT. Klicka på en kostnadsruta för att se underlaget.</p></details>
+     {all.length?[...machineTypes.map(type=>type.title),otherMachineType].map(type=>{
+      const rows=machineGroups.get(type);
+      if(!rows?.length)return null;
+      const costs=machineCostColumns.slice(0,5);
+      const columns=[
+       {label:'Maskin'},{label:'Upparbetat värde'},{label:'Maskinkostnad'},
+       ...costs,{label:'Maskintid'},{label:'Arbetstid'},{label:'Dagar'},{label:'Debiterad tid'},{label:'Nyttjandegrad'},{label:'Värde / h'},{label:'Kostnad / debiterad h'},
+      ];
+      const head=<thead><tr>{columns.map(c=><th key={c.label} scope="col" className={unitStyles.headingCell} style={{borderTop:'3px solid '+('color' in c?'rgb('+c.color+')':'#cbd5e1')}}>{c.label}</th>)}</tr></thead>;
+      return <article className={'panel economic-units '+unitStyles.panel} key={type}>
+       <h3>{type} <small>· {rows.length}</small></h3>
+       <KpiTableFrame head={head}><table className={unitStyles.table} aria-label={type}>
+        {head}<tbody>{[...rows].sort((a,b)=>a.name.localeCompare(b.name,'sv',{numeric:true})).map(m=><tr className="economic-parent" key={m.machine_id}>
+         <td className={unitStyles.name}><Link prefetch={false} href={href({machine:m.machine_id})}><strong>{m.name} →</strong></Link>
+          <small>{m.machine_reference?('AO '+m.machine_reference+' · '):''}{m.codes.join(', ')}</small></td>
+         <td>{money(m.value)}</td><td>{money(m.total_cost)}</td>
+         {costs.map(c=><td key={c.key} className={unitStyles.cost}>
+          <MachineCostCell machine={m} category={c.key} color={c.color} href={href({machine:m.machine_id})+'#kostnad-'+c.key}/>
+         </td>)}
+         <td>{number(m.hours)}</td><td>{number(m.personnel_hours)}</td><td>{number(m.days??null)}</td><td>{number(m.billed_hours??null)}</td>
+         <td>{utilization(m)}</td><td>{money(m.value_per_hour)}</td><td>{costPerBilledHour(m)}</td>
+        </tr>)}</tbody>
+       </table></KpiTableFrame>
+      </article>;
+     }):<p>Inga bekräftade egna maskiner har underlag i urvalet.</p>}
     </section>}
     {current&&<section className="panel"><h2>Upparbetat värde per användning</h2>
      <p>Bygger på projektets verksamhetsgrupp vid utförandedatum. NeXT-projektets kategori kan komplettera den första klassningen bakåt i tiden. Extern uthyrning kräver en extern kund på resursraden.</p>

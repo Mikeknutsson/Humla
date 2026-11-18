@@ -24,7 +24,7 @@ function ForemanDashboard({owner=false,query='',children}:{owner?:boolean;query?
  const title=owner?'Arbetsledarvyer':'Mina enheter';
  return <>
   {owner&&<Suspense fallback={null}><KpiRefresh foremanOwner/></Suspense>}
-  <KpiDetailShell title={title} breadcrumb={'Humla Dashboard / '+title} query={query} personal={!owner}>
+  <KpiDetailShell followup="foremen" title={title} breadcrumb={'Humla Dashboard / '+title} query={query} personal={!owner}>
    {children}
   </KpiDetailShell>
  </>;
