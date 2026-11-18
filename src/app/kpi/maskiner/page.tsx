@@ -27,7 +27,7 @@ function utilization(metrics:MachinePerformance){
 }
 const marginText=(value:number|null|undefined)=>value==null?'–':percent.format(value/100);
 
-function MachineResultCells({result,margin_pct}:MachineProfit) {
+function ResultCells({result,margin_pct}:MachineProfit) {
  const tone=result==null?undefined:result<0?unitStyles.negative:unitStyles.positive;
  return <>
   <td className={tone}><strong>{money(result??null)}</strong>{result!=null&&<small>{result<0?'Förlust':result>0?'Överskott':'I balans'}</small>}</td>
@@ -84,7 +84,7 @@ function MachineCostCell({machine,category,color,href}:{machine:Machine;category
 type Machine=Metrics & MachineCosts & MachinePerformance & {machine_id:string;name:string;codes:string[];machine_reference?:string|null;order_count?:number;order_refs?:string[];usage?:Partial<Record<Usage,UsageTotals>>};
 type Job={project:string;work_order:string;project_name:string;order_name:string;rows:number;hours:number|null;value:number|null;drivers?:string[];usage?:Usage;personnel_hours?:number|null;personnel_cost?:number|null};
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
-type PersonUnit={
+type PersonUnit=MachineProfit & {
  person:string|null; name:string|null; hours:number; operator_hours:number|null; groundworker_hours:number|null;
  personnel_cost:number; value:number|null; vehicles:string[]; vehicle_cost:number|null; total_cost:number;
 };
@@ -227,6 +227,11 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  const metrics=machine?current:all.length?summary:null;
  const rates=report?.labor_rates;
  const people=report?.person_units;
+ const personnelGroups=[{title:'Anläggare',units:[] as PersonUnit[]},{title:'Maskinist',units:[] as PersonUnit[]}];
+ for(const unit of people??[]){
+  const machinist=unit.operator_hours!=null&&(unit.groundworker_hours==null||Math.abs(unit.operator_hours)>Math.abs(unit.groundworker_hours));
+  personnelGroups[machinist?1:0].units.push(unit);
+ }
  const manage=people?.some(unit=>unit.person!==null)?
   (await access.db.rpc('hub_has_permission',{p_tenant_id:access.tenantId,p_permission:'kpi.manage'})).data===true:false;
  const statusKey=text(raw.vehicle_link);
@@ -289,7 +294,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
           <small>{m.machine_reference?('AO '+m.machine_reference+' · '):''}{m.codes.join(', ')}</small></td>
          <td><Link prefetch={false} href={href({machine:m.machine_id})+'#maskinintakt'}>{money(m.value)}</Link></td>
          <td><Link prefetch={false} href={href({machine:m.machine_id})+'#maskinkostnader'}>{money(m.total_cost)}</Link></td>
-         <MachineResultCells result={m.result} margin_pct={m.margin_pct}/>
+         <ResultCells result={m.result} margin_pct={m.margin_pct}/>
          {costs.map(c=><td key={c.key} className={unitStyles.cost}>
           <MachineCostCell machine={m} category={c.key} color={c.color} href={href({machine:m.machine_id})+'#kostnad-'+c.key}/>
          </td>)}
@@ -301,15 +306,19 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
      }):<p>Inga bekräftade egna maskiner har underlag i urvalet.</p>}
     </section>}
     {!machine&&people&&<section className="panel" id="personalenheter">
-     <h2>Person + bil</h2>
-     <p>Maskinförar- och anläggartid som saknar entydig maskinkoppling följs upp här. Bilkostnader hämtas för bilens giltiga kopplingsperiod.</p>
+     <h2>Personaluppföljning</h2>
+     <p>Visar arbetstid utan entydig maskinkoppling. Varje person visas en gång. Vid tid i båda rollerna avgör flest timmar vilket block personen visas i. Vid lika många timmar visas personen under Anläggare.</p>
+     <p>Resultat och marginal bygger på kända kostnader. Bilkostnader följer bilkopplingens giltighetsperiod.</p>
      {linkStatus&&<p role="status">{linkStatus}</p>}
-     {people.length?<div className="table-wrap"><table className="data-table">
-      <thead><tr><th scope="col">Person och bil</th><th scope="col">Anläggartid</th><th scope="col">Maskinförartid</th><th scope="col">Upparbetat värde</th><th scope="col">Personalkostnad</th><th scope="col">Bilkostnad</th><th scope="col">Summa känd kostnad</th>{manage&&<th scope="col">Bilkoppling</th>}</tr></thead>
-      <tbody>{people.map((unit,i)=><tr key={unit.person??i}>
+     {personnelGroups.map(({title,units})=><section className={'panel '+unitStyles.panel} key={title}>
+      <h3>{title}</h3>
+      {units.length?<div className="table-wrap"><table className={'data-table '+unitStyles.table} aria-label={title}>
+      <thead><tr><th scope="col">Person och bil</th><th scope="col">Anläggartid</th><th scope="col">Maskinförartid</th><th scope="col">Upparbetat värde</th><th scope="col">Personalkostnad</th><th scope="col">Bilkostnad</th><th scope="col">Summa känd kostnad</th><th scope="col">Resultat</th><th scope="col">Marginal</th>{manage&&<th scope="col">Bilkoppling</th>}</tr></thead>
+      <tbody>{units.map((unit,i)=><tr key={unit.person??i}>
        <th scope="row">{unit.name??'Person saknas i NeXT'}<br/><small>{unit.vehicles.join(', ')||'Bil saknas'}</small></th>
        <td>{number(unit.groundworker_hours)}</td><td>{number(unit.operator_hours)}</td><td>{money(unit.value)}</td>
        <td>{money(unit.personnel_cost)}</td><td>{money(unit.vehicle_cost)}</td><td>{money(unit.total_cost)}</td>
+       <ResultCells result={unit.result} margin_pct={unit.margin_pct}/>
        {manage&&<td>{unit.person?<details><summary>Koppla bil</summary>
         <form action={assignPersonVehicle} className="period-form">
          <input type="hidden" name="person" value={unit.person}/>
@@ -321,6 +330,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
        </details>:'Personen behöver kopplas till Humla'}</td>}
       </tr>)}</tbody>
      </table></div>:<p>Ingen arbetstid utan maskinkoppling i urvalet.</p>}
+     </section>)}
     </section>}
     {current&&<section className="panel" id="maskinintakt"><h2>Intäkt per användning</h2>
      <p>Bygger på projektets verksamhetsgrupp vid utförandedatum. NeXT-projektets kategori kan komplettera den första klassningen bakåt i tiden. Extern uthyrning kräver en extern kund på resursraden.</p>
@@ -372,7 +382,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     </section>}
     {machine&&report.months.length>0&&<section className="panel"><h2>Maskinens utveckling per månad</h2><MachineMonthlyTrend months={report.months}/><div className="table-wrap"><table className="data-table">
      <thead><tr><th scope="col">Månad</th><th scope="col">Registrerade tim</th><th scope="col">Debiterade tim</th><th scope="col">Nyttjandegrad</th><th scope="col">Intäkt</th><th scope="col">Kostnad</th><th scope="col">Resultat</th><th scope="col">Marginal</th><th scope="col">Kostnad/debiterad tim</th></tr></thead>
-     <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td><td>{money(m.value)}</td><td>{money(m.total_cost??null)}</td><MachineResultCells result={m.result} margin_pct={m.margin_pct}/><td>{costPerBilledHour(m)}</td></tr>)}</tbody>
+     <tbody>{report.months.map(m=><tr key={m.month_key}><th scope="row">{m.month_key}</th><td>{number(m.hours)}</td><td>{number(m.billed_hours??null)}</td><td>{utilization(m)}</td><td>{money(m.value)}</td><td>{money(m.total_cost??null)}</td><ResultCells result={m.result} margin_pct={m.margin_pct}/><td>{costPerBilledHour(m)}</td></tr>)}</tbody>
     </table></div></section>}
     {machine&&!drilling&&report.jobs.length>0&&<section className="panel"><h2>Projekt och arbetsorder</h2><div className="table-wrap"><table className="data-table">
      <thead><tr><th scope="col">Projekt</th><th scope="col">Arbetsorder</th><th scope="col">Förare</th><th scope="col">Användning</th><th scope="col">Registrerad tid</th><th scope="col">Upparbetat värde</th><th scope="col">Matchad arbetstid</th><th scope="col">Tilldelad personalkostnad</th></tr></thead>
