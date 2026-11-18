@@ -53,7 +53,7 @@ type MachinePerformance=MachineProfit & {hours:number|null; billed_hours?:number
 type MachineCosts={
  booked_cost:number|null; personnel_cost:number|null; personnel_hours:number|null; total_cost:number|null;
  operator_hours?:number|null; operator_cost?:number|null; groundworker_hours?:number|null; groundworker_cost?:number|null;
- categories?:Record<string,number>|null; internal_ao?:number|null;
+ categories?:Record<string,number>|null; fuel_estimated?:number|null;
 };
 // Labels are for display grouping. They do not affect identities, costs or resource rows.
 const machineTypes = [
@@ -69,7 +69,7 @@ const machineCostColumns=[
  ...costColumns,{key:'transport',label:'Transport och maskinflytt',color:'148,105,69'},
 ];
 function costLabel(category:string){
- return machineCostColumns.find(item=>item.key===category)?.label??(category==='internal_ao'?'Interna AO-överföringar':category);
+ return machineCostColumns.find(item=>item.key===category)?.label??category;
 }
 function machineCost(machine:MachineCosts,category:string){
  return sumPresent([machine.categories?.[category]??null,category==='personnel'?machine.personnel_cost:null]);
@@ -343,27 +343,28 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     {current&&<section className="panel" id="maskinkostnader">
      <h2>Kostnader och arbetstid</h2>
      <dl className={styles.facts}>
-      <dt>Kostnader enligt bokföring och avskrivningsregister</dt><dd>{money(current.booked_cost??null)}</dd>
-      {current.internal_ao!=null&&<><dt>Interna AO-överföringar</dt><dd>{money(current.internal_ao)}</dd></>}
+      <dt>Kostnader från bokföring och register</dt><dd>{money(current.booked_cost==null?null:current.booked_cost-(current.fuel_estimated??0))}</dd>
+      {current.fuel_estimated!=null&&<><dt>Beräknad dieselkostnad</dt><dd>{money(current.fuel_estimated)}</dd></>}
       <dt>{rates?'Beräknad personalkostnad':'Personalkostnad tilldelad från tidrapporter'}</dt><dd>{money(current.personnel_cost??null)}</dd>
       {rates&&<><dt>Maskinförare</dt><dd>{number(current.operator_hours??null)} tim · {money(current.operator_cost??null)}</dd>
       <dt>Anläggare</dt><dd>{number(current.groundworker_hours??null)} tim · {money(current.groundworker_cost??null)}</dd></>}
       <dt>Matchad arbetstid</dt><dd>{current.personnel_hours==null?'–':number(current.personnel_hours)+' tim'}</dd>
      </dl>
-     <p>Avskrivningar hämtas från Humlas avskrivningsregister. – betyder att underlag saknas. NeXT-kostnaderna hämtas från senaste publicerade bokföringsimporten i Humla. Interna AO-överföringar redovisas separat från maskinkostnaden. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT. Nyttjandegraden jämför registrerade maskintimmar med Humlas normala kapacitet under exportens period.</p>
+     <p>Avskrivningar hämtas från Humlas avskrivningsregister. – betyder att underlag saknas. NeXT-kostnaderna hämtas från senaste publicerade bokföringsimporten i Humla. Vid luckor används B.SMART-tankningar eller en beräkning utifrån liter per drifttimme, uppmätta drifttimmar och dieselpriset i B.SMART. Beräknade belopp och prisdatum syns under konton och källor. Kostnad per debiterad timme använder timmar markerade som fakturerade i NeXT. Nyttjandegraden jämför registrerade maskintimmar med Humlas normala kapacitet under exportens period.</p>
      {rates?<p>Humla använder de registrerade personaltimmarna i NeXT där de går att koppla till maskinen. När en maskinförare har registrerats på en maskinrad används maskintimmarna som underlag i övriga fall. Maskinflytt och maskinrader utan förare ger ingen schablonkostnad.</p>:<p>Humla matchar tidrapporter mot förare, utförandedag och maskinartikel i NeXT. Om tidrapporten anger ett projekt behöver projektet också stämma. Om föraren kört flera maskiner fördelas kostnaden efter matchade timmar. Sammanställda arbetstidsrader från NeXT räknas bort för att undvika dubbelräkning.</p>}
      {current.personnel_hours==null&&<p>Ingen beräknad personalkostnad kunde kopplas i urvalet. Kostnaden per debiterad timme bygger på de kostnader som finns i underlaget.</p>}
      <div className="table-wrap"><table className="data-table">
       <caption>Maskinkostnader per kategori</caption>
       <thead><tr><th scope="col">Kostnadsslag</th><th scope="col">Bokföring och register</th><th scope="col">{rates?'Beräknad kostnad':'Från tidrapporter'}</th><th scope="col">Totalt</th></tr></thead>
       <tbody>{[...new Set([...machineCostColumns.map(item=>item.key),...Object.keys(current.categories??{})])].map(category=>{
-       const booked=current.categories?.[category]??null;
-       const allocated=category==='personnel'?current.personnel_cost:null;
+       const baseCost=current.categories?.[category]??null;
+       const booked=category==='fuel'&&current.fuel_estimated!=null?((baseCost??0)-current.fuel_estimated)||null:baseCost;
+       const allocated=category==='personnel'?current.personnel_cost:category==='fuel'?current.fuel_estimated??null:null;
        const amount=machineCost(current,category);
        const column=machineCostColumns.find(item=>item.key===category);
        return <tr key={category} id={'kostnad-'+category}><th scope="row">{costLabel(category)}</th><td>{money(booked)}</td><td>{money(allocated)}</td><td style={{background:column?costShade(column.color,costShare(amount,current.value??0)):undefined}}>{money(amount)}</td></tr>;
       })}</tbody>
-      <tfoot><tr><th scope="row">Summa maskinkostnader</th><td>{money(current.booked_cost)}</td><td>{money(current.personnel_cost)}</td><td>{money(current.total_cost)}</td></tr></tfoot>
+      <tfoot><tr><th scope="row">Summa maskinkostnader</th><td>{money(current.booked_cost==null?null:current.booked_cost-(current.fuel_estimated??0))}</td><td>{money(sumPresent([current.personnel_cost,current.fuel_estimated??null]))}</td><td>{money(current.total_cost)}</td></tr></tfoot>
      </table></div>
      {!!report.cost_accounts?.length&&<details><summary>Visa konton och källor</summary>
       <div className="table-wrap"><table className="data-table">
