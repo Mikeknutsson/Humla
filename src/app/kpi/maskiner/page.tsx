@@ -86,7 +86,8 @@ type Job={project:string;work_order:string;project_name:string;order_name:string
 type Other={category:string;code:string;article:string;unit:string;rows:number;quantity:number|null;value:number|null};
 type PersonUnit=MachineProfit & {
  person:string|null; name:string|null; hours:number; operator_hours:number|null; groundworker_hours:number|null;
- personnel_cost:number; value:number|null; vehicles:string[]; vehicle_cost:number|null; total_cost:number;
+ personnel_cost:number|null; value:number|null; vehicles:string[]; vehicle_cost:number|null; total_cost:number|null;
+ project_cost?:number|null; operator_machine_hours?:number|null; is_operator?:boolean;
 };
 const vehicleLinkStatus:Record<string,string>={
  saved:'Bilkopplingen sparades.',missing:'Registreringsnumret hittades inte i Humla.',
@@ -229,7 +230,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
  const people=report?.person_units;
  const personnelGroups=[{title:'Anläggare',units:[] as PersonUnit[]},{title:'Maskinist',units:[] as PersonUnit[]}];
  for(const unit of people??[]){
-  const machinist=unit.operator_hours!=null&&(unit.groundworker_hours==null||Math.abs(unit.operator_hours)>Math.abs(unit.groundworker_hours));
+  const machinist=unit.is_operator??(unit.operator_hours!=null&&(unit.groundworker_hours==null||Math.abs(unit.operator_hours)>Math.abs(unit.groundworker_hours)));
   personnelGroups[machinist?1:0].units.push(unit);
  }
  const manage=people?.some(unit=>unit.person!==null)?
@@ -307,17 +308,18 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
     </section>}
     {!machine&&people&&<section className="panel" id="personalenheter">
      <h2>Personaluppföljning</h2>
-     <p>Visar arbetstid utan entydig maskinkoppling. Varje person visas en gång. Vid tid i båda rollerna avgör flest timmar vilket block personen visas i. Vid lika många timmar visas personen under Anläggare.</p>
+     <p>Varje person visas en gång, i rollen med flest registrerade timmar i perioden. Vid lika många timmar visas personen under Anläggare.</p>
      <p>Resultat och marginal bygger på kända kostnader. Bilkostnader följer bilkopplingens giltighetsperiod.</p>
      {linkStatus&&<p role="status">{linkStatus}</p>}
      {personnelGroups.map(({title,units})=><section className={'panel '+unitStyles.panel} key={title}>
       <h3>{title}</h3>
+      {title==='Maskinist'&&<p>Tid på maskin ingår i maskinförartiden. Upparbetat värde och arbetstidskostnad som redan ingår på en maskin visas där. Kolumnen Personprojekt visar övriga bokförda NeXT-kostnader på maskinistens anställningsnummer.</p>}
       {units.length?<div className="table-wrap"><table className={'data-table '+unitStyles.table} aria-label={title}>
-      <thead><tr><th scope="col">Person och bil</th><th scope="col">Anläggartid</th><th scope="col">Maskinförartid</th><th scope="col">Upparbetat värde</th><th scope="col">Personalkostnad</th><th scope="col">Bilkostnad</th><th scope="col">Summa känd kostnad</th><th scope="col">Resultat</th><th scope="col">Marginal</th>{manage&&<th scope="col">Bilkoppling</th>}</tr></thead>
+      <thead><tr><th scope="col">Person och bil</th><th scope="col">Anläggartid</th><th scope="col">Maskinförartid</th><th scope="col">Upparbetat värde</th><th scope="col">Personalkostnad</th>{title==='Maskinist'&&<th scope="col">Personprojekt</th>}<th scope="col">Bilkostnad</th><th scope="col">Summa känd kostnad</th><th scope="col">Resultat</th><th scope="col">Marginal</th>{manage&&<th scope="col">Bilkoppling</th>}</tr></thead>
       <tbody>{units.map((unit,i)=><tr key={unit.person??i}>
        <th scope="row">{unit.name??'Person saknas i NeXT'}<br/><small>{unit.vehicles.join(', ')||'Bil saknas'}</small></th>
-       <td>{number(unit.groundworker_hours)}</td><td>{number(unit.operator_hours)}</td><td>{money(unit.value)}</td>
-       <td>{money(unit.personnel_cost)}</td><td>{money(unit.vehicle_cost)}</td><td>{money(unit.total_cost)}</td>
+       <td>{number(unit.groundworker_hours)}</td><td>{number(unit.operator_hours)}{unit.operator_machine_hours!=null&&<small>{number(unit.operator_machine_hours)} tim på maskin</small>}</td><td>{money(unit.value)}</td>
+       <td>{money(unit.personnel_cost)}</td>{title==='Maskinist'&&<td>{money(unit.project_cost??null)}</td>}<td>{money(unit.vehicle_cost)}</td><td>{money(unit.total_cost)}</td>
        <ResultCells result={unit.result} margin_pct={unit.margin_pct}/>
        {manage&&<td>{unit.person?<details><summary>Koppla bil</summary>
         <form action={assignPersonVehicle} className="period-form">
@@ -329,7 +331,7 @@ export default async function MachineFollowup({searchParams}:{searchParams:Promi
         </form>
        </details>:'Personen behöver kopplas till Humla'}</td>}
       </tr>)}</tbody>
-     </table></div>:<p>Ingen arbetstid utan maskinkoppling i urvalet.</p>}
+     </table></div>:<p>Ingen arbetstid i urvalet.</p>}
      </section>)}
     </section>}
     {current&&<section className="panel" id="maskinintakt"><h2>Intäkt per användning</h2>
