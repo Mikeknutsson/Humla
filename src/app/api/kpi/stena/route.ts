@@ -1,7 +1,7 @@
 import {queueImportedKpiData} from '@/lib/kpi/import-publication';
 import {createHash} from 'node:crypto';
 import {createClient} from '@/lib/supabase/server';
-import {stenaWorkbook,normalizeStena,detectStenaWorkbook,suggestStenaMapping} from '@/lib/hub/stena-import';
+import {stenaWorkbook,normalizeStena,detectStenaWorkbook,suggestStenaMapping,stenaSheetKind} from '@/lib/hub/stena-import';
 export const runtime='nodejs';export const maxDuration=120;
 export async function POST(request:Request){
  const requestId=request.headers.get('x-humla-import-request');
@@ -19,9 +19,12 @@ export async function POST(request:Request){
  const detection=action==='columns'&&!form.get('sheet')?detectStenaWorkbook(bytes):null;
  const header=detection?.header??Number(form.get('header')??1);
  const table=stenaWorkbook(bytes,detection?.sheet??String(form.get('sheet')??''),header);
- if(action==='columns')return Response.json({headers:table.headers,sheet:table.sheet,sheets:table.sheets,totalRows:table.rows.length,header,detectedKind:detection?.kind??(/^avräknade/i.test(table.sheet)?'settled':null),suggestedMapping:suggestStenaMapping(table.headers)});
+ const detectedKind=stenaSheetKind(table.sheet,table.headers);
+ if(action==='columns')return Response.json({headers:table.headers,sheet:table.sheet,sheets:table.sheets,totalRows:table.rows.length,header,detectedKind,suggestedMapping:suggestStenaMapping(table.headers)});
  const mapping=JSON.parse(String(form.get('mapping')??'{}'));if(!mapping||Array.isArray(mapping)||typeof mapping!=='object'||Object.values(mapping).some(v=>typeof v!=='string'))throw Error('Ogiltig kolumnmappning');
- const kind=String(form.get('kind')??''),rows=normalizeStena(table,mapping,kind),hash=createHash('sha256').update(bytes).digest('hex');
+ const kind=String(form.get('kind')??'');
+ if(detectedKind&&kind!==detectedKind)throw Error(detectedKind==='settled'?'Det valda bladet är Avräknade transporter. Välj rätt underlagstyp.':'Det valda bladet är Historik. Välj rätt underlagstyp.');
+ const rows=normalizeStena(table,mapping,kind),hash=createHash('sha256').update(bytes).digest('hex');
  const {data,error}=await db.rpc('hub_stena_upload_v1',{p_tenant:member.tenant_id,p_hash:hash,p_name:file.name,p_kind:kind,p_rows:rows,p_original:action==='import'?Buffer.from(bytes).toString('base64'):'',p_mapping:{columns:mapping,sheet:table.sheet,header:Number(form.get('header')??1)},p_commit:action==='import'}).abortSignal(AbortSignal.timeout(90000));
  if(error){console.error('[stena-import]',{code:error.code,message:error.message});throw Error('Stena-importen kunde inte slutföras. Ingen ofullständig fil publiceras. Kontrollera filen eller försök igen.');}
  return Response.json({...data,...(action==='import'&&!data?.duplicate?await queueImportedKpiData(db,member.tenant_id,user.id):{})});

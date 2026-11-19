@@ -10,15 +10,20 @@ export type Attachment = {
  sender: string | null;
  subject: string | null;
  received_at: string;
+ document_id: string | null;
 };
 
 export default function MailAttachments({files}: {files: Attachment[]}) {
  const [showAll, setShowAll] = useState(false);
+ const [search,setSearch] = useState("");
+ const [page,setPage] = useState(0);
  const [busy, setBusy] = useState<string | null>(null);
  const [error, setError] = useState("");
  const [excel, setExcel] = useState<File>();
- const visible = showAll ? files : files.filter(file =>
-  /stena|självfaktur|avräkn|mina transporter/i.test([file.filename, file.subject, file.sender].join(" ")));
+ const eligible = files.filter(file => showAll || /stena|självfaktur|avräkn|mina transporter/i.test([file.filename, file.subject, file.sender].join(" ")));
+ const unique = Array.from(new Map(eligible.map(file => [file.document_id??file.id,file])).values());
+ const visible = unique.filter(file => [file.filename,file.subject,file.sender].join(" ").toLocaleLowerCase("sv").includes(search.trim().toLocaleLowerCase("sv")));
+ const pageSize = 20;
  const timestamp = new Intl.DateTimeFormat("sv-SE", {dateStyle: "short", timeZone: "Europe/Stockholm"});
 
  async function open(file: Attachment, prepareImport: boolean) {
@@ -51,12 +56,13 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
  return <section className="panel weekly-panel">
   <h2>Underlag från mejl</h2>
   <p>Visar sparade PDF- och Excelbilagor. Öppna självfakturan för kontroll eller läs in en Excelbilaga i Stena-importen.</p>
-  <label><input type="checkbox" checked={showAll} onChange={event => setShowAll(event.target.checked)}/> Visa även bilagor utan Stena-ord i filnamn, avsändare eller ämne</label>
+  <label><input type="checkbox" checked={showAll} onChange={event => {setShowAll(event.target.checked);setPage(0);}}/> Visa även bilagor utan Stena-ord i filnamn, avsändare eller ämne</label>
+  <p><label>Sök i de senaste bilagorna <input type="search" value={search} onChange={event=>{setSearch(event.target.value);setPage(0);}}/></label></p>
   {error && <p role="alert">{error}</p>}
   {visible.length === 0 ? <p>Inga matchande bilagor bland de senaste hämtade filerna.</p> :
    <div className="table-wrap"><table className="data-table">
     <thead><tr><th>Bilaga</th><th>Mejl</th><th>Mottaget</th><th>Åtgärd</th></tr></thead>
-    <tbody>{visible.map(file => <tr key={file.id}>
+    <tbody>{visible.slice(page*pageSize,(page+1)*pageSize).map(file => <tr key={file.id}>
      <td>{file.filename}</td><td>{file.sender}<br/>{file.subject}</td>
      <td>{timestamp.format(new Date(file.received_at))}</td>
      <td>{/\.xlsx?$/i.test(file.filename) &&
@@ -66,8 +72,10 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
      </td>
     </tr>)}</tbody>
    </table></div>}
+  {page>0&&<button type="button" className="secondary" onClick={()=>setPage(page-1)}>Föregående bilagor</button>}
+  {(page+1)*pageSize<visible.length&&<button type="button" className="secondary" onClick={()=>setPage(page+1)}>Nästa bilagor</button>}
   {excel && <div><p>Vald bilaga: <strong>{excel.name}</strong></p>
-   <StenaImport initialFile={excel}/>
+   <StenaImport initialFile={excel} refreshOnImport/>
    <button className="secondary" type="button" onClick={() => setExcel(undefined)}>Stäng bilageimport</button>
   </div>}
  </section>;

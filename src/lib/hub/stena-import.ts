@@ -38,8 +38,8 @@ export function normalizeStena(table:ReturnType<typeof stenaWorkbook>,mapping:St
 }
 
 const stenaAliases:Record<string,string[]>={
- booking:['bokning','bokningsnummer','bokningsnr','boknings nr','transportordernummer'],
- date:['transportdatum','utförd datum','utförtdatum','datum','date'],
+ booking:['bokning','bokningsnummer','bokningsnr','boknings nr','transportordernummer','trp best nr'],
+ date:['transportdatum','utförd datum','utförtdatum','datum','date','hämtdatum'],
  registration:['regnr','reg nr','registreringsnummer','registreringsnr','fordon'],
  price:['pris','pris sek','grundpris'],extra:['tillägg','tillagg','extra'],
  load_count:['antal','antal lastbärare'],load_carrier_type:['lastbärartyp','lastbärare','typ av lastbärare'],
@@ -52,16 +52,24 @@ export function suggestStenaMapping(headers:{key:string;label:string}[]){
   return [field,matches.length===1?matches[0].key:''];
  }));
 }
-/** A named portal sheet plus distinctive source columns is required; filenames never decide. */
+/** Prefer the named portal sheet. Generic sheets require distinctive export columns. */
+export function stenaSheetKind(name:string,headers:{label:string}[]){
+ const sheet=name.trim().toLocaleLowerCase('sv');
+ if(sheet==='historik')return 'history';
+ if(/^avräknade(?: transporter)?$/.test(sheet))return 'settled';
+ const labels=headers.map(h=>h.label.split(' – ').slice(1).join(' – ').trim().toLocaleLowerCase('sv'));
+ if(labels.includes('trp.best.nr')&&labels.includes('hämtdatum')&&labels.includes('pris sek'))return 'settled';
+ return null;
+}
+
 export function detectStenaWorkbook(bytes:Uint8Array){
  const book=XLSX.read(bytes,{type:'array',cellDates:false});
  for(const sheet of book.SheetNames){
-  const name=sheet.trim().toLocaleLowerCase('sv');
-  const kind=name==='historik'?'history':/^avräknade(?: transporter)?$/.test(name)?'settled':null;
-  if(!kind)continue;
   const matrix=XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[sheet],{header:1,defval:'',raw:true});
   for(let i=0;i<Math.min(10,matrix.length);i++){
    const headers=(matrix[i]??[]).map((v,j)=>({key:String(j),label:`${XLSX.utils.encode_col(j)} – ${String(v)}`}));
+   const kind=stenaSheetKind(sheet,headers);
+   if(!kind)continue;
    const mapping=suggestStenaMapping(headers);
    if(mapping.booking&&mapping.date&&mapping[kind==='settled'?'settled_amount':'price'])return {sheet,header:i+1,kind,mapping};
   }

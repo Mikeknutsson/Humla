@@ -7,17 +7,15 @@ import styles from "./review.module.css";
 
 const date = new Intl.DateTimeFormat("sv-SE", {dateStyle:"short", timeStyle:"short", timeZone:"Europe/Stockholm"});
 
-export default function ReviewEditor({row, month, page, review}: {
- row: RowReview & {id:string}; month:string; page:number; review:boolean;
+export default function ReviewEditor({row, month, page, review, embedded=false}: {
+ row: RowReview & {id:string}; month:string; page:number; review:boolean; embedded?:boolean;
 }) {
  const [error, action, pending] = useActionState(saveReview,"");
  const [state, setState] = useState(row.review_state);
  const [note, setNote] = useState(row.note ?? "");
  const label = row.changed_since_review ? "Underlag ändrat" : row.revision === 0 ? "Följ upp" : reviewLabels[row.review_state];
 
- return <details className={styles.review}>
-  <summary>{label}</summary>
-  <form action={action}>
+ const form = <form action={action}>
    <input type="hidden" name="id" value={row.id}/>
    <input type="hidden" name="fingerprint" value={row.fingerprint}/>
    <input type="hidden" name="revision" value={row.revision}/>
@@ -36,6 +34,6 @@ export default function ReviewEditor({row, month, page, review}: {
    {row.updated_at && <small>Senast sparad {date.format(new Date(row.updated_at))}</small>}
    {error && <p role="alert">{error}</p>}
    <button className="secondary" disabled={pending}>{pending ? "Sparar…" : "Spara"}</button>
-  </form>
- </details>;
+  </form>;
+ return embedded ? <div className={styles.review}>{form}</div> : <details className={styles.review}><summary>{label}</summary>{form}</details>;
 }
