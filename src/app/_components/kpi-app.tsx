@@ -1,5 +1,6 @@
 "use client";
 import { KpiFollowupNav } from "./kpi-followup-nav";
+import { KpiTransportAdministrationNav } from "./kpi-transport-administration-nav";
 import { KpiDriverCount, type DriverCount } from './kpi-driver-count';
 
 import {requestImport,ImportConnectionError} from "@/lib/kpi/import-request";
@@ -372,6 +373,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
       <nav className="nav">
         <Link prefetch={false} className={view === "overview" ? "nav-overview active" : "nav-overview"} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
         <KpiFollowupNav query={periodQuery} expanded={view === "kpi"} active={view === "kpi" ? (costCenter === "20" ? "recycling" : costCenter === "30" ? "trucks" : undefined) : undefined} onNavigate={() => setMobileMenu(false)}/>
+        {canManage&&<KpiTransportAdministrationNav onNavigate={() => setMobileMenu(false)}/>}
         <details className="report-nav-group" open={view === "internal" || view === "monthly"} style={{margin:"4px 0"}}>
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><FileSpreadsheet size={18}/>Rapporter <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>
