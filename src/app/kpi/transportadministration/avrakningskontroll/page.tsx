@@ -20,7 +20,8 @@ const amounts = new Intl.NumberFormat("sv-SE", {style: "currency", currency: "SE
 const money = (value: number | null) => value === null ? "–" : amounts.format(value);
 
 const queueLabels = {
- missing_settlement: "Saknas i avräkningen",
+ history_difference: "Belopp lägre i Stena Historik",
+ missing_history_amount: "Belopp saknas i Stena Historik",
  needs_match: "Behöver matchas mot avräkning",
  underpaid: "Avräknat lägre än Workify",
 };
@@ -49,13 +50,15 @@ type Comparison = RowReview & {
  workify_difference: number | null;
  status: keyof typeof statuses;
  shortfall?: number|null;
+ history_shortfall?: number|null;
+ awaiting_settlement?: boolean;
  review_reason?: keyof typeof queueLabels|null;
  match_method?: "booking" | "registration_date_amount" | null;
 };
 
 type Report = {
  report_available: boolean;
- totals: {rows: number; review_rows: number; review_amount?: number|null; settled_only_rows?: number; settled_only_amount?: number|null; reviewed_rows: number; fallback_rows?: number; workify: number | null; history: number | null; settled: number | null};
+ totals: {rows: number; review_rows: number; review_amount?: number|null; awaiting_rows?: number; awaiting_amount?: number|null; settled_only_rows?: number; settled_only_amount?: number|null; reviewed_rows: number; fallback_rows?: number; workify: number | null; history: number | null; settled: number | null};
  rows: Comparison[];
  filtered_count: number;
  settled_only_vehicles?: {registration:string|null;bookings:number;amount:number}[];
@@ -129,18 +132,22 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
      <article className="metric-card"><span>Workify</span><strong>{money(report.totals.workify)}</strong></article>
      <article className="metric-card"><span>Stena Historik</span><strong>{money(report.totals.history)}</strong></article>
      <article className="metric-card"><span>Avräknat enligt Stena</span><strong>{money(report.totals.settled)}</strong></article>
-     <article className="metric-card"><span>Att följa upp</span><strong>{report.totals.review_rows}</strong>{report.totals.review_amount!=null&&<small>{money(report.totals.review_amount)} jämfört med Workify</small>}</article>
+     <article className="metric-card"><span>Att följa upp</span><strong>{report.totals.review_rows}</strong>{report.totals.review_amount!=null&&<small>{money(report.totals.review_amount)} avräknad beloppsskillnad</small>}</article>
     </section>
    </>}
   {report && <section className="panel weekly-panel">
    <h2>{review ? "Workify att följa upp" : "Alla bokningar"}</h2>
-   {review&&<p>Visar Workify-rader där minst 200 kr saknas i avräkningen. Rader utan avräknat belopp visas först.</p>}
-   {report.rows.length ? <div className={styles.rows}>{report.rows.map(row => <details key={row.id} className={styles.row} data-status={row.review_reason??row.status}>
+   {review&&<p>Beloppsskillnader från 200 kr visas först. Därefter kommer Workify-rader som behöver matchas eller saknar belopp i Historik.</p>}
+   {report.rows.length ? <div className={styles.rows}>{report.rows.map(row => <details key={row.id} className={styles.row} data-status={row.awaiting_settlement ? "open" : row.review_reason??row.status}>
     <summary>
      <strong>{row.registration || "Regnummer saknas"}</strong><time dateTime={row.date}>{row.date}</time>
-     <span>{row.booking || "Bokningsnummer saknas"}</span><span className={styles.status}>{row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
+     <span>{row.booking || "Bokningsnummer saknas"}</span><span className={styles.status}>{row.awaiting_settlement ? "Finns i Historik · inväntar avräkningsunderlag" : row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
      <span>{row.changed_since_review ? "Underlag ändrat" : row.revision>0 ? reviewLabels[row.review_state] : ""}</span>
-     <strong className={styles.amount}>{review&&row.shortfall!=null ? `${money(row.shortfall)} att följa upp` : row.workify_difference==null ? money(row.settled??row.history??row.workify) : `${money(row.workify_difference)} diff`}</strong>
+     <strong className={styles.amount}>{review
+      ? row.review_reason==="underpaid" ? `${money(row.shortfall??null)} avräknad skillnad`
+       : row.review_reason==="history_difference" ? `${money(row.history_shortfall??null)} skillnad mot Historik`
+       : `${money(row.workify)} i Workify`
+      : row.workify_difference==null ? money(row.settled??row.history??row.workify) : `${money(row.workify_difference)} diff`}</strong>
     </summary>
     <div className={styles.details}>
      <dl className={styles.values}>
@@ -160,6 +167,10 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
     {(page + 1) * 80 < report.filtered_count && page < 1000 && <Link className="secondary" href={pageUrl(page + 1)}>Nästa →</Link>}
    </nav>
   </section>}
+  {report?.report_available && !!report.totals.awaiting_rows && <details className="panel weekly-panel">
+   <summary><strong>Inväntar avräkningsunderlag</strong> · {report.totals.awaiting_rows} rader · {money(report.totals.awaiting_amount??null)} i Workify</summary>
+   <p>Transporterna finns i Stena Historik och skillnaden understiger 200 kr eller är till vår fördel. När avräkningen kommer kontrolleras beloppet. Raderna går att öppna under <Link href={base+"?"+new URLSearchParams({month,tab:"all"})}>Alla bokningar</Link>.</p>
+  </details>}
   {report?.report_available && !!report.totals.settled_only_rows && <details className="panel weekly-panel">
    <summary><strong>Avräknat utan Workify-match</strong> · {report.totals.settled_only_rows} bokningar · {money(report.totals.settled_only_amount??null)}</summary>
    <div className="table-wrap"><table className="data-table">

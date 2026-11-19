@@ -39,13 +39,13 @@
   background: var(--status-background, #f1f5f9);
 }
 
-.row[data-status="missing_settlement"] {
+.row[data-status="underpaid"] {
   --status-accent: #b91c1c;
   --status-text: #991b1b;
   --status-background: #fef2f2;
 }
 
-.row[data-status="underpaid"],
+.row[data-status="history_difference"],
 .row[data-status="difference"] {
   --status-accent: #b45309;
   --status-text: #92400e;
@@ -60,6 +60,7 @@
   --status-background: #f5f3ff;
 }
 
+.row[data-status="missing_history_amount"],
 .row[data-status="missing_amount"],
 .row[data-status="portal_only"] {
   --status-accent: #0369a1;
