@@ -15,7 +15,9 @@ export default async function Page() {
   const {data: allowed} = member ? await db.rpc('hub_has_permission', {
     p_tenant_id: member.tenant_id, p_permission: 'kpi.manage',
   }) : {data: false};
-  if (!member || !allowed) return <section className="section"><h1>{title}</h1><p>KPI-administratör krävs för materialkontrollen.</p></section>;
+  if (!member || !allowed) return <KpiDetailShell query="" title={title} breadcrumb="Humla Dashboard / Transportadministration" transportAdministration="material">
+    <div className="content"><section className="panel"><p>KPI-administratör krävs för materialkontrollen.</p></section></div>
+  </KpiDetailShell>;
   const mail = member.role === 'owner' ? await db.from('hub_gmail_attachments')
     .select('id,filename,sender,subject,received_at')
     .eq('tenant_id', member.tenant_id).eq('status', 'stored')
