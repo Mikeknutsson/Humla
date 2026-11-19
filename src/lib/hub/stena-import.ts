@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx/xlsx.mjs';
 export type StenaMapping=Record<string,string>;
-export type StenaRow={row_number:number;booking:string;date:string;registration:string;price:number|null;extra:number|null;load_count:number|null;settled_amount:number|null;load_carrier_type:string};
+export type StenaRow={row_number:number;booking:string;date:string;registration:string;price:number|null;extra:number|null;load_count:number|null;settled_amount:number|null;invoice_number:string|null;load_carrier_type:string};
 export function stenaNumber(value:unknown):number|null{
  if(value==null||String(value).trim()==='')return null;
  const n=typeof value==='number'?value:Number(String(value).replace(/[\s\u00a0]/g,'').replace(',','.'));
@@ -32,7 +32,9 @@ export function normalizeStena(table:ReturnType<typeof stenaWorkbook>,mapping:St
    const booking=String(get('booking')).trim();if(!/^\d{8}$/.test(booking))throw Error('Bokningsnummer ska ha 8 siffror');
    if(bookings.has(booking))throw Error('Bokningsnummer förekommer flera gånger i filen');bookings.add(booking);
    const count=stenaNumber(get('load_count'));if(count!=null&&count<0)throw Error('Antal får inte vara negativt');
-   return {row_number,booking,date:date(get('date')),registration:String(get('registration')).trim(),price:stenaNumber(get('price')),extra:stenaNumber(get('extra')),load_count:count,settled_amount:stenaNumber(get('settled_amount')),load_carrier_type:String(get('load_carrier_type')).trim()};
+   const invoice=String(get('invoice_number')).trim();
+   if(invoice&&!/^\d{5,16}$/.test(invoice))throw Error('Ogiltigt fakturanummer');
+   return {row_number,booking,date:date(get('date')),registration:String(get('registration')).trim(),price:stenaNumber(get('price')),extra:stenaNumber(get('extra')),load_count:count,settled_amount:stenaNumber(get('settled_amount')),invoice_number:kind==='settled'&&invoice?invoice:null,load_carrier_type:String(get('load_carrier_type')).trim()};
   }catch(e){throw Error(`Rad ${row_number}: ${e instanceof Error?e.message:'Ogiltig rad'}`);}
  });
 }
@@ -43,7 +45,7 @@ const stenaAliases:Record<string,string[]>={
  registration:['regnr','reg nr','registreringsnummer','registreringsnr','fordon'],
  price:['pris','pris sek','grundpris'],extra:['tillägg','tillagg','extra'],
  load_count:['antal','antal lastbärare'],load_carrier_type:['lastbärartyp','lastbärare','typ av lastbärare'],
- settled_amount:['pris sek','avräknat belopp']
+ settled_amount:['pris sek','avräknat belopp'],invoice_number:['fakturanr','fakturanummer','faktura nr']
 };
 export function suggestStenaMapping(headers:{key:string;label:string}[]){
  const names=headers.map(h=>({...h,name:h.label.split(' – ').slice(1).join(' – ').toLocaleLowerCase('sv').replace(/[._-]+/g,' ').replace(/\s+/g,' ').trim()}));

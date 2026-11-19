@@ -25,28 +25,43 @@ export function broadWeeklyBaseline(rows:EvidenceRow[],weekFrom:string){
  return {amount:covered?roundPayment(sum(samples.filter(r=>!r.oneOff))/13):null,rows:samples,excluded:roundPayment(sum(samples.filter(r=>r.oneOff))/13),from:paymentIso(start),to:paymentIso(end)};
 }
 export function stenaPaymentDate(deliveryMonth:string){const d=new Date(dateValue(deliveryMonth));return paymentIso(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)+45*day);}
-export type StenaMonth={center:string;deliveryMonth:string;paymentDate:string;settled:number;history:number;workify:number;registered:number;remaining:number|null;total:number|null;baseline:number|null;factor:number;reviewed:boolean;trendMonths:number;knownIds:string[];baselineIds:string[]};
+export type StenaMonth={center:string;deliveryMonth:string;paymentDate:string;dateSource:'document'|'estimate';settled:number;history:number;workify:number;registered:number;remaining:number|null;total:number|null;baseline:number|null;factor:number;reviewed:boolean;trendMonths:number;knownIds:string[];baselineIds:string[]};
 export function stenaMonthlyEvidence(rows:EvidenceRow[],reviews:PeriodReview[],asOf:string,weeks:{from:string;to:string}[]):StenaMonth[]{
  const answer:StenaMonth[]=[];
  for(const center of [...new Set(rows.filter(r=>r.stena&&!r.internal).map(r=>r.center))]){
   const group=rows.filter(r=>r.stena&&!r.internal&&r.center===center),trend=reviewedTrend(group,reviews,asOf,'stena',center,'in');
-  // Delivery month ends 45 days before the assumed payment date. Include boundary months.
+  const estimatedDates=new Set<string>();
   for(const week of weeks){
-   const first=monthDate(paymentIso(dateValue(week.from)-80*day));
-   for(let month=first;month<=monthDate(week.to);month=shiftMonth(month,1)){
-    const pay=stenaPaymentDate(month);if(pay<week.from||pay>week.to)continue;
-    const prior=shiftMonth(month,-12),priorEnd=shiftMonth(prior,1);
-    const baselineRows=group.filter(r=>r.date>=prior&&r.date<priorEnd),known=group.filter(r=>monthDate(r.date)===month&&r.date<=asOf);
-    // A customer seen only in unrelated old months is not a new monthly forecast stream.
-    if(!baselineRows.length&&!known.length)continue;
-    const dates=group.map(r=>r.dateValue),covered=dates.length>0&&Math.min(...dates)<=dateValue(prior)&&Math.max(...dates)>=dateValue(priorEnd)-day;
-    const sum=(rs:EvidenceRow[])=>roundPayment(rs.reduce((s,r)=>s+r.amount,0));
-    const baseline=covered?sum(baselineRows.filter(r=>!r.oneOff)):null,registered=sum(known),factor=trend.factor??1;
-    const reviewed=reviews.some(r=>r.reviewed&&!r.stale&&r.scope==='stena'&&r.center===center&&r.kind==='in'&&r.month===month&&r.month<monthDate(asOf));
-    const remaining=reviewed?0:baseline===null?null:roundPayment(Math.max(0,baseline*factor-registered));
-    answer.push({center,deliveryMonth:month,paymentDate:pay,settled:sum(known.filter(r=>r.amountStatus==='settled')),history:sum(known.filter(r=>r.amountStatus==='history')),workify:sum(known.filter(r=>!r.amountStatus)),registered,remaining,total:remaining===null?null:roundPayment(registered+remaining),baseline,factor,reviewed,trendMonths:trend.months.length,knownIds:known.map(r=>r.id),baselineIds:baselineRows.map(r=>r.id)});
+   for(let month=monthDate(paymentIso(dateValue(week.from)-80*day));month<=monthDate(week.to);month=shiftMonth(month,1)){
+    const pay=stenaPaymentDate(month);
+    if(pay>=week.from&&pay<=week.to)estimatedDates.add(month);
    }
   }
+  const knownByMonth=Map.groupBy(group.filter(r=>r.date<=asOf),r=>monthDate(r.date));
+  const inRange=(day:string)=>weeks.some(w=>day>=w.from&&day<=w.to);
+  const months=new Set([...estimatedDates,...Array.from(knownByMonth).filter(([,known])=>known.some(r=>r.scheduledPayoutDate&&inRange(r.paymentDate))).map(([month])=>month)]);
+  for(const month of months){
+   const prior=shiftMonth(month,-12),priorEnd=shiftMonth(prior,1);
+   const baselineRows=group.filter(r=>r.date>=prior&&r.date<priorEnd),known=knownByMonth.get(month)??[];
+   if(!baselineRows.length&&!known.length)continue;
+   const dates=group.map(r=>r.dateValue),covered=dates.length>0&&Math.min(...dates)<=dateValue(prior)&&Math.max(...dates)>=dateValue(priorEnd)-day;
+   const sum=(rs:EvidenceRow[])=>roundPayment(rs.reduce((s,r)=>s+r.amount,0));
+   const baseline=covered?sum(baselineRows.filter(r=>!r.oneOff)):null,registered=sum(known),factor=trend.factor??1;
+   const reviewed=reviews.some(r=>r.reviewed&&!r.stale&&r.scope==='stena'&&r.center===center&&r.kind==='in'&&r.month===month&&r.month<monthDate(asOf));
+   const remaining=reviewed?0:baseline===null?null:roundPayment(Math.max(0,baseline*factor-registered));
+   const scheduled=known.filter(r=>r.scheduledPayoutDate);
+   for(const [paymentDate,rows] of Map.groupBy(scheduled,r=>r.paymentDate)){
+    if(!inRange(paymentDate))continue;
+    const amount=sum(rows);
+    answer.push({center,deliveryMonth:month,paymentDate,dateSource:'document',settled:amount,history:0,workify:0,registered:amount,remaining:0,total:amount,baseline:0,factor,reviewed,trendMonths:trend.months.length,knownIds:rows.map(r=>r.id),baselineIds:[]});
+   }
+   const estimated=known.filter(r=>!r.scheduledPayoutDate);
+   if(!estimatedDates.has(month)||(!estimated.length&&remaining===0))continue;
+   const estimatedTotal=sum(estimated);
+   answer.push({center,deliveryMonth:month,paymentDate:stenaPaymentDate(month),dateSource:'estimate',
+    settled:sum(estimated.filter(r=>r.amountStatus==='settled')),history:sum(estimated.filter(r=>r.amountStatus==='history')),workify:sum(estimated.filter(r=>!r.amountStatus)),registered:estimatedTotal,
+    remaining,total:remaining===null?null:roundPayment(estimatedTotal+remaining),baseline,factor,reviewed,trendMonths:trend.months.length,knownIds:estimated.map(r=>r.id),baselineIds:baselineRows.map(r=>r.id)});
+  }
  }
- return answer;
+ return answer.sort((a,b)=>a.paymentDate.localeCompare(b.paymentDate));
 }

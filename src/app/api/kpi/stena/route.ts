@@ -24,6 +24,10 @@ export async function POST(request:Request){
  const mapping=JSON.parse(String(form.get('mapping')??'{}'));if(!mapping||Array.isArray(mapping)||typeof mapping!=='object'||Object.values(mapping).some(v=>typeof v!=='string'))throw Error('Ogiltig kolumnmappning');
  const kind=String(form.get('kind')??'');
  if(detectedKind&&kind!==detectedKind)throw Error(detectedKind==='settled'?'Det valda bladet är Avräknade transporter. Välj rätt underlagstyp.':'Det valda bladet är Historik. Välj rätt underlagstyp.');
+ if(kind==='settled'&&!mapping.invoice_number){
+  const suggested=suggestStenaMapping(table.headers).invoice_number;
+  if(suggested)mapping.invoice_number=suggested;
+ }
  const rows=normalizeStena(table,mapping,kind),hash=createHash('sha256').update(bytes).digest('hex');
  const {data,error}=await db.rpc('hub_stena_upload_v1',{p_tenant:member.tenant_id,p_hash:hash,p_name:file.name,p_kind:kind,p_rows:rows,p_original:action==='import'?Buffer.from(bytes).toString('base64'):'',p_mapping:{columns:mapping,sheet:table.sheet,header:Number(form.get('header')??1)},p_commit:action==='import'}).abortSignal(AbortSignal.timeout(90000));
  if(error){console.error('[stena-import]',{code:error.code,message:error.message});throw Error('Stena-importen kunde inte slutföras. Ingen ofullständig fil publiceras. Kontrollera filen eller försök igen.');}

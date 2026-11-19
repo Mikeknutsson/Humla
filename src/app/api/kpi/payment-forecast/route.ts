@@ -47,7 +47,7 @@ export async function POST(req:Request){
    const publication=await getKpiReportStatus(member.tenant_id);
    if(publication.error||!publication.data)throw new ForecastSourceError('Rapportversionen kunde inte kontrolleras. Tidigare prognos återanvänds inte.');
    const sourceVersion=kpiReportVersion(publication.data)+':'+(publication.data.requested_at??'');
-   const [snapshot,reviews]=await Promise.all([
+   const [snapshot,reviews,payouts]=await Promise.all([
     paymentSourceSession(`${member.tenant_id}:${user.id}:${body.asOf}:${sourceVersion}`,body.reuseSource===true&&publication.data.status==='ready',async()=>{
      const [{data,error},salary]=await Promise.all([
       db.rpc('hub_payment_outcome_source_v1',{p_tenant_id:member.tenant_id,p_as_of:body.asOf}),
@@ -58,11 +58,16 @@ export async function POST(req:Request){
      if(data.controls?.scope!=='live_approved_imports'&&data.synced_at!==salary.data.synced_at)throw new ForecastSourceError('Hubben uppdaterades under hämtningen. Hämta underlaget igen.');
      return {source:data as OutcomeSource,payroll:salary.data as PayrollSource};
     }),
-    db.rpc('hub_payment_forecast_reviews_v2',{p_tenant:member.tenant_id})
+    db.rpc('hub_payment_forecast_reviews_v2',{p_tenant:member.tenant_id}),
+    db.rpc('hub_stena_forecast_payouts',{p_tenant:member.tenant_id})
    ]);
    if(reviews.error||!reviews.data)return Response.json({error:'Månadsavstämningarna kunde inte hämtas. Försök igen.'},{status:503});
+   if(payouts.error)throw new ForecastSourceError('Stenas utbetalningsdatum kunde inte hämtas.');
    const data=snapshot.source;
-   const forecast=outcomeForecast({...data,periodReviews:validatePeriodReviews(data.rows,reviews.data.reviews),reviewBasis:periodReviewBasis(data.rows,body.asOf)},body.asOf,body.supplierDays??30,body.periodOffset??0,snapshot.payroll);
+   const dates=payouts.data as Record<string,string>;
+   const rows=data.rows.map(row=>row.source==='Stena portal'&&row.amountStatus==='settled'&&row.reference&&dates[row.reference]
+    ? {...row,scheduledPayoutDate:dates[row.reference]} : row);
+   const forecast=outcomeForecast({...data,rows,periodReviews:validatePeriodReviews(data.rows,reviews.data.reviews),reviewBasis:periodReviewBasis(data.rows,body.asOf)},body.asOf,body.supplierDays??30,body.periodOffset??0,snapshot.payroll);
    return Response.json({...forecast,automatic:{...forecast.automatic,sourceFetchedAt:snapshot.fetchedAt,sourceReused:snapshot.reused}},{headers:{'Cache-Control':'no-store'}});
   }
   return Response.json(paymentForecast(body as ForecastInput),{headers:{'Cache-Control':'no-store'}});
