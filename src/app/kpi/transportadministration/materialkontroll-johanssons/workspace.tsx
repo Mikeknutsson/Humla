@@ -17,7 +17,23 @@ const labels = {
   article_missing: 'Artikeln saknas på ordern',
   order_unspecified: 'Ordernummer saknas på vägsedeln',
 };
-const needsReview = (load: CheckedLoad) => !['matched', 'equivalent'].includes(load.match) || load.amount === null || !load.registration;
+const needsReview = (load: CheckedLoad) => !['matched', 'equivalent'].includes(load.match) ||
+  load.amount === null || load.workify_registrations.length !== 1;
+
+function RegistrationEvidence({load}: {load: CheckedLoad}) {
+  const registrations = load.workify_registrations;
+  if (registrations.length === 1) {
+    return load.excel_registration !== load.registration &&
+      <div>Regnummer från Workify <strong>{load.registration}</strong> · Excel <strong>{load.excel_registration || 'saknas'}</strong></div>;
+  }
+  if (registrations.length > 1) return <div className={styles.warning}>
+    Flera regnummer i Workify ({registrations.join(', ')}). Excel: {load.excel_registration || 'saknas'}.
+  </div>;
+  if (load.match === 'matched' || load.match === 'equivalent' || load.match === 'article_missing') {
+    return <div className={styles.warning}>Regnummer saknas på Workify-ordern. Excel: {load.excel_registration || 'saknas'}.</div>;
+  }
+  return null;
+}
 
 function totals(loads: CheckedLoad[]) {
   return loads.reduce((sum, load) => ({
@@ -68,6 +84,7 @@ function InvoicePanel({invoice, reviewOnly}: {invoice: CheckedInvoice; reviewOnl
           {(reviewOnly ? flagged : loads).map(load => <article key={load.row} className={styles.load}>
             <div className={styles.heading}><strong>{load.article}</strong><time>{load.date}</time></div>
             <span>Order {load.order || '–'} · Vägsedel {load.ticket} · Excelrad {load.row}</span>
+            <RegistrationEvidence load={load}/>
             <div className={styles.badges}>
               <span data-status={load.match}>{labels[load.match]}</span>
               {load.amount === null && <span data-status="unpriced">Pris saknas</span>}
