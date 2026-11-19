@@ -42,6 +42,7 @@ type Comparison = RowReview & {
  date: string;
  registration: string | null;
  workify: number | null;
+ workify_orders?: string[];
  history: number | null;
  settled: number | null;
  history_file: string | null;
@@ -56,7 +57,16 @@ type Comparison = RowReview & {
  match_method?: "booking" | "registration_date_amount" | null;
 };
 
+const coverageLabels = {
+ matched_settled: "Workify matchat mot avräkning",
+ matched_history: "Workify matchat mot Historik, inväntar avräkning",
+ workify_only: "Workify utan belopp i Stenas underlag",
+ settled_only: "Avräknat utan Workify-match",
+ history_other: "Övriga rader i Stena Historik",
+};
+
 type Report = {
+ coverage?: Partial<Record<keyof typeof coverageLabels,{rows:number;workify:number|null;history:number|null;settled:number|null}>>;
  report_available: boolean;
  totals: {rows: number; review_rows: number; review_amount?: number|null; awaiting_rows?: number; awaiting_amount?: number|null; settled_only_rows?: number; settled_only_amount?: number|null; reviewed_rows: number; fallback_rows?: number; workify: number | null; history: number | null; settled: number | null};
  rows: Comparison[];
@@ -134,6 +144,17 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
      <article className="metric-card"><span>Avräknat enligt Stena</span><strong>{money(report.totals.settled)}</strong></article>
      <article className="metric-card"><span>Att följa upp</span><strong>{report.totals.review_rows}</strong>{report.totals.review_amount!=null&&<small>{money(report.totals.review_amount)} avräknad beloppsskillnad</small>}</article>
     </section>
+    {report.coverage&&<details className="panel weekly-panel">
+     <summary><strong>Så hänger beloppen ihop</strong></summary>
+     <p>Kolumnerna har olika täckning. Första raden jämför bara transporter med belopp i både Workify och avräkningen.</p>
+     <div className="table-wrap"><table className="data-table">
+      <thead><tr><th>Underlag</th><th>Rader</th><th>Workify</th><th>Historik</th><th>Avräknat</th></tr></thead>
+      <tbody>{(Object.keys(coverageLabels) as (keyof typeof coverageLabels)[]).map(key=>{
+       const group=report.coverage?.[key];
+       return group&&<tr key={key}><td>{coverageLabels[key]}</td><td>{group.rows}</td><td>{money(group.workify)}</td><td>{money(group.history)}</td><td>{money(group.settled)}</td></tr>;
+      })}</tbody>
+     </table></div>
+    </details>}
    </>}
   {report && <section className="panel weekly-panel">
    <h2>{review ? "Workify att följa upp" : "Alla bokningar"}</h2>
@@ -141,7 +162,7 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
    {report.rows.length ? <div className={styles.rows}>{report.rows.map(row => <details key={row.id} className={styles.row} data-status={row.awaiting_settlement ? "open" : row.review_reason??row.status}>
     <summary>
      <strong>{row.registration || "Regnummer saknas"}</strong><time dateTime={row.date}>{row.date}</time>
-     <span>{row.booking || "Bokningsnummer saknas"}</span><span className={styles.status}>{row.awaiting_settlement ? "Finns i Historik · inväntar avräkningsunderlag" : row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
+     <span>{row.booking || "Bokningsnummer saknas"}</span>{!!row.workify_orders?.length&&<span>Workify {row.workify_orders.join(", ")}</span>}<span className={styles.status}>{row.awaiting_settlement ? "Finns i Historik · inväntar avräkningsunderlag" : row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
      <span>{row.changed_since_review ? "Underlag ändrat" : row.revision>0 ? reviewLabels[row.review_state] : ""}</span>
      <strong className={styles.amount}>{review
       ? row.review_reason==="underpaid" ? `${money(row.shortfall??null)} avräknad skillnad`
@@ -152,6 +173,7 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
     <div className={styles.details}>
      <dl className={styles.values}>
       <div><dt>Workify</dt><dd>{money(row.workify)}</dd></div>
+      {row.workify!==null&&<div><dt>Ordernummer i Workify</dt><dd>{row.workify_orders?.join(", ")||"Saknas i underlaget"}</dd></div>}
       <div><dt>Stena Historik</dt><dd>{money(row.history)}{row.history_file&&<small>{row.history_file}</small>}</dd></div>
       <div><dt>Avräknat</dt><dd>{money(row.settled)}{row.settled_file&&<small>{row.settled_file}</small>}</dd></div>
       <div><dt>Avräknat minus Historik</dt><dd>{money(row.settlement_difference)}</dd></div>
