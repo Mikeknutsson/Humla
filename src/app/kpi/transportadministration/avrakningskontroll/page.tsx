@@ -1,11 +1,13 @@
 import Link from "next/link";
+import {redirect} from "next/navigation";
+import {KpiDetailShell} from "@/app/_components/kpi-detail-shell";
+import {settlementPath as base} from "@/app/_components/kpi-transport-administration-nav";
 import {createClient} from "@/lib/supabase/server";
 import {stenaPaymentDate} from "@/lib/hub/payment-evidence-model";
 import MailAttachments from "./MailAttachments";
 
 export const dynamic = "force-dynamic";
 
-const base = "/integrationer/projekt-order/avrakningskontroll";
 const importUrl = "/kpi?view=import&import_source=stena";
 const amounts = new Intl.NumberFormat("sv-SE", {style: "currency", currency: "SEK"});
 const money = (value: number | null) => value === null ? "–" : amounts.format(value);
@@ -55,7 +57,7 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
 
  const db = await createClient();
  const {data: {user}} = await db.auth.getUser();
- if (!user) return <section className="section"><h1>Avräkningskontroll</h1><Link href="/kpi/login">Logga in i Humla</Link></section>;
+ if (!user) redirect("/kpi/login");
  const {data: member} = await db.from("hub_tenant_members").select("tenant_id,role")
   .eq("user_id", user.id).eq("status", "active").maybeSingle();
  if (!member) return <section className="section"><h1>Avräkningskontroll</h1><p>Aktiv arbetsyta saknas.</p></section>;
@@ -80,32 +82,33 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
   month, page: String(index), ...(review ? {review: "1"} : {}),
  });
 
- return <>
-  <Link href="/integrationer/projekt-order" className="backlink">← Projekt & order</Link>
-  <header className="topbar">
-   <div><h1>Avräkningskontroll</h1><p>Stena Recycling AB</p></div>
-   <Link href={importUrl} className="button">Importera måndagens Excel</Link>
-  </header>
-  <section className="panel">
-   <form method="get" action={base} className="form-grid">
-    <label>Leveransmånad<input type="month" name="month" min="2000-01" max="2099-12" defaultValue={month} required/></label>
-    <label><input type="checkbox" name="review" value="1" defaultChecked={review}/> Visa bara rader att granska</label>
-    <button type="submit">Visa period</button>
-   </form>
-   <p>Beräknat betalningsdatum <strong>{stenaPaymentDate(month + "-01")}</strong>. Beloppen är exklusive moms. <Link href="/kpi/betalningsprognos">Öppna betalningsprognosen</Link></p>
+ return <KpiDetailShell query="" title="Avräkningskontroll"
+  breadcrumb="Humla Dashboard / Transportadministration" transportAdministration>
+  <div className="content">
+   <section className="overview-hero">
+    <div><h2>Stena Recycling AB</h2><p>Beräknat betalningsdatum <strong>{stenaPaymentDate(month + "-01")}</strong> · Belopp exklusive moms</p></div>
+    <Link href={importUrl} className="primary">Importera Stena-Excel</Link>
+   </section>
+   <section className="period-bar" aria-label="Leveransperiod">
+    <form method="get" action={base} className="period-form">
+     <label>Leveransmånad<input type="month" name="month" min="2000-01" max="2099-12" defaultValue={month} required/></label>
+     <label>Visa bara rader att granska<input type="checkbox" name="review" value="1" defaultChecked={review}/></label>
+     <button type="submit">Visa period</button>
+    </form>
+    <Link className="secondary" href="/kpi/betalningsprognos">Betalningsprognos</Link>
+   </section>
    {summary.error && <p role="alert">Underlaget kunde inte hämtas. Försök igen.</p>}
    {report && <>
     {report.report_available ? <p>Workify följer den senast publicerade KPI-beräkningen. Nya Excelunderlag visas så snart de har importerats.</p> :
      <p>En publicerad KPI-beräkning behövs för att visa Workify-beloppen.</p>}
-    <dl className="linkgrid three">
-     <div><dt>Workify</dt><dd>{money(report.totals.workify)}</dd></div>
-     <div><dt>Stena Historik</dt><dd>{money(report.totals.history)}</dd></div>
-     <div><dt>Avräknat enligt Stena</dt><dd>{money(report.totals.settled)}</dd></div>
-    </dl>
-    <p>{report.totals.rows} kontrollrader · {report.totals.review_rows} att granska</p>
+    <section className="metrics-grid" aria-label="Belopp och kontrollrader">
+     <article className="metric-card"><span>Workify</span><strong>{money(report.totals.workify)}</strong></article>
+     <article className="metric-card"><span>Stena Historik</span><strong>{money(report.totals.history)}</strong></article>
+     <article className="metric-card"><span>Avräknat enligt Stena</span><strong>{money(report.totals.settled)}</strong></article>
+     <article className="metric-card"><span>Att granska</span><strong>{report.totals.review_rows}</strong><small>Av {report.totals.rows} kontrollrader</small></article>
+    </section>
    </>}
-  </section>
-  {report && <section className="panel">
+  {report && <section className="panel weekly-panel">
    <h2>Bokningar och avvikelser</h2>
    {report.rows.length > 0 ? <div className="table-wrap"><table className="data-table">
     <thead><tr><th>Datum</th><th>Bokning / referens</th><th>Fordon</th><th>Workify</th><th>Historik</th><th>Avräknat</th><th>Avräknat minus Historik</th><th>Workify minus valt Stenabelopp</th><th>Status</th></tr></thead>
@@ -124,5 +127,6 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
   </section>}
   {mail && (mail.error ? <p role="alert">Mejlbilagorna kunde inte hämtas.</p> : <MailAttachments files={mail.data ?? []}/>)}
   <p><Link href="/integrationer/dokument-ovrigt/gmail">Öppna dokumentinkorgen</Link></p>
- </>;
+  </div>
+ </KpiDetailShell>;
 }

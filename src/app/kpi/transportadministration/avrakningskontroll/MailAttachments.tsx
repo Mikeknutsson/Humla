@@ -48,7 +48,7 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
   }
  }
 
- return <section className="panel">
+ return <section className="panel weekly-panel">
   <h2>Underlag från mejl</h2>
   <p>Visar sparade PDF- och Excelbilagor. Öppna självfakturan för kontroll eller läs in en Excelbilaga i Stena-importen.</p>
   <label><input type="checkbox" checked={showAll} onChange={event => setShowAll(event.target.checked)}/> Visa även bilagor utan Stena-ord i filnamn, avsändare eller ämne</label>
@@ -60,15 +60,15 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
      <td>{file.filename}</td><td>{file.sender}<br/>{file.subject}</td>
      <td>{timestamp.format(new Date(file.received_at))}</td>
      <td>{/\.xlsx?$/i.test(file.filename) &&
-      <button type="button" disabled={busy !== null} onClick={() => void open(file, true)}>Läs i Stena-importen</button>}
-      <button type="button" disabled={busy !== null} onClick={() => void open(file, false)}>Hämta fil</button>
+      <button className="secondary" type="button" disabled={busy !== null} onClick={() => void open(file, true)}>Läs i Stena-importen</button>}
+      <button className="secondary" type="button" disabled={busy !== null} onClick={() => void open(file, false)}>Hämta fil</button>
       {busy === file.id && <span role="status"> Hämtar…</span>}
      </td>
     </tr>)}</tbody>
    </table></div>}
   {excel && <div><p>Vald bilaga: <strong>{excel.name}</strong></p>
    <StenaImport initialFile={excel}/>
-   <button type="button" onClick={() => setExcel(undefined)}>Stäng bilageimport</button>
+   <button className="secondary" type="button" onClick={() => setExcel(undefined)}>Stäng bilageimport</button>
   </div>}
  </section>;
 }
