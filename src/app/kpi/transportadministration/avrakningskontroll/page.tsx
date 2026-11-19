@@ -37,11 +37,12 @@ type Comparison = RowReview & {
  settlement_difference: number | null;
  workify_difference: number | null;
  status: keyof typeof statuses;
+ match_method?: "booking" | "registration_date_amount" | null;
 };
 
 type Report = {
  report_available: boolean;
- totals: {rows: number; review_rows: number; reviewed_rows: number; workify: number | null; history: number | null; settled: number | null};
+ totals: {rows: number; review_rows: number; reviewed_rows: number; fallback_rows?: number; workify: number | null; history: number | null; settled: number | null};
  rows: Comparison[];
  filtered_count: number;
 };
@@ -112,6 +113,7 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
    </>}
   {report && <section className="panel weekly-panel">
    <h2>Bokningar och avvikelser</h2>
+   {!!report.totals.fallback_rows && <p>{report.totals.fallback_rows} matchade på regnummer, transportdag och belopp.</p>}
    <p>Spara vad som behöver följas upp eller markera raden som granskad. Om beloppen eller matchningen ändras kommer raden tillbaka i granskningslistan.</p>
    {report.rows.length > 0 ? <div className="table-wrap"><table className="data-table">
     <thead><tr><th>Datum</th><th>Bokning / referens</th><th>Fordon</th><th>Workify</th><th>Historik</th><th>Avräknat</th><th>Avräknat minus Historik</th><th>Workify minus valt Stenabelopp</th><th>Kontrollresultat</th><th>Uppföljning</th></tr></thead>
@@ -120,7 +122,7 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
      <td>{money(row.workify)}</td><td>{money(row.history)}{row.history_file && <><br/><small>{row.history_file}</small></>}</td>
      <td>{money(row.settled)}{row.settled_file && <><br/><small>{row.settled_file}</small></>}</td>
      <td>{money(row.settlement_difference)}</td><td>{money(row.workify_difference)}</td>
-     <td>{statuses[row.status]}</td>
+     <td>{statuses[row.status]}{row.match_method === "registration_date_amount" && <small>Matchad på regnr, dag och belopp</small>}</td>
      <td>{row.fingerprint && <ReviewEditor key={row.revision + row.fingerprint} row={row} month={month} page={page} review={review}/>}</td>
     </tr>)}</tbody>
    </table></div> : <p>Inga rader att visa för det här urvalet.</p>}
