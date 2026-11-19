@@ -135,10 +135,10 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
   {report && <section className="panel weekly-panel">
    <h2>{review ? "Workify att följa upp" : "Alla bokningar"}</h2>
    {review&&<p>Visar Workify-rader där minst 200 kr saknas i avräkningen. Rader utan avräknat belopp visas först.</p>}
-   {report.rows.length ? <div className={styles.rows}>{report.rows.map(row => <details key={row.id} className={styles.row}>
+   {report.rows.length ? <div className={styles.rows}>{report.rows.map(row => <details key={row.id} className={styles.row} data-status={row.review_reason??row.status}>
     <summary>
      <strong>{row.registration || "Regnummer saknas"}</strong><time dateTime={row.date}>{row.date}</time>
-     <span>{row.booking || "Bokningsnummer saknas"}</span><span>{review&&row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
+     <span>{row.booking || "Bokningsnummer saknas"}</span><span className={styles.status}>{row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
      <span>{row.changed_since_review ? "Underlag ändrat" : row.revision>0 ? reviewLabels[row.review_state] : ""}</span>
      <strong className={styles.amount}>{review&&row.shortfall!=null ? `${money(row.shortfall)} att följa upp` : row.workify_difference==null ? money(row.settled??row.history??row.workify) : `${money(row.workify_difference)} diff`}</strong>
     </summary>
