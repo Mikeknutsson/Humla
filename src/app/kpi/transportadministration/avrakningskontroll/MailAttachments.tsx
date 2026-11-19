@@ -20,6 +20,22 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
  const [busy, setBusy] = useState<string | null>(null);
  const [error, setError] = useState("");
  const [excel, setExcel] = useState<File>();
+ const [payout, setPayout] = useState<{id:string;invoice:string}>();
+ const [confirmedDate,setConfirmedDate] = useState("");
+ const [notice,setNotice] = useState("");
+
+ async function recordPayout(id:string,date?:string) {
+  setBusy(id);setError("");setNotice("");
+  try {
+   const response=await fetch("/api/kpi/stena-payout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,confirmedDate:date})});
+   const result=await response.json();
+   if(!response.ok)throw Error(result.error??"Datumet kunde inte sparas.");
+   if(result.needsConfirmation){setPayout({id,invoice:result.invoice});setConfirmedDate("");return;}
+   setPayout(undefined);
+   setNotice(`Faktura ${result.invoice}: utbetalningsdatum ${result.date} sparat för ${result.bookings} bokningar.`);
+  }catch(e){setError(e instanceof Error?e.message:"Utbetalningsdatumet kunde inte sparas.");}
+  finally{setBusy(null);}
+ }
  const eligible = files.filter(file => showAll || /stena|självfaktur|avräkn|mina transporter/i.test([file.filename, file.subject, file.sender].join(" ")));
  const unique = Array.from(new Map(eligible.map(file => [file.document_id??file.id,file])).values());
  const visible = unique.filter(file => [file.filename,file.subject,file.sender].join(" ").toLocaleLowerCase("sv").includes(search.trim().toLocaleLowerCase("sv")));
@@ -59,6 +75,14 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
   <label><input type="checkbox" checked={showAll} onChange={event => {setShowAll(event.target.checked);setPage(0);}}/> Visa även bilagor utan Stena-ord i filnamn, avsändare eller ämne</label>
   <p><label>Sök i de senaste bilagorna <input type="search" value={search} onChange={event=>{setSearch(event.target.value);setPage(0);}}/></label></p>
   {error && <p role="alert">{error}</p>}
+  {notice && <p role="status">{notice}</p>}
+  {payout&&<form onSubmit={event=>{event.preventDefault();void recordPayout(payout.id,confirmedDate);}}>
+   <p>Humla kunde inte läsa ett entydigt utbetalningsdatum på faktura {payout.invoice}. Öppna PDF-filen och ange datumet som står där.</p>
+   <label>Utbetalningsdatum <input type="date" required value={confirmedDate} onChange={event=>setConfirmedDate(event.target.value)}/></label>
+   <button type="submit" className="secondary" disabled={busy!==null}>Spara datum</button>
+   <button type="button" className="secondary" onClick={()=>{const file=files.find(item=>item.id===payout.id);if(file)void open(file,false);}}>Hämta PDF</button>
+   <button type="button" className="secondary" onClick={()=>setPayout(undefined)}>Avbryt</button>
+  </form>}
   {visible.length === 0 ? <p>Inga matchande bilagor bland de senaste hämtade filerna.</p> :
    <div className="table-wrap"><table className="data-table">
     <thead><tr><th>Bilaga</th><th>Mejl</th><th>Mottaget</th><th>Åtgärd</th></tr></thead>
@@ -68,6 +92,8 @@ export default function MailAttachments({files}: {files: Attachment[]}) {
      <td>{/\.xlsx?$/i.test(file.filename) &&
       <button className="secondary" type="button" disabled={busy !== null} onClick={() => void open(file, true)}>Läs i Stena-importen</button>}
       <button className="secondary" type="button" disabled={busy !== null} onClick={() => void open(file, false)}>Hämta fil</button>
+      {/^[0-9]{5,16}\.pdf$/.test(file.filename)&&/Stena Recycling/i.test(file.subject??"")&&
+       <button className="secondary" type="button" disabled={busy!==null} onClick={()=>void recordPayout(file.id)}>Läs utbetalningsdatum</button>}
       {busy === file.id && <span role="status"> Hämtar…</span>}
      </td>
     </tr>)}</tbody>

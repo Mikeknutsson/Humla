@@ -1,7 +1,7 @@
 import {dateValue,departments,costOnly,emptyIncoming,availableForecast,paymentForecast,type Payment,type PaymentForecast} from './payment-forecast';
 import {payrollForecast,type PayrollSource} from './payment-payroll-forecast';
 import {reviewedTrend,broadWeeklyBaseline,stenaMonthlyEvidence,monthDate,type EvidenceRow,type PeriodReview,type StenaMonth} from './payment-evidence-model';
-export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean;oneOff?:boolean;id?:string;rowId?:string|null;reference?:string;description?:string;account?:string;project?:string;paymentDate?:string;source?:string;amountStatus?:'history'|'settled'|null};
+export type Outcome={center:string;kind:'in'|'out';date:string;amount:number;party:string;invoiceDate:string|null;internal:boolean;oneOff?:boolean;id?:string;rowId?:string|null;reference?:string;description?:string;account?:string;project?:string;paymentDate?:string;scheduledPayoutDate?:string;source?:string;amountStatus?:'history'|'settled'|null};
 export type ForecastBreakdown={weekFrom:string;center:string;kind:'in'|'out';internal:boolean;baseline:number|null;factor:number|null;known:number;forecast:number|null;total:number|null;trendPrevious:number;trendCurrent:number;excludedBaseline:number;baselineRows:string[];knownRows:string[];trendPreviousRows:string[];trendCurrentRows:string[];spike:boolean;scope:'ordinary'|'stena';method:'weekly_average_13'|'stena_month';baselineFrom:string;baselineTo:string;reviewedTrendMonths:string[];trendStatus:'reviewed'|'historical_only';periodReviewed?:boolean};
 export type OutcomeSource={synced_at:string;rows:Outcome[];review_rows:number;review_amount:number;generation?:string;periodReviews?:PeriodReview[];reviewBasis?:Record<string,string>;controls?:{scope:string;from:string;to:string;supplierRows:number;supplierAmount:number;excludedNonPayments:{reason:string;rows:number;amount:number}[];stena?:{rows:number;settledRows:number;settledAmount:number;historyRows:number;historyAmount:number;unresolvedRows:number;replacedWorkifyRows:number}}};
 const day=86400000,iso=(n:number)=>new Date(n).toISOString().slice(0,10),round=(n:number)=>Math.round(n*100)/100;
@@ -17,6 +17,7 @@ export function customerTerm(party:string){
 export function expectedPaymentDate(row:Outcome,supplierDays=30){
  const term=customerTerm(row.party),delivery=dateValue(row.date);
  if(row.kind==='in'&&term.code==='stena_month_end'){
+  if(row.amountStatus==='settled'&&row.scheduledPayoutDate)return row.scheduledPayoutDate;
   const d=new Date(delivery),last=Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0);
   return iso(last+45*day);
  }
@@ -29,7 +30,7 @@ export type TransferSummary={from:string;to:string;incoming:number|null;outgoing
 export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30,periodOffset=0,payrollSource?:PayrollSource):AutomaticForecast{
  const now=dateValue(asOf);if(!Number.isInteger(supplierDays)||supplierDays<0||supplierDays>180)throw Error('Leverantörstid måste vara 0–180 dagar');
  const reviews=source.periodReviews??[],warnings=[
-  'Beloppen är exklusive moms och bygger på Workify/Stena/NeXT. Betalningsdagar är antaganden; ingen öppen reskontra eller faktisk betalningsstatus har verifierats.',
+  'Beloppen är exklusive moms och bygger på Workify/Stena/NeXT. Sparade utbetalningsdatum för Stena hämtas från självfakturan. Övriga betalningsdagar uppskattas.',
   'Netto är före löner och moms. Löner särredovisas; beloppet är ingen banksaldoprognos.',
   'Vanliga betalningar använder snittet av 13 jämförbara historiska veckor. En ändrad veckobas flyttar aldrig redan registrerade belopp.',
  ];
@@ -87,8 +88,8 @@ export function outcomeForecast(source:OutcomeSource,asOf:string,supplierDays=30
  if(reviews.some(r=>r.reviewed&&r.stale))warnings.push('Underlag har ändrats efter en månadsavstämning. Den månaden används inte som avstämd förrän den har kontrollerats igen.');
  if(source.review_rows)warnings.push(`${source.review_rows} rader väntar på granskning och ingår inte.`);
  if(payroll)warnings.push(...payroll.warnings);
- if(stenaMonths.length)warnings.push('Stena följs per leveransmånad med betalning 45 dagar efter månadens slut. Avräknat är en beloppsgrund, inte bevis på betalning. En uttryckligen avstämd leveransmånad får ingen extra historikreserv.');
- result.method='Registrerat + återstående uppskattning. Ordinarie betalningar: snitt av 13 jämförbara veckor 52 veckor bakåt. Trend: högst sex par av uttryckligen avstämda månader inom senaste året; minst tre par krävs. Annars används historik utan tillväxtpåslag. Stena: egen leveransmånad och samma månad föregående år, separat trend; avstämd månad använder endast registrerat belopp. Registrerat räknas av en gång inom respektive del. Alla betalningsdatum är antagna. Exklusive moms; löner särredovisas utanför kostnader och netto.';
+ if(stenaMonths.length)warnings.push('Stenas avräknade rader följer utbetalningsdatum från självfakturan när datum finns. Övriga rader uppskattas till 45 dagar efter leveransmånadens slut.');
+ result.method='Registrerat + återstående uppskattning. Ordinarie betalningar: snitt av 13 jämförbara veckor 52 veckor bakåt. Trend: högst sex par av uttryckligen avstämda månader inom senaste året; minst tre par krävs. Annars används historik utan tillväxtpåslag. Stena: egen leveransmånad och samma månad föregående år, separat trend; avstämd månad använder endast registrerat belopp. Registrerat räknas av en gång inom respektive del. Sparade utbetalningsdatum från Stena har företräde. Exklusive moms; löner särredovisas utanför kostnader och netto.';
  const trendEnd=new Date(Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth(),0)).toISOString().slice(0,10),trendFrom=new Date(Date.UTC(new Date(now).getUTCFullYear(),new Date(now).getUTCMonth()-12,1)).toISOString().slice(0,10);
  return {...result,automatic:{model:'evidence-v2',syncedAt:source.synced_at,trendFrom,trendTo:trendEnd,warnings,reviewRows:source.review_rows,reviewAmount:source.review_amount,supplierDays,breakdown,auditRows:Array.from(audit.values()),controls:source.controls,payroll,periodReviews:reviews,reviewBasis:source.reviewBasis??{},stenaMonths,transfer}};
 }
