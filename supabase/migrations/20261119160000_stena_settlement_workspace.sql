@@ -5,6 +5,7 @@ returns jsonb
 language plpgsql stable security definer
 set search_path = ''
 set statement_timeout = '15s'
+set jit = 'off'
 as $$
 declare
  next_month date;
@@ -37,15 +38,25 @@ begin
   from source_rows s
   order by s.revenue_object_id, (s.source_kind = 'settled') desc
  ), active_matches as materialized (
-  select a.* from private.hub_stena_projection_audit_v1 a
+  select a.fact_id, a.before_fact, a.portal_ids
+  from private.hub_stena_projection_audit_v1 a
+  left join bookings b on cardinality(a.portal_ids) = 1 and b.revenue_object_id = a.portal_ids[1]
+  left join lateral (
+   select true as retained from private.hub_kpi_prepared_facts f
+   where f.tenant_id = p_tenant and f.generation_id = active_report and f.fact_id = a.fact_id
+   limit 1
+  ) current_fact on true
   where a.tenant_id = p_tenant and a.generation_id = active_report
-    and not exists (select 1 from private.hub_kpi_prepared_facts f
-     where f.tenant_id = p_tenant and f.generation_id = active_report and f.fact_id = a.fact_id)
+    and current_fact.retained is null
+    and case when cardinality(a.portal_ids) = 1
+         then b.occurred_on >= p_month and b.occurred_on < next_month
+         else (a.before_fact->>'occurred_on')::date >= p_month
+           and (a.before_fact->>'occurred_on')::date < next_month
+        end
  ), matches as (
   select a.portal_ids[1] as booking_id, sum((a.before_fact->>'amount')::numeric) as amount
   from active_matches a
-  join bookings b on b.revenue_object_id = a.portal_ids[1]
-  where cardinality(a.portal_ids) = 1 and b.occurred_on >= p_month and b.occurred_on < next_month
+  where cardinality(a.portal_ids) = 1
   group by a.portal_ids[1]
  ), comparison as (
   select b.revenue_object_id::text as id, b.booking, b.occurred_on as date,
@@ -79,7 +90,6 @@ begin
    null, null, null, null, null, null, 'multiple_bookings'
   from active_matches a
   where cardinality(a.portal_ids) > 1
-    and (a.before_fact->>'occurred_on')::date >= p_month and (a.before_fact->>'occurred_on')::date < next_month
  ), totals as (
   select count(*) as rows, count(*) filter(where status not in ('open','matched')) as review_rows,
    sum(workify) as workify, sum(history) as history, sum(settled) as settled
