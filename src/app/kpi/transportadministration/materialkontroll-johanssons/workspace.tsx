@@ -20,14 +20,16 @@ const labels = {
 const needsReview = (load: CheckedLoad) => !['matched', 'equivalent'].includes(load.match) ||
   load.amount === null || load.workify_registrations.length !== 1;
 
+const registrationLabel = (registration: string) => registration === 'LASTBIL' ? 'Inhyrd lastbil' : registration;
+
 function RegistrationEvidence({load}: {load: CheckedLoad}) {
   const registrations = load.workify_registrations;
   if (registrations.length === 1) {
     return load.excel_registration !== load.registration &&
-      <div>Regnummer från Workify <strong>{load.registration}</strong> · Excel <strong>{load.excel_registration || 'saknas'}</strong></div>;
+      <div>Regnummer från Workify <strong>{registrationLabel(load.registration)}</strong> · Excel <strong>{load.excel_registration || 'saknas'}</strong></div>;
   }
   if (registrations.length > 1) return <div className={styles.warning}>
-    Flera regnummer i Workify ({registrations.join(', ')}). Excel: {load.excel_registration || 'saknas'}.
+    Flera regnummer i Workify ({registrations.map(registrationLabel).join(', ')}). Excel: {load.excel_registration || 'saknas'}.
   </div>;
   if (load.match === 'matched' || load.match === 'equivalent' || load.match === 'article_missing') {
     return <div className={styles.warning}>Regnummer saknas på Workify-ordern. Excel: {load.excel_registration || 'saknas'}.</div>;
@@ -76,7 +78,7 @@ function InvoicePanel({invoice, reviewOnly}: {invoice: CheckedInvoice; reviewOnl
       if (reviewOnly && !flagged.length) return null;
       return <details key={registration} className={styles.vehicle}>
         <summary>
-          <strong>{registration}</strong>
+          <strong>{registrationLabel(registration)}</strong>
           <Total loads={loads}/>
           {flagged.length > 0 && <span className={styles.warning}>{flagged.length} att granska</span>}
         </summary>
