@@ -1,6 +1,7 @@
 import {redirect} from 'next/navigation';
 import {KpiDetailShell} from '@/app/_components/kpi-detail-shell';
 import {createClient} from '@/lib/supabase/server';
+import type {DocumentEntry} from '@/lib/hub/johansson-review';
 import MaterialWorkspace from './workspace';
 
 export const dynamic = 'force-dynamic';
@@ -18,17 +19,19 @@ export default async function Page() {
   if (!member || !allowed) return <KpiDetailShell query="" title={title} breadcrumb="Humla Dashboard / Transportadministration" transportAdministration="material">
     <div className="content"><section className="panel"><p>KPI-administratör krävs för materialkontrollen.</p></section></div>
   </KpiDetailShell>;
-  const mail = member.role === 'owner' ? await db.from('hub_gmail_attachments')
+  const [mail, saved] = await Promise.all([member.role === 'owner' ? db.from('hub_gmail_attachments')
     .select('id,filename,sender,subject,received_at')
     .eq('tenant_id', member.tenant_id).eq('status', 'stored')
     .or('filename.ilike.%.xls,filename.ilike.%.xlsx')
-    .order('received_at', {ascending: false}).order('id').limit(250) : null;
+    .order('received_at', {ascending: false}).order('id').limit(250) : null,
+    db.rpc('hub_johansson_review', {p_tenant: member.tenant_id, p_action: 'list'}),
+  ]);
   const candidates = (mail?.data ?? []).map(file => ({
     ...file, likely: /johans+s?ons|kyll?inge|^elleholm\.xls/i.test(file.filename) ||
       /johans+s?ons|kyll?inge/i.test(`${file.sender} ${file.subject}`),
   }));
   const attachments = [...candidates.filter(file => file.likely), ...candidates.filter(file => !file.likely)];
   return <KpiDetailShell query="" title={title} breadcrumb="Humla Dashboard / Transportadministration" transportAdministration="material">
-    <MaterialWorkspace attachments={attachments} mailAvailable={!!mail} mailError={!!mail?.error}/>
+    <MaterialWorkspace attachments={attachments} mailAvailable={!!mail} mailError={!!mail?.error} saved={(saved.data ?? []) as DocumentEntry[]} listError={!!saved.error}/>
   </KpiDetailShell>;
 }

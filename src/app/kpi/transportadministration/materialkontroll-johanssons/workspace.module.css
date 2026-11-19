@@ -56,3 +56,12 @@
   .form select, .form input { font-size: 16px; }
   .vehicle > summary .total { display: flex; margin: .4rem 0; gap: .35rem .75rem; }
 }
+
+.actions, .statusField { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.upload + .upload { margin-top: .65rem; }
+.documents { display: grid; gap: .5rem; padding: 0; list-style: none; }
+.documents button { text-align: left; overflow-wrap: anywhere; }
+.statusField { margin: .4rem 0; }
+.statusField select { min-height: 44px; padding: .4rem; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+.actions button, .documents button { min-height: 44px; }
+.actions button:disabled { opacity: .6; }
