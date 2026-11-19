@@ -48,7 +48,7 @@ function InvoicePanel({invoice, reviewOnly}: {invoice: CheckedInvoice; reviewOnl
   }
   const sortedVehicles = [...vehicles].sort(([a], [b]) => a.localeCompare(b, 'sv'));
   const sum = totals(invoice.loads);
-  return <section className="section">
+  return <section className={`panel ${styles.card}`}>
     <div className={styles.heading}><h2>{invoice.name}</h2><Total loads={invoice.loads}/></div>
     <p>{invoice.loads.length} vägsedlar · {vehicles.size} fordonsgrupper · {sum.review + invoice.issues.length} att granska</p>
     {invoice.issues.length > 0 && <details className={styles.vehicle}>
@@ -108,10 +108,9 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
     } finally { setBusy(false); }
   }
 
-  return <>
-    <section className="section">
-      <h1>Materialkontroll Johanssons</h1>
-      <p>Kontrollera materialet mot Workify och beräkna inköpsbelopp exkl. moms per fordon och fakturaflik.</p>
+  return <div className={`content ${styles.workspace}`}>
+    <section className={`panel ${styles.card}`}>
+      <p className={styles.intro}>Kontrollera materialet mot Workify och beräkna inköpsbelopp exkl. moms per fordon och fakturaflik.</p>
       {mailAvailable && <form onSubmit={check} className={styles.form}>
         <label>Excelbilaga från mejl
           <select name="id" required defaultValue="" disabled={busy || attachments.length === 0}>
@@ -121,28 +120,28 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
             </option>)}
           </select>
         </label>
-        <button className="btn" disabled={busy || attachments.length === 0}>Kontrollera bilaga</button>
+        <button className="secondary" disabled={busy || attachments.length === 0}>Kontrollera bilaga</button>
       </form>}
       {mailAvailable && !attachments.length && <p>{mailError ? 'Mejlbilagorna kunde inte hämtas.' : 'Det finns inga sparade Excelbilagor.'}</p>}
       <details className={styles.upload} open={!mailAvailable ? true : undefined}>
         <summary>Välj Excel-fil från datorn</summary>
         <form onSubmit={check} className={styles.form}>
           <label>Johanssons materialunderlag<input type="file" name="file" accept=".xls,.xlsx" required disabled={busy}/></label>
-          <button className="btn" disabled={busy}>Kontrollera fil</button>
+          <button className="secondary" disabled={busy}>Kontrollera fil</button>
         </form>
       </details>
       {busy && <p role="status">Kontrollerar materialet mot Workify och prislistorna…</p>}
       {error && <p role="alert" className={styles.warning}>{error}</p>}
     </section>
     {report && <>
-      <section className="section">
+      <section className={`panel ${styles.card}`}>
         <div className={styles.heading}><h2>{report.name}</h2>
-          <label><input type="checkbox" checked={reviewOnly} onChange={event => setReviewOnly(event.target.checked)}/> Visa bara avvikelser</label>
+          <label className={styles.reviewFilter}><input type="checkbox" checked={reviewOnly} onChange={event => setReviewOnly(event.target.checked)}/> Visa bara avvikelser</label>
         </div>
         <p>{report.invoices.length} fakturaflikar · Belopp exkl. moms enligt prislistan på leveransdagen.</p>
         {report.skipped.length > 0 && <p>Flikar utan läsbara materialtransaktioner · {report.skipped.join(', ')}</p>}
       </section>
       {report.invoices.map(invoice => <InvoicePanel key={invoice.name} invoice={invoice} reviewOnly={reviewOnly}/>)}
     </>}
-  </>;
+  </div>;
 }
