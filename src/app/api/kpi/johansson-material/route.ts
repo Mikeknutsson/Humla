@@ -56,9 +56,19 @@ export async function POST(request: Request) {
       console.error('Material control query failed', error.code);
       return Response.json({error: 'Matchning mot Workify och prislistor misslyckades. Försök igen.'}, {status: 502});
     }
-    const checks = new Map((data as CheckedLoad[]).map(check => [JSON.stringify([check.sheet, check.row]), check]));
+    type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
+    const checks = new Map((data as Check[]).map(check => [JSON.stringify([check.sheet, check.row]), check]));
     return Response.json({name, skipped, invoices: invoices.map(invoice => ({
-      ...invoice, loads: invoice.loads.map(load => ({...load, ...checks.get(JSON.stringify([load.sheet, load.row]))})),
+      ...invoice, loads: invoice.loads.map((load): CheckedLoad => {
+        const check = checks.get(JSON.stringify([load.sheet, load.row]));
+        if (!check) throw Error('Workify-kontrollen saknar ett resultat för en vägsedel.');
+        const registrations = check.workify_registrations ?? [];
+        return {
+          ...load, ...check, workify_registrations: registrations,
+          excel_registration: load.registration,
+          registration: registrations.length === 1 ? registrations[0] : load.registration,
+        };
+      }),
     }))});
   } catch (error) {
     return Response.json({error: error instanceof Error ? error.message : 'Excel-filen kunde inte läsas.'}, {status: 422});
