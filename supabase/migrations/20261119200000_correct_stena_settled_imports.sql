@@ -2,12 +2,12 @@
 -- Trp.best.nr, Hämtdatum, Pris SEK and Fakturanr.
 do $repair$
 declare
- f record;
+ target_file record;
  updated_count integer;
  definition text;
  marker constant text := ' p_hash:=encode(extensions.digest(p_hash||'':''||p_kind,''sha256''),''hex'');';
 begin
- for f in
+ for target_file in
   select f.*, o.mapping
   from private.hub_stena_files_v1 f
   join private.hub_stena_upload_originals_v1 o using (tenant_id,file_hash)
@@ -18,18 +18,18 @@ begin
      ('f00f658af38e561155303a60d5a53298476e1e051ab9aa1540474fa958f3b61a',441)
     )
  loop
-  perform pg_advisory_xact_lock(hashtextextended('stena-import:'||f.tenant_id::text,0));
-  if f.mapping#>>'{columns,settled_amount}' is distinct from '9'
-     or f.mapping#>>'{columns,price}' is distinct from '9'
-     or coalesce(f.mapping->>'original_sha256','') !~ '^[a-f0-9]{64}$' then
+  perform pg_advisory_xact_lock(hashtextextended('stena-import:'||target_file.tenant_id::text,0));
+  if target_file.mapping#>>'{columns,settled_amount}' is distinct from '9'
+     or target_file.mapping#>>'{columns,price}' is distinct from '9'
+     or coalesce(target_file.mapping->>'original_sha256','') !~ '^[a-f0-9]{64}$' then
    raise exception 'Unexpected original Stena mapping';
   end if;
   update private.hub_stena_rows_v1 r set amount=r.settled_amount
-  where r.tenant_id=f.tenant_id and r.file_hash=f.file_hash and r.settled_amount is not null;
+  where r.tenant_id=target_file.tenant_id and r.file_hash=target_file.file_hash and r.settled_amount is not null;
   get diagnostics updated_count = row_count;
-  if updated_count<>f.expected_rows then raise exception 'Unexpected number of settled rows'; end if;
+  if updated_count<>target_file.expected_rows then raise exception 'Unexpected number of settled rows'; end if;
   update private.hub_stena_files_v1 s set source_kind='settled'
-  where s.tenant_id=f.tenant_id and s.file_hash=f.file_hash;
+  where s.tenant_id=target_file.tenant_id and s.file_hash=target_file.file_hash;
  end loop;
 
  -- The repaired files retain their original record identity and references.
