@@ -5,6 +5,8 @@ import {settlementPath as base} from "@/app/_components/kpi-transport-administra
 import {createClient} from "@/lib/supabase/server";
 import {stenaPaymentDate} from "@/lib/hub/payment-evidence-model";
 import MailAttachments from "./MailAttachments";
+import ReviewEditor from "./ReviewEditor";
+import type {RowReview} from "./review";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,7 @@ const statuses = {
  workify_only: "Workify-rad utan entydig match",
 };
 
-type Comparison = {
+type Comparison = RowReview & {
  id: string;
  booking: string;
  date: string;
@@ -39,7 +41,7 @@ type Comparison = {
 
 type Report = {
  report_available: boolean;
- totals: {rows: number; review_rows: number; workify: number | null; history: number | null; settled: number | null};
+ totals: {rows: number; review_rows: number; reviewed_rows: number; workify: number | null; history: number | null; settled: number | null};
  rows: Comparison[];
  filtered_count: number;
 };
@@ -105,19 +107,21 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
      <article className="metric-card"><span>Workify</span><strong>{money(report.totals.workify)}</strong></article>
      <article className="metric-card"><span>Stena Historik</span><strong>{money(report.totals.history)}</strong></article>
      <article className="metric-card"><span>Avräknat enligt Stena</span><strong>{money(report.totals.settled)}</strong></article>
-     <article className="metric-card"><span>Att granska</span><strong>{report.totals.review_rows}</strong><small>Av {report.totals.rows} kontrollrader</small></article>
+     <article className="metric-card"><span>Att granska</span><strong>{report.totals.review_rows}</strong><small>{report.totals.reviewed_rows} granskade av {report.totals.rows} kontrollrader</small></article>
     </section>
    </>}
   {report && <section className="panel weekly-panel">
    <h2>Bokningar och avvikelser</h2>
+   <p>Spara vad som behöver följas upp eller markera raden som granskad. Om beloppen eller matchningen ändras kommer raden tillbaka i granskningslistan.</p>
    {report.rows.length > 0 ? <div className="table-wrap"><table className="data-table">
-    <thead><tr><th>Datum</th><th>Bokning / referens</th><th>Fordon</th><th>Workify</th><th>Historik</th><th>Avräknat</th><th>Avräknat minus Historik</th><th>Workify minus valt Stenabelopp</th><th>Status</th></tr></thead>
+    <thead><tr><th>Datum</th><th>Bokning / referens</th><th>Fordon</th><th>Workify</th><th>Historik</th><th>Avräknat</th><th>Avräknat minus Historik</th><th>Workify minus valt Stenabelopp</th><th>Kontrollresultat</th><th>Uppföljning</th></tr></thead>
     <tbody>{report.rows.map(row => <tr key={row.id}>
      <td>{row.date}</td><td>{row.booking || "–"}</td><td>{row.registration || "–"}</td>
      <td>{money(row.workify)}</td><td>{money(row.history)}{row.history_file && <><br/><small>{row.history_file}</small></>}</td>
      <td>{money(row.settled)}{row.settled_file && <><br/><small>{row.settled_file}</small></>}</td>
      <td>{money(row.settlement_difference)}</td><td>{money(row.workify_difference)}</td>
      <td>{statuses[row.status]}</td>
+     <td>{row.fingerprint && <ReviewEditor key={row.revision + row.fingerprint} row={row} month={month} page={page} review={review}/>}</td>
     </tr>)}</tbody>
    </table></div> : <p>Inga rader att visa för det här urvalet.</p>}
    <nav aria-label="Kontrollrader">
