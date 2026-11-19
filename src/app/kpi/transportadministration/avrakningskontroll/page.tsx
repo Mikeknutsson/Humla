@@ -19,6 +19,12 @@ const dateTime = new Intl.DateTimeFormat("sv-SE",{dateStyle:"short",timeZone:"Eu
 const amounts = new Intl.NumberFormat("sv-SE", {style: "currency", currency: "SEK"});
 const money = (value: number | null) => value === null ? "–" : amounts.format(value);
 
+const queueLabels = {
+ missing_settlement: "Saknas i avräkningen",
+ needs_match: "Behöver matchas mot avräkning",
+ underpaid: "Avräknat lägre än Workify",
+};
+
 const statuses = {
  difference: "Beloppsavvikelse",
  matched: "Avräknat",
@@ -42,14 +48,17 @@ type Comparison = RowReview & {
  settlement_difference: number | null;
  workify_difference: number | null;
  status: keyof typeof statuses;
+ shortfall?: number|null;
+ review_reason?: keyof typeof queueLabels|null;
  match_method?: "booking" | "registration_date_amount" | null;
 };
 
 type Report = {
  report_available: boolean;
- totals: {rows: number; review_rows: number; reviewed_rows: number; fallback_rows?: number; workify: number | null; history: number | null; settled: number | null};
+ totals: {rows: number; review_rows: number; review_amount?: number|null; settled_only_rows?: number; settled_only_amount?: number|null; reviewed_rows: number; fallback_rows?: number; workify: number | null; history: number | null; settled: number | null};
  rows: Comparison[];
  filtered_count: number;
+ settled_only_vehicles?: {registration:string|null;bookings:number;amount:number}[];
 };
 
 export default async function Page({searchParams}: {searchParams: Promise<Record<string, string | string[] | undefined>>}) {
@@ -120,17 +129,18 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
      <article className="metric-card"><span>Workify</span><strong>{money(report.totals.workify)}</strong></article>
      <article className="metric-card"><span>Stena Historik</span><strong>{money(report.totals.history)}</strong></article>
      <article className="metric-card"><span>Avräknat enligt Stena</span><strong>{money(report.totals.settled)}</strong></article>
-     <article className="metric-card"><span>Att granska</span><strong>{report.totals.review_rows}</strong><small>{report.totals.reviewed_rows} granskade av {report.totals.rows} kontrollrader</small></article>
+     <article className="metric-card"><span>Att följa upp</span><strong>{report.totals.review_rows}</strong>{report.totals.review_amount!=null&&<small>{money(report.totals.review_amount)} jämfört med Workify</small>}</article>
     </section>
    </>}
   {report && <section className="panel weekly-panel">
-   <h2>{review ? "Öppna avvikelser" : "Alla bokningar"}</h2>
+   <h2>{review ? "Workify att följa upp" : "Alla bokningar"}</h2>
+   {review&&<p>Visar Workify-rader där minst 200 kr saknas i avräkningen. Rader utan avräknat belopp visas först.</p>}
    {report.rows.length ? <div className={styles.rows}>{report.rows.map(row => <details key={row.id} className={styles.row}>
     <summary>
      <strong>{row.registration || "Regnummer saknas"}</strong><time dateTime={row.date}>{row.date}</time>
-     <span>{row.booking || "Bokningsnummer saknas"}</span><span>{statuses[row.status]}</span>
+     <span>{row.booking || "Bokningsnummer saknas"}</span><span>{review&&row.review_reason ? queueLabels[row.review_reason] : statuses[row.status]}</span>
      <span>{row.changed_since_review ? "Underlag ändrat" : row.revision>0 ? reviewLabels[row.review_state] : ""}</span>
-     <strong className={styles.amount}>{row.workify_difference==null ? money(row.settled??row.history??row.workify) : `${money(row.workify_difference)} diff`}</strong>
+     <strong className={styles.amount}>{review&&row.shortfall!=null ? `${money(row.shortfall)} att följa upp` : row.workify_difference==null ? money(row.settled??row.history??row.workify) : `${money(row.workify_difference)} diff`}</strong>
     </summary>
     <div className={styles.details}>
      <dl className={styles.values}>
@@ -150,6 +160,15 @@ export default async function Page({searchParams}: {searchParams: Promise<Record
     {(page + 1) * 80 < report.filtered_count && page < 1000 && <Link className="secondary" href={pageUrl(page + 1)}>Nästa →</Link>}
    </nav>
   </section>}
+  {report?.report_available && !!report.totals.settled_only_rows && <details className="panel weekly-panel">
+   <summary><strong>Avräknat utan Workify-match</strong> · {report.totals.settled_only_rows} bokningar · {money(report.totals.settled_only_amount??null)}</summary>
+   <div className="table-wrap"><table className="data-table">
+    <thead><tr><th>Regnummer</th><th>Bokningar</th><th>Avräknat</th></tr></thead>
+    <tbody>{report.settled_only_vehicles?.map(vehicle=><tr key={vehicle.registration??"missing"}>
+     <td>{vehicle.registration||"Regnummer saknas"}</td><td>{vehicle.bookings}</td><td>{money(vehicle.amount)}</td>
+    </tr>)}</tbody>
+   </table></div>
+  </details>}
   {isImport && <>
    <StenaImport refreshOnImport/>
    <section className="panel weekly-panel">
