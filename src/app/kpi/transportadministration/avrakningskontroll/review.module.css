@@ -1,0 +1,35 @@
+.review {
+  min-width: 12rem;
+}
+
+.review summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.review form {
+  margin-top: .6rem;
+  display: grid;
+  gap: .6rem;
+  white-space: normal;
+}
+
+.review label {
+  display: grid;
+  gap: .25rem;
+}
+
+.review select,
+.review textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  padding: .45rem;
+}
+
+.review textarea {
+  resize: vertical;
+}
