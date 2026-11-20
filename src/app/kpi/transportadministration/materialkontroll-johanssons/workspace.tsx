@@ -123,7 +123,11 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
             </div>
             {load.workify_articles.length > 0 && <div>Workify · {load.workify_articles.join(', ')}</div>}
             {load.workify_combined && <div>
-              Samlingsrad · {load.workify_combined.load_count} vägsedlar · Johanssons {tonnes.format(load.workify_combined.kg / 1000)} ton · Workify {tonnes.format(load.workify_combined.workify_kg / 1000)} ton
+              Samlingsrad{load.workify_combined.date && ` ${load.workify_combined.date}`} · {load.workify_combined.load_count} vägsedlar · Johanssons {tonnes.format(load.workify_combined.kg / 1000)} ton · Workify {tonnes.format(load.workify_combined.workify_kg / 1000)} ton
+            </div>}
+            {!!load.workify_receipts?.length && <div>
+              Avläst kvitto på Workify-ordern · {load.workify_receipts.map(receipt =>
+                [receipt.date, receipt.reference].filter(Boolean).join(' · ')).filter(Boolean).join(', ')}
             </div>}
             {load.workify_article_date && load.workify_article_date !== load.date &&
               <div>Artikeldatum i Workify · {load.workify_article_date}</div>}
