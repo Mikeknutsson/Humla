@@ -125,6 +125,8 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
             {load.workify_combined && <div>
               Samlingsrad · {load.workify_combined.load_count} vägsedlar · Johanssons {tonnes.format(load.workify_combined.kg / 1000)} ton · Workify {tonnes.format(load.workify_combined.workify_kg / 1000)} ton
             </div>}
+            {load.workify_article_date && load.workify_article_date !== load.date &&
+              <div>Artikeldatum i Workify · {load.workify_article_date}</div>}
             {!!load.workify_rates?.length && <div>Orderpris i Workify · {load.workify_rates.map(rate => `${money.format(rate)}/ton`).join(', ')}</div>}
             <div>Inköp · {tonnes.format(load.kg / 1000)} ton{load.rate !== null && ` × ${money.format(load.rate)}/ton`}
               {load.amount !== null && <strong> = {money.format(load.amount)}</strong>}</div>
