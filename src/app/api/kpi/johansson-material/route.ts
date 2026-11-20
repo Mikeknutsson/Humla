@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       console.error('Material control query failed', error.code);
       return Response.json({error: 'Matchning mot Workify och prislistor misslyckades. Försök igen.'}, {status: 502});
     }
-    type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
+    type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_rates' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
     const checks = new Map((data as Check[]).map(check => [JSON.stringify([check.sheet, check.row]), check]));
     const report = {name, source, skipped, invoices: invoices.map(invoice => ({
       ...invoice, loads: invoice.loads.map((load): CheckedLoad => {
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       }),
     }))};
     const deviations = Object.fromEntries(report.invoices.flatMap(invoice => [
-      ...invoice.loads.filter(isDeviation).map(load => [deviationKey(invoice.name, load.row), load] as const),
+      ...invoice.loads.filter(isDeviation).map(load => [deviationKey(invoice.name, load.row), {...load, workify_rates: undefined}] as const),
       ...invoice.issues.map(issue => [deviationKey(invoice.name, issue), issue] as const),
     ]));
     const saved = await db.rpc('hub_johansson_review', {

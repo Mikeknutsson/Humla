@@ -49,7 +49,7 @@ function Total({loads}: {loads: CheckedLoad[]}) {
   return <span className={styles.total}>
     <span>{tonnes.format(sum.kg / 1000)} ton</span>
     <strong>{sum.priced ? money.format(sum.cents / 100) : '–'}</strong>
-    {unpriced > 0 && <span className={styles.warning}>{unpriced} utan pris</span>}
+    {unpriced > 0 && <span className={styles.warning}>{unpriced} utan inköpspris</span>}
   </span>;
 }
 
@@ -115,10 +115,11 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
             <RegistrationEvidence load={load}/>
             <div className={styles.badges}>
               <span data-status={load.match}>{labels[load.match]}</span>
-              {load.amount === null && <span data-status="unpriced">Pris saknas</span>}
+              {load.amount === null && <span data-status="unpriced">Inköpspris saknas</span>}
             </div>
             {load.workify_articles.length > 0 && <div>Workify · {load.workify_articles.join(', ')}</div>}
-            <div>{tonnes.format(load.kg / 1000)} ton{load.rate !== null && ` × ${money.format(load.rate)}/ton`}
+            {!!load.workify_rates?.length && <div>Orderpris i Workify · {load.workify_rates.map(rate => `${money.format(rate)}/ton`).join(', ')}</div>}
+            <div>Inköp · {tonnes.format(load.kg / 1000)} ton{load.rate !== null && ` × ${money.format(load.rate)}/ton`}
               {load.amount !== null && <strong> = {money.format(load.amount)}</strong>}</div>
             {load.price_source && <small>{load.price_source}</small>}
             {isDeviation(load) && <StatusField item={deviationKey(invoice.name, load.row)} controls={controls}/>}
