@@ -78,3 +78,49 @@
   .views button { flex: 1 1 auto; justify-content: center; }
   .views button:last-child { flex-basis: 100%; }
 }
+
+.intro, .reportBanner, .metric dt, .reason, .evidence summary {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.intro svg { color: #2457b5; }
+.reportBanner {
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border-radius: 10px;
+  background: linear-gradient(120deg, #172c64, #2653a7 72%, #266582);
+  color: #fff;
+}
+.reportBanner > svg { flex: none; color: #d7eaff; }
+.reportBanner h2 { margin: 0 0 .25rem; color: #fff; overflow-wrap: anywhere; scroll-margin-top: 6rem; }
+.reportBanner span { color: #e6efff; font-size: .875rem; }
+
+.workspace [data-review-state="todo"] { --status-ink: #943a17; --status-bg: #fff1e7; --status-accent: #ce561f; }
+.workspace [data-review-state="in_progress"] { --status-ink: #1a4593; --status-bg: #e9f1ff; --status-accent: #376acc; }
+.workspace [data-review-state="reviewed"] { --status-ink: #146341; --status-bg: #e2f5eb; --status-accent: #1d8a61; }
+.progress { margin: 1rem 0; }
+.progressHeading { display: flex; justify-content: space-between; gap: .5rem; font-size: .875rem; }
+.progressHeading span { color: #475569; font-variant-numeric: tabular-nums; }
+.progressTrack { display: flex; gap: 2px; height: 9px; margin-top: .55rem; border-radius: 999px; overflow: hidden; }
+.progressTrack span { background: var(--status-accent); }
+.metrics { display: grid; gap: .5rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: .65rem 0 0; }
+.metric { min-width: 0; padding: .6rem .75rem; background: var(--status-bg); color: var(--status-ink); border-radius: 8px; }
+.metric dt { font-size: .8rem; font-weight: 650; gap: .35rem; }
+.metric dt svg { flex: none; }
+.metric dd { margin: .2rem 0 0; font-size: 1.45rem; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
+.load[data-review-state] { border-inline-start: 4px solid var(--status-accent); }
+.queue .load[data-review-state] { border-inline-start: 4px solid var(--status-accent); }
+.reason { justify-self: start; padding: .3rem .5rem; border-radius: 6px; color: var(--status-ink); background: var(--status-bg); font-size: .875rem; }
+.reason svg, .evidence svg { flex: none; }
+.weight { background: #eef2fb; color: #273f72; padding: .2rem .45rem; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.statusField .markReviewed { background: #e2f5eb; color: #146341; border-color: #a9d7c1; }
+.search { position: relative; }
+.search > svg { position: absolute; top: 13px; left: .65rem; color: #506887; pointer-events: none; }
+.search input { padding-inline-start: 2.3rem; }
+.evidence[open] summary svg { transform: rotate(180deg); }
+@media (max-width: 425px) {
+  .reportBanner { padding: .85rem; }
+  .metric { padding: .5rem .4rem; }
+  .metric dt svg { display: none; }
+}

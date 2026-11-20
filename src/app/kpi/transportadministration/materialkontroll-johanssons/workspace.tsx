@@ -1,5 +1,6 @@
 'use client';
 
+import {Check, ChevronDown, CircleAlert, ClipboardCheck, Clock3, FileSpreadsheet, ListChecks, Search} from 'lucide-react';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import type {CheckedLoad} from '@/lib/hub/johansson-material';
 import {deviationKey, hasWorkifyCharge, isDeviation, reviewLabels, type DocumentEntry, type MaterialReview, type ReviewState} from '@/lib/hub/johansson-review';
@@ -65,14 +66,39 @@ function StatusField({item, controls}: {item: string; controls: ReviewControls})
   const state = controls.statuses[item]?.state ?? 'todo';
   if (!controls.editable) return <span>{reviewLabels[state]}</span>;
   return <div className={styles.statusField}>
-    {state !== 'reviewed' && <button type="button" className="secondary" disabled={controls.busy}
-      onClick={() => controls.onReview(item, 'reviewed')}>Markera granskad</button>}
+    {state !== 'reviewed' && <button type="button" className={`secondary ${styles.markReviewed}`} disabled={controls.busy}
+      onClick={() => controls.onReview(item, 'reviewed')}><Check size={17} aria-hidden="true"/>Markera granskad</button>}
     <label>
       <span className={styles.srOnly}>Granskningsstatus</span>
       <select value={state} disabled={controls.busy} onChange={event => controls.onReview(item, event.target.value as ReviewState)}>
         {Object.entries(reviewLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
     </label>
+  </div>;
+}
+
+function ReviewProgress({todo, inProgress, reviewed}: {todo: number; inProgress: number; reviewed: number}) {
+  const total = todo + inProgress + reviewed;
+  const metrics = [
+    {state: 'todo', label: 'Att granska', value: todo, Icon: CircleAlert},
+    {state: 'in_progress', label: 'Pågår', value: inProgress, Icon: Clock3},
+    {state: 'reviewed', label: 'Granskade', value: reviewed, Icon: ClipboardCheck},
+  ];
+  return <div className={styles.progress} aria-label="Granskningsstatus">
+    <div className={styles.progressHeading}>
+      <strong>{total ? `${reviewed} av ${total} avvikelser granskade` : 'Inga avvikelser'}</strong>
+      {total > 0 && <span>{Math.round(reviewed / total * 100)} %</span>}
+    </div>
+    {total > 0 && <div className={styles.progressTrack} aria-hidden="true">
+      {[...metrics].reverse().filter(metric => metric.value > 0).map(metric =>
+        <span key={metric.state} data-review-state={metric.state} style={{flex: metric.value}}/>)}
+    </div>}
+    <dl className={styles.metrics}>
+      {metrics.map(({state, label, value, Icon}) => <div key={state} className={styles.metric} data-review-state={state}>
+        <dt><Icon size={17} aria-hidden="true"/>{label}</dt>
+        <dd>{value}</dd>
+      </div>)}
+    </dl>
   </div>;
 }
 
@@ -84,7 +110,7 @@ function openItems(invoice: CheckedInvoice, statuses: MaterialReview['statuses']
 }
 
 function IssueCard({invoice, issue, controls}: {invoice: string; issue: string; controls: ReviewControls}) {
-  return <article className={styles.load}>
+  return <article className={styles.load} data-review-state={controls.statuses[deviationKey(invoice, issue)]?.state ?? 'todo'}>
     <strong>Kontrollera Excel · {invoice}</strong>
     <div>{issue}</div>
     <StatusField item={deviationKey(invoice, issue)} controls={controls}/>
@@ -134,13 +160,13 @@ function LoadCard({load, invoice, controls}: {load: CheckedLoad; invoice: string
   const reason = batch && batch.kg !== batch.workify_kg
     ? `Viktskillnad på samlingsraden: ${tonnes.format(Math.abs(batch.kg - batch.workify_kg) / 1000)} ton`
     : load.match === 'matched' || load.match === 'equivalent' ? 'Kunddebitering ej verifierad' : labels[load.match];
-  return <article className={styles.load}>
-    <div className={styles.heading}><strong>{load.article}</strong><span>{tonnes.format(load.kg / 1000)} ton</span></div>
+  return <article className={styles.load} data-review-state={unresolved ? controls.statuses[item]?.state ?? 'todo' : undefined}>
+    <div className={styles.heading}><strong>{load.article}</strong><span className={styles.weight}>{tonnes.format(load.kg / 1000)} ton</span></div>
     <div className={styles.context}>Order {load.order || '–'} · {registrationLabel(load.registration) || 'Regnummer saknas'} · <time>{load.date}</time></div>
-    {unresolved && <div className={styles.reason}>{reason}</div>}
+    {unresolved && <div className={styles.reason}><CircleAlert size={16} aria-hidden="true"/>{reason}</div>}
     {unresolved && <StatusField item={item} controls={controls}/>}
     <details className={styles.evidence}>
-      <summary>Visa underlag</summary>
+      <summary><ChevronDown size={16} aria-hidden="true"/>Visa underlag</summary>
       <div className={styles.evidenceBody}>
         <div>Flik {invoice} · Vägsedel {load.ticket} · Excelrad {load.row}</div>
         <RegistrationEvidence load={load}/>
@@ -210,6 +236,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
   const queue = report ? reviewQueue(report) : [];
   const reviewed = queue.filter(item => report?.statuses[item.key]?.state === 'reviewed').length;
   const remaining = queue.length - reviewed;
+  const inProgress = queue.filter(item => report?.statuses[item.key]?.state === 'in_progress').length;
   const term = search.trim().toLocaleLowerCase('sv');
   const visibleQueue = queue.filter(item =>
     (report?.statuses[item.key]?.state === 'reviewed') === (view === 'reviewed') &&
@@ -284,7 +311,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
 
   return <div className={`content ${styles.workspace}`}>
     <section className={`panel ${styles.card}`}>
-      <h2 className={styles.intro}>Bilagor</h2>
+      <h2 className={styles.intro}><FileSpreadsheet size={22} aria-hidden="true"/>Bilagor</h2>
       {active.length > 0 && <details className={styles.upload} open={!report ? true : undefined}>
         <summary>Påbörjade granskningar ({active.length})</summary>
         {documentList(active)}
@@ -319,26 +346,30 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
     </section>
     {report && controls && <>
       <section className={`panel ${styles.card}`}>
-        <div className={styles.heading}>
-          <h2 ref={resultsHeading} tabIndex={-1}>{report.name}</h2>
-          <span>{report.invoices.reduce((sum, invoice) => sum + invoice.loads.length, 0)} vägsedlar · {report.invoices.length} fakturaflikar</span>
+        <div className={styles.reportBanner}>
+          <FileSpreadsheet size={29} aria-hidden="true"/>
+          <div>
+            <h2 ref={resultsHeading} tabIndex={-1}>{report.name}</h2>
+            <span>{report.invoices.reduce((sum, invoice) => sum + invoice.loads.length, 0)} vägsedlar · {report.invoices.length} fakturaflikar</span>
+          </div>
         </div>
+        <ReviewProgress todo={remaining - inProgress} inProgress={inProgress} reviewed={reviewed}/>
         {error && <p role="alert" className={styles.warning}>{error}</p>}
         {report.approved_at ? <div className={styles.actions}>
           <span>Godkänd {day.format(new Date(report.approved_at))}</span>
           <button type="button" className="secondary" disabled={busy} onClick={() => change('reopen', report.key)}>Återöppna bilagan</button>
         </div> : <div className={styles.actions}>
           <button type="button" className="secondary" disabled={busy || remaining > 0} onClick={() => change('approve', report.key)}>Godkänn bilagan</button>
-          <span>{remaining > 0 ? `Kvar att granska: ${remaining}` : 'Alla avvikelser är genomgångna.'}</span>
           <button type="button" className="secondary" disabled={busy} onClick={() => change('get', report.key)}>Hämta sparad status</button>
         </div>}
         <div className={styles.views} role="group" aria-label="Visa granskning">
-          <button type="button" className="secondary" aria-pressed={view === 'open'} onClick={() => setView('open')}>Att granska ({remaining})</button>
-          <button type="button" className="secondary" aria-pressed={view === 'reviewed'} onClick={() => setView('reviewed')}>Granskade ({reviewed})</button>
-          <button type="button" className="secondary" aria-pressed={view === 'all'} onClick={() => setView('all')}>Alla vägsedlar och inköp</button>
+          <button type="button" className="secondary" aria-pressed={view === 'open'} onClick={() => setView('open')}><CircleAlert size={17} aria-hidden="true"/>Att granska ({remaining})</button>
+          <button type="button" className="secondary" aria-pressed={view === 'reviewed'} onClick={() => setView('reviewed')}><Check size={17} aria-hidden="true"/>Granskade ({reviewed})</button>
+          <button type="button" className="secondary" aria-pressed={view === 'all'} onClick={() => setView('all')}><ListChecks size={17} aria-hidden="true"/>Alla vägsedlar och inköp</button>
         </div>
         {view !== 'all' && <label className={styles.search}>
           <span className={styles.srOnly}>Sök bland avvikelser</span>
+          <Search size={18} aria-hidden="true"/>
           <input type="search" placeholder="Sök order, vägsedel, regnummer eller material" value={search} onChange={event => setSearch(event.target.value)}/>
         </label>}
         {view === 'all' && report.skipped.length > 0 && <p>Flikar utan läsbara materialtransaktioner · {report.skipped.join(', ')}</p>}
