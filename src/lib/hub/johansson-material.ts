@@ -21,8 +21,9 @@ export type CheckedLoad = Load & {
   match: 'matched' | 'equivalent' | 'order_missing' | 'article_missing' | 'order_unspecified';
   workify_articles: string[];
   workify_rates?: number[];
+  workify_receipts?: {reference: string | null; date: string | null}[];
   workify_article_date?: string | null;
-  workify_combined?: {kg: number; workify_kg: number; load_count: number} | null;
+  workify_combined?: {kg: number; workify_kg: number; load_count: number; date?: string | null} | null;
   workify_registrations: string[];
   excel_registration: string;
   rate: number | null;
