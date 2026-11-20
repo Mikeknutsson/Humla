@@ -1,6 +1,6 @@
 'use client';
 
-import {Check, ChevronDown, CircleAlert, ClipboardCheck, Clock3, FileSpreadsheet, ListChecks, Search} from 'lucide-react';
+import {Check, ChevronDown, CircleAlert, ClipboardCheck, Clock3, Copy, FileSpreadsheet, ListChecks, Search} from 'lucide-react';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import type {CheckedLoad} from '@/lib/hub/johansson-material';
 import {deviationKey, hasWorkifyCharge, isDeviation, reviewLabels, type DocumentEntry, type MaterialReview, type ReviewState} from '@/lib/hub/johansson-review';
@@ -153,6 +153,37 @@ function InvoicePanel({invoice, controls}: {
   </section>;
 }
 
+function WorkifyOrderNumber({number}: {number: string}) {
+  const [feedback, setFeedback] = useState<'copied' | 'error'>();
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(undefined), 2500);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  async function copyNumber() {
+    try {
+      await navigator.clipboard.writeText(number);
+      setFeedback('copied');
+    } catch {
+      setFeedback('error');
+    }
+  }
+
+  if (!number) return <span>Order –</span>;
+  return <span className={styles.orderReference}>
+    <span>Order</span>
+    <button type="button" className={styles.copyOrder} onClick={copyNumber}
+      aria-label={`Kopiera Workify-ordernummer ${number}`} title="Kopiera Workify-ordernumret">
+      <strong>{number}</strong>
+      {feedback === 'copied' ? <Check size={15} aria-hidden="true"/> : <Copy size={15} aria-hidden="true"/>}
+    </button>
+    <span role="status" className={feedback === 'error' ? styles.warning : styles.copyFeedback}>
+      {feedback === 'copied' ? 'Kopierat' : feedback === 'error' ? 'Numret kunde inte kopieras' : ''}
+    </span>
+  </span>;
+}
+
 function LoadCard({load, invoice, controls}: {load: CheckedLoad; invoice: string; controls: ReviewControls}) {
   const item = deviationKey(invoice, load.row);
   const unresolved = isDeviation(load, controls.billingReview);
@@ -162,7 +193,7 @@ function LoadCard({load, invoice, controls}: {load: CheckedLoad; invoice: string
     : load.match === 'matched' || load.match === 'equivalent' ? 'Kunddebitering ej verifierad' : labels[load.match];
   return <article className={styles.load} data-review-state={unresolved ? controls.statuses[item]?.state ?? 'todo' : undefined}>
     <div className={styles.heading}><strong>{load.article}</strong><span className={styles.weight}>{tonnes.format(load.kg / 1000)} ton</span></div>
-    <div className={styles.context}>Order {load.order || '–'} · {registrationLabel(load.registration) || 'Regnummer saknas'} · <time>{load.date}</time></div>
+    <div className={styles.context}><WorkifyOrderNumber key={load.order} number={load.order}/> · {registrationLabel(load.registration) || 'Regnummer saknas'} · <time>{load.date}</time></div>
     {unresolved && <div className={styles.reason}><CircleAlert size={16} aria-hidden="true"/>{reason}</div>}
     {unresolved && <StatusField item={item} controls={controls}/>}
     <details className={styles.evidence}>
