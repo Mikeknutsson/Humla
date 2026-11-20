@@ -14,10 +14,15 @@ export type MaterialReview = DocumentEntry & {
   invoices: CheckedInvoice[];
   skipped: string[];
   revision: number;
+  billing_review?: true;
   statuses: Record<string, {state: ReviewState}>;
 };
 
-export const isDeviation = (load: CheckedLoad) => !['matched', 'equivalent'].includes(load.match) ||
-  load.amount === null || load.workify_registrations.length !== 1;
+export const hasWorkifyCharge = (load: CheckedLoad) => (load.workify_rates ?? []).some(rate => rate > 0);
+
+export function isDeviation(load: CheckedLoad, billingReview?: true) {
+  if (billingReview) return !hasWorkifyCharge(load);
+  return !['matched', 'equivalent'].includes(load.match) || load.amount === null || load.workify_registrations.length !== 1;
+}
 
 export const deviationKey = (sheet: string, item: number | string) => JSON.stringify([sheet, item]);

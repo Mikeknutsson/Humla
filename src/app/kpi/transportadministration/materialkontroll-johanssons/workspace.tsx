@@ -2,7 +2,7 @@
 
 import {useState, type FormEvent} from 'react';
 import type {CheckedLoad} from '@/lib/hub/johansson-material';
-import {deviationKey, isDeviation, reviewLabels, type DocumentEntry, type MaterialReview, type ReviewState} from '@/lib/hub/johansson-review';
+import {deviationKey, hasWorkifyCharge, isDeviation, reviewLabels, type DocumentEntry, type MaterialReview, type ReviewState} from '@/lib/hub/johansson-review';
 import styles from './workspace.module.css';
 
 type Attachment = {id: string; filename: string; subject: string; received_at: string; likely: boolean};
@@ -56,6 +56,7 @@ function Total({loads}: {loads: CheckedLoad[]}) {
 type ReviewControls = {
   statuses: MaterialReview['statuses'];
   editable: boolean;
+  billingReview?: true;
   busy: boolean;
   onReview: (item: string, state: ReviewState) => void;
 };
@@ -70,9 +71,9 @@ function StatusField({item, controls}: {item: string; controls: ReviewControls})
   </label>;
 }
 
-function openItems(invoice: CheckedInvoice, statuses: MaterialReview['statuses']) {
+function openItems(invoice: CheckedInvoice, statuses: MaterialReview['statuses'], billingReview?: true) {
   return [
-    ...invoice.loads.filter(isDeviation).map(load => deviationKey(invoice.name, load.row)),
+    ...invoice.loads.filter(load => isDeviation(load, billingReview)).map(load => deviationKey(invoice.name, load.row)),
     ...invoice.issues.map(issue => deviationKey(invoice.name, issue)),
   ].filter(item => statuses[item]?.state !== 'reviewed').length;
 }
@@ -88,7 +89,7 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
     vehicles.set(registration, rows);
   }
   const sortedVehicles = [...vehicles].sort(([a], [b]) => a.localeCompare(b, 'sv'));
-  const remaining = openItems(invoice, controls.statuses);
+  const remaining = openItems(invoice, controls.statuses, controls.billingReview);
   return <section className={`panel ${styles.card}`}>
     <div className={styles.heading}><h2>{invoice.name}</h2><Total loads={invoice.loads}/></div>
     <p>{invoice.loads.length} vägsedlar · {vehicles.size} fordonsgrupper · {remaining} att granska</p>
@@ -99,7 +100,7 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
       </li>)}</ul>
     </details>}
     {sortedVehicles.map(([registration, loads]) => {
-      const flagged = loads.filter(isDeviation);
+      const flagged = loads.filter(load => isDeviation(load, controls.billingReview));
       const pending = flagged.filter(load => controls.statuses[deviationKey(invoice.name, load.row)]?.state !== 'reviewed').length;
       if (reviewOnly && !flagged.length) return null;
       return <details key={registration} className={styles.vehicle}>
@@ -115,6 +116,9 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
             <RegistrationEvidence load={load}/>
             <div className={styles.badges}>
               <span data-status={load.match}>{labels[load.match]}</span>
+              {controls.billingReview && <span data-status={hasWorkifyCharge(load) ? 'matched' : 'article_missing'}>
+                {hasWorkifyCharge(load) ? 'Debiterad i Workify' : 'Kunddebitering ej verifierad'}
+              </span>}
               {load.amount === null && <span data-status="unpriced">Inköpspris saknas</span>}
             </div>
             {load.workify_articles.length > 0 && <div>Workify · {load.workify_articles.join(', ')}</div>}
@@ -122,12 +126,12 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
             <div>Inköp · {tonnes.format(load.kg / 1000)} ton{load.rate !== null && ` × ${money.format(load.rate)}/ton`}
               {load.amount !== null && <strong> = {money.format(load.amount)}</strong>}</div>
             {load.price_source && <small>{load.price_source}</small>}
-            {isDeviation(load) && <StatusField item={deviationKey(invoice.name, load.row)} controls={controls}/>}
+            {isDeviation(load, controls.billingReview) && <StatusField item={deviationKey(invoice.name, load.row)} controls={controls}/>}
           </article>)}
         </div>
       </details>;
     })}
-    {reviewOnly && !invoice.loads.some(isDeviation) && invoice.issues.length === 0 && <p>Inga avvikelser att granska.</p>}
+    {reviewOnly && !invoice.loads.some(load => isDeviation(load, controls.billingReview)) && invoice.issues.length === 0 && <p>Inga avvikelser att granska.</p>}
   </section>;
 }
 
@@ -144,7 +148,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
   const active = documents.filter(document => !document.approved_at);
   const archivedKeys = new Set(archive.map(document => document.key));
   const available = attachments.filter(file => !archivedKeys.has(`mail:${file.id}`));
-  const remaining = report?.invoices.reduce((sum, invoice) => sum + openItems(invoice, report.statuses), 0) ?? 0;
+  const remaining = report?.invoices.reduce((sum, invoice) => sum + openItems(invoice, report.statuses, report.billing_review), 0) ?? 0;
 
   function show(result: MaterialReview) {
     setReport(result);
@@ -202,7 +206,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
 
   return <div className={`content ${styles.workspace}`}>
     <section className={`panel ${styles.card}`}>
-      <p className={styles.intro}>Kontrollera materialet mot Workify och beräkna inköpsbelopp exkl. moms per fordon och fakturaflik.</p>
+      <p className={styles.intro}>Kontrollera kunddebiteringen i Workify. Inköpsbeloppen beräknas per fordon och fakturaflik.</p>
       {mailAvailable && <form onSubmit={check} className={styles.form}>
         <label>Excelbilaga från mejl
           <select name="id" required defaultValue="" disabled={busy || available.length === 0}>
@@ -252,7 +256,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
         {report.skipped.length > 0 && <p>Flikar utan läsbara materialtransaktioner · {report.skipped.join(', ')}</p>}
       </section>
       {report.invoices.map(invoice => <InvoicePanel key={invoice.name} invoice={invoice} reviewOnly={reviewOnly}
-        controls={{statuses: report.statuses, editable: !report.approved_at, busy, onReview: (item, state) => change('review', report.key, item, state)}}/>)}
+        controls={{statuses: report.statuses, billingReview: report.billing_review, editable: !report.approved_at, busy, onReview: (item, state) => change('review', report.key, item, state)}}/>)}
     </>}
   </div>;
 }

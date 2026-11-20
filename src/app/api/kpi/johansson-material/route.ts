@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {createClient} from '@/lib/supabase/server';
-import {parseJohanssonWorkbook, type CheckedLoad} from '@/lib/hub/johansson-material';
-import {isDeviation, deviationKey, reviewLabels} from '@/lib/hub/johansson-review';
+import {parseJohanssonWorkbook, type CheckedLoad, type Invoice} from '@/lib/hub/johansson-material';
+import {isDeviation, deviationKey, reviewLabels, type MaterialReview} from '@/lib/hub/johansson-review';
 
 export const runtime = 'nodejs';
 export const maxDuration = 45;
@@ -24,6 +24,45 @@ async function materialAccess(request: Request) {
   return {db, tenant: member.tenant_id};
 }
 
+async function saveCheck(
+  {db, tenant}: Exclude<Awaited<ReturnType<typeof materialAccess>>, Response>,
+  key: string,
+  {name, source, skipped, invoices}: Pick<MaterialReview, 'name' | 'source' | 'skipped'> & {invoices: Invoice[]},
+) {
+  const loads = invoices.flatMap(invoice => invoice.loads);
+  const {data, error} = await db.rpc('hub_johansson_material_control', {p_tenant: tenant, p_loads: loads});
+  if (error) {
+    console.error('Material control query failed', error.code);
+    return Response.json({error: 'Matchning mot Workify och prislistor misslyckades. Försök igen.'}, {status: 502});
+  }
+  type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_rates' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
+  const checks = new Map((data as Check[]).map(check => [JSON.stringify([check.sheet, check.row]), check]));
+  const report = {name, source, skipped, billing_review: true, invoices: invoices.map(invoice => ({
+    ...invoice, loads: invoice.loads.map((load): CheckedLoad => {
+      const check = checks.get(JSON.stringify([load.sheet, load.row]));
+      if (!check) throw Error('Workify-kontrollen saknar ett resultat för en vägsedel.');
+      const registrations = check.workify_registrations ?? [];
+      return {
+        ...load, ...check, workify_registrations: registrations,
+        excel_registration: load.registration,
+        registration: registrations.length === 1 ? registrations[0] : load.registration,
+      };
+    }),
+  }))};
+  const deviations = Object.fromEntries(report.invoices.flatMap(invoice => [
+    ...invoice.loads.filter(load => isDeviation(load, true)).map(load => [deviationKey(invoice.name, load.row), {...load, workify_rates: undefined}] as const),
+    ...invoice.issues.map(issue => [deviationKey(invoice.name, issue), issue] as const),
+  ]));
+  const saved = await db.rpc('hub_johansson_review', {
+    p_tenant: tenant, p_action: 'register', p_key: key, p_report: report, p_deviations: deviations,
+  });
+  if (saved.error) {
+    console.error('Material review could not be saved', saved.error.code);
+    return Response.json({error: 'Bilagans granskning kunde inte sparas.'}, {status: 502});
+  }
+  return Response.json(saved.data);
+}
+
 export async function PATCH(request: Request) {
   const access = await materialAccess(request);
   if (access instanceof Response) return access;
@@ -42,7 +81,20 @@ export async function PATCH(request: Request) {
     p_revision: action === 'get' ? null : revision,
     p_item: action === 'review' ? item : null, p_state: action === 'review' ? state : null,
   });
-  if (!error) return Response.json(data);
+  if (!error) {
+    const saved = data as MaterialReview;
+    if ((action === 'get' || action === 'reopen') && !saved.approved_at && !saved.billing_review) {
+      const invoices = saved.invoices.map(invoice => ({...invoice, loads: invoice.loads.map(({
+        sheet, row, ticket, quarry, date, excel_registration, order, article, fraction, kg,
+      }) => ({sheet, row, ticket, quarry, date, registration: excel_registration, order, article, fraction, kg}))}));
+      try {
+        return await saveCheck(access, key, {...saved, invoices});
+      } catch {
+        return Response.json({error: 'Kunddebiteringen kunde inte kontrolleras. Försök öppna bilagan igen.'}, {status: 502});
+      }
+    }
+    return Response.json(data);
+  }
   if (error.code === '40001') return Response.json({error: 'Bilagan har ändrats. Öppna den igen för att se aktuell status.'}, {status: 409});
   if (error.code === '23514') return Response.json({error: 'Granska alla öppna avvikelser innan du godkänner bilagan.'}, {status: 409});
   if (error.code === '42501') return Response.json({error: 'Behörighet saknas.'}, {status: 403});
@@ -90,38 +142,7 @@ export async function POST(request: Request) {
       if (bytes.byteLength > maxBytes) throw Error('Excelbilagan är för stor.');
     }
     const {invoices, skipped} = parseJohanssonWorkbook(new Uint8Array(bytes));
-    const loads = invoices.flatMap(invoice => invoice.loads);
-    const {data, error} = await db.rpc('hub_johansson_material_control', {p_tenant: tenant, p_loads: loads});
-    if (error) {
-      console.error('Material control query failed', error.code);
-      return Response.json({error: 'Matchning mot Workify och prislistor misslyckades. Försök igen.'}, {status: 502});
-    }
-    type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_rates' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
-    const checks = new Map((data as Check[]).map(check => [JSON.stringify([check.sheet, check.row]), check]));
-    const report = {name, source, skipped, invoices: invoices.map(invoice => ({
-      ...invoice, loads: invoice.loads.map((load): CheckedLoad => {
-        const check = checks.get(JSON.stringify([load.sheet, load.row]));
-        if (!check) throw Error('Workify-kontrollen saknar ett resultat för en vägsedel.');
-        const registrations = check.workify_registrations ?? [];
-        return {
-          ...load, ...check, workify_registrations: registrations,
-          excel_registration: load.registration,
-          registration: registrations.length === 1 ? registrations[0] : load.registration,
-        };
-      }),
-    }))};
-    const deviations = Object.fromEntries(report.invoices.flatMap(invoice => [
-      ...invoice.loads.filter(isDeviation).map(load => [deviationKey(invoice.name, load.row), {...load, workify_rates: undefined}] as const),
-      ...invoice.issues.map(issue => [deviationKey(invoice.name, issue), issue] as const),
-    ]));
-    const saved = await db.rpc('hub_johansson_review', {
-      p_tenant: tenant, p_action: 'register', p_key: key, p_report: report, p_deviations: deviations,
-    });
-    if (saved.error) {
-      console.error('Material review could not be saved', saved.error.code);
-      return Response.json({error: 'Bilagans granskning kunde inte sparas.'}, {status: 502});
-    }
-    return Response.json(saved.data);
+    return await saveCheck(access, key, {name, source, skipped, invoices});
   } catch (error) {
     return Response.json({error: error instanceof Error ? error.message : 'Excel-filen kunde inte läsas.'}, {status: 422});
   }
