@@ -15,6 +15,7 @@ export type MaterialReview = DocumentEntry & {
   skipped: string[];
   revision: number;
   billing_review?: true;
+  combined_billing_review?: true;
   statuses: Record<string, {state: ReviewState}>;
 };
 

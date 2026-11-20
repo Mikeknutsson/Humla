@@ -117,11 +117,14 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
             <div className={styles.badges}>
               <span data-status={load.match}>{labels[load.match]}</span>
               {controls.billingReview && <span data-status={hasWorkifyCharge(load) ? 'matched' : 'article_missing'}>
-                {hasWorkifyCharge(load) ? 'Debiterad i Workify' : 'Kunddebitering ej verifierad'}
+                {hasWorkifyCharge(load) ? (load.workify_combined ? 'Matchad mot samlingsrad i Workify' : 'Debiterad i Workify') : 'Kunddebitering ej verifierad'}
               </span>}
               {load.amount === null && <span data-status="unpriced">Inköpspris saknas</span>}
             </div>
             {load.workify_articles.length > 0 && <div>Workify · {load.workify_articles.join(', ')}</div>}
+            {load.workify_combined && <div>
+              Samlingsrad · {load.workify_combined.load_count} vägsedlar · Johanssons {tonnes.format(load.workify_combined.kg / 1000)} ton · Workify {tonnes.format(load.workify_combined.workify_kg / 1000)} ton
+            </div>}
             {!!load.workify_rates?.length && <div>Orderpris i Workify · {load.workify_rates.map(rate => `${money.format(rate)}/ton`).join(', ')}</div>}
             <div>Inköp · {tonnes.format(load.kg / 1000)} ton{load.rate !== null && ` × ${money.format(load.rate)}/ton`}
               {load.amount !== null && <strong> = {money.format(load.amount)}</strong>}</div>
