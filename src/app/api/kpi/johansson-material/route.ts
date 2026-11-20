@@ -35,9 +35,9 @@ async function saveCheck(
     console.error('Material control query failed', error.code);
     return Response.json({error: 'Matchning mot Workify och prislistor misslyckades. Försök igen.'}, {status: 502});
   }
-  type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_rates' | 'workify_article_date' | 'workify_receipts' | 'workify_combined' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
+  type Check = Pick<CheckedLoad, 'sheet' | 'row' | 'match' | 'workify_articles' | 'workify_rates' | 'workify_article_date' | 'workify_receipts' | 'workify_combined' | 'workify_period' | 'workify_registrations' | 'rate' | 'amount' | 'price_source'>;
   const checks = new Map((data as Check[]).map(check => [JSON.stringify([check.sheet, check.row]), check]));
-  const report = {name, source, skipped, billing_review: true, billing_match_version: 3, invoices: invoices.map(invoice => ({
+  const report = {name, source, skipped, billing_review: true, billing_match_version: 4, invoices: invoices.map(invoice => ({
     ...invoice, loads: invoice.loads.map((load): CheckedLoad => {
       const check = checks.get(JSON.stringify([load.sheet, load.row]));
       if (!check) throw Error('Workify-kontrollen saknar ett resultat för en vägsedel.');
@@ -50,7 +50,7 @@ async function saveCheck(
     }),
   }))};
   const deviations = Object.fromEntries(report.invoices.flatMap(invoice => [
-    ...invoice.loads.filter(load => isDeviation(load, true)).map(load => [deviationKey(invoice.name, load.row), {...load, workify_rates: undefined, workify_article_date: undefined, workify_receipts: undefined, workify_combined: load.workify_combined ?? undefined}] as const),
+    ...invoice.loads.filter(load => isDeviation(load, true)).map(load => [deviationKey(invoice.name, load.row), {...load, workify_rates: undefined, workify_article_date: undefined, workify_receipts: undefined, workify_period: undefined, workify_combined: load.workify_combined ?? undefined}] as const),
     ...invoice.issues.map(issue => [deviationKey(invoice.name, issue), issue] as const),
   ]));
   const saved = await db.rpc('hub_johansson_review', {
@@ -83,7 +83,7 @@ export async function PATCH(request: Request) {
   });
   if (!error) {
     const saved = data as MaterialReview;
-    if ((action === 'get' || action === 'reopen') && !saved.approved_at && saved.billing_match_version !== 3) {
+    if ((action === 'get' || action === 'reopen') && !saved.approved_at && saved.billing_match_version !== 4) {
       const invoices = saved.invoices.map(invoice => ({...invoice, loads: invoice.loads.map(({
         sheet, row, ticket, quarry, date, excel_registration, order, article, fraction, kg,
       }) => ({sheet, row, ticket, quarry, date, registration: excel_registration, order, article, fraction, kg}))}));

@@ -122,6 +122,13 @@ function InvoicePanel({invoice, reviewOnly, controls}: {
               {load.amount === null && <span data-status="unpriced">Inköpspris saknas</span>}
             </div>
             {load.workify_articles.length > 0 && <div>Workify · {load.workify_articles.join(', ')}</div>}
+            {load.workify_period && <div>
+              <strong>Ordertotal matchar över flera dagar</strong>
+              <div>{load.workify_period.load_count} vägsedlar · Johanssons {tonnes.format(load.workify_period.kg / 1000)} ton · Workify {tonnes.format(load.workify_period.workify_kg / 1000)} ton på {load.workify_period.workify_lines} rader</div>
+              <ul>{load.workify_period.days.map(day => <li key={day.date}>
+                {day.date} · Johanssons {tonnes.format(day.supplier_kg / 1000)} ton · Workify {tonnes.format(day.workify_kg / 1000)} ton
+              </li>)}</ul>
+            </div>}
             {load.workify_combined && <div>
               Samlingsrad{load.workify_combined.date && ` ${load.workify_combined.date}`} · {load.workify_combined.load_count} vägsedlar · Johanssons {tonnes.format(load.workify_combined.kg / 1000)} ton · Workify {tonnes.format(load.workify_combined.workify_kg / 1000)} ton
             </div>}
