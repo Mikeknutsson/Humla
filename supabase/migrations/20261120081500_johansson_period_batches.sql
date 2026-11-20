@@ -83,20 +83,23 @@ begin
      and not exists (select 1 from loads l where l."order"=g."order" and l.fraction=g.fraction
       and (g.batch_date is null or l.date=g.batch_date) and l.article ~* 'tvättad|torr|ridbana|sandlåda|murgrus|kabelsand|rörgrus'))
    )
+  ), period_inputs as (
+   select * from combined_candidates where batch_date is null
+    and delivery_date between first_date and last_date
   ), period_totals as (
    select "order",fraction,kg,load_count,first_date,last_date,sum(workify_kg) as workify_kg,count(*) as workify_lines,
     array_agg(distinct round(amount/nullif(quantity,0),2) order by round(amount/nullif(quantity,0),2)) as rates
-   from combined_candidates where batch_date is null
+   from period_inputs
    group by "order",fraction,kg,load_count,first_date,last_date
    having count(*)>1 and first_date<last_date and sum(workify_kg)=kg
-    and bool_and(coalesce(quantity>0 and amount>0 and delivery_date between first_date-1 and last_date+1,false))
+    and bool_and(coalesce(quantity>0 and amount>0,false))
   ), period_days as (
    select p."order",p.fraction,days.day,sum(days.supplier_kg) as supplier_kg,sum(days.workify_kg) as workify_kg
    from period_totals p cross join lateral (
     select l.date as day,l.kg::numeric as supplier_kg,0::numeric as workify_kg
     from loads l where l."order"=p."order" and l.fraction=p.fraction
     union all
-    select c.delivery_date,0::numeric,c.workify_kg from combined_candidates c
+    select c.delivery_date,0::numeric,c.workify_kg from period_inputs c
     where c."order"=p."order" and c.fraction=p.fraction and c.batch_date is null
    ) days group by p."order",p.fraction,days.day
   ), period_matches as (
