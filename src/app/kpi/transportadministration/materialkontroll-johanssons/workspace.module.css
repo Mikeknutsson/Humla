@@ -124,3 +124,26 @@
   .metric { padding: .5rem .4rem; }
   .metric dt svg { display: none; }
 }
+
+.orderReference { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: .25rem; }
+.orderReference [role="status"]:empty { width: 0; margin-inline-start: -.25rem; }
+.orderReference .copyOrder {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 32px;
+  padding: .2rem .4rem;
+  border: 1px solid #b6c9ee;
+  border-radius: 5px;
+  background: #edf3ff;
+  color: #193f85;
+  cursor: pointer;
+  font: inherit;
+}
+.copyOrder strong { font-weight: 800; font-variant-numeric: tabular-nums; }
+.orderReference .copyOrder:hover { background: #dce9ff; }
+.orderReference .copyOrder:focus-visible { outline: 2px solid #2457b5; outline-offset: 2px; }
+.copyFeedback { color: #146341; font-weight: 650; }
+@media (pointer: coarse) {
+  .orderReference .copyOrder { min-height: 44px; }
+}
