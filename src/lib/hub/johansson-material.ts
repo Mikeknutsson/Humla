@@ -14,6 +14,7 @@ export type Load = {
 };
 export type Invoice = {
   name: string;
+  project?: string;
   loads: Load[];
   issues: string[];
 };
@@ -74,6 +75,7 @@ export function parseJohanssonWorkbook(bytes: Uint8Array) {
     let defaultQuarry = '';
     let recognized = false;
     for (const [index, row] of rows.entries()) {
+      if (!recognized && !invoice.project && key(row[0]) === 'projekt' && label(row[2])) invoice.project = label(row[2]);
       if (key(row[0]) === 'anläggning' && label(row[2])) defaultQuarry = label(row[2]).split(/\s+-\s+/)[0];
       const ticket = column(row, ['transnr', 'transaktionsnr', 'transaktionsnummer', 'vågsedel']);
       const date = column(row, ['datum', 'leveransdatum', 'vägningsdatum']);

@@ -109,9 +109,9 @@ function openItems(invoice: CheckedInvoice, statuses: MaterialReview['statuses']
   ].filter(item => statuses[item]?.state !== 'reviewed').length;
 }
 
-function IssueCard({invoice, issue, controls}: {invoice: string; issue: string; controls: ReviewControls}) {
+function IssueCard({invoice, project, issue, controls}: {invoice: string; project?: string; issue: string; controls: ReviewControls}) {
   return <article className={styles.load} data-review-state={controls.statuses[deviationKey(invoice, issue)]?.state ?? 'todo'}>
-    <strong>Kontrollera Excel · {invoice}</strong>
+    <strong>Kontrollera Excel · {project || invoice}</strong>
     <div>{issue}</div>
     <StatusField item={deviationKey(invoice, issue)} controls={controls}/>
   </article>;
@@ -130,11 +130,11 @@ function InvoicePanel({invoice, controls}: {
   const sortedVehicles = [...vehicles].sort(([a], [b]) => a.localeCompare(b, 'sv'));
   const remaining = openItems(invoice, controls.statuses, controls.billingReview);
   return <section className={`panel ${styles.card}`}>
-    <div className={styles.heading}><h2>{invoice.name}</h2><Total loads={invoice.loads}/></div>
+    <div className={styles.heading}><h2>{invoice.project || invoice.name}</h2><Total loads={invoice.loads}/></div>
     <p>{invoice.loads.length} vägsedlar · {vehicles.size} fordonsgrupper · {remaining} att granska</p>
     {invoice.issues.length > 0 && <details className={styles.vehicle}>
       <summary>{invoice.issues.length} rader att kontrollera i Excel</summary>
-      {invoice.issues.map(issue => <IssueCard key={issue} invoice={invoice.name} issue={issue} controls={controls}/>)}
+      {invoice.issues.map(issue => <IssueCard key={issue} invoice={invoice.name} project={invoice.project} issue={issue} controls={controls}/>)}
     </details>}
     {sortedVehicles.map(([registration, loads]) => {
       const flagged = loads.filter(load => isDeviation(load, controls.billingReview));
@@ -234,14 +234,14 @@ function LoadCard({load, invoice, controls}: {load: CheckedLoad; invoice: string
   </article>;
 }
 
-type QueueItem = {key: string; invoice: string} & ({load: CheckedLoad; issue?: never} | {load?: never; issue: string});
+type QueueItem = {key: string; invoice: string; project?: string} & ({load: CheckedLoad; issue?: never} | {load?: never; issue: string});
 type ReviewView = 'open' | 'reviewed' | 'all';
 
 function reviewQueue(report: MaterialReview): QueueItem[] {
   return report.invoices.flatMap(invoice => [
     ...invoice.loads.filter(load => isDeviation(load, report.billing_review)).map(load =>
-      ({key: deviationKey(invoice.name, load.row), invoice: invoice.name, load})),
-    ...invoice.issues.map(issue => ({key: deviationKey(invoice.name, issue), invoice: invoice.name, issue})),
+      ({key: deviationKey(invoice.name, load.row), invoice: invoice.name, project: invoice.project, load})),
+    ...invoice.issues.map(issue => ({key: deviationKey(invoice.name, issue), invoice: invoice.name, project: invoice.project, issue})),
   ]);
 }
 
@@ -271,7 +271,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
   const term = search.trim().toLocaleLowerCase('sv');
   const visibleQueue = queue.filter(item =>
     (report?.statuses[item.key]?.state === 'reviewed') === (view === 'reviewed') &&
-    [item.invoice, item.issue, item.load?.order, item.load?.ticket, item.load?.article, item.load?.registration,
+    [item.invoice, item.project, item.issue, item.load?.order, item.load?.ticket, item.load?.article, item.load?.registration,
       item.load && registrationLabel(item.load.registration), item.load?.excel_registration]
       .some(value => value?.toLocaleLowerCase('sv').includes(term)));
   const controls: ReviewControls | undefined = report && {
@@ -410,7 +410,7 @@ export default function MaterialWorkspace({attachments, mailAvailable, mailError
           {visibleQueue.length === 0 && <p>{term ? 'Ingen avvikelse matchar din sökning.' : view === 'open' ? 'Inga öppna avvikelser.' : 'Inga avvikelser har markerats som granskade.'}</p>}
           {visibleQueue.map(item => item.load ?
             <LoadCard key={item.key} load={item.load} invoice={item.invoice} controls={controls}/> :
-            <IssueCard key={item.key} invoice={item.invoice} issue={item.issue} controls={controls}/>)}
+            <IssueCard key={item.key} invoice={item.invoice} project={item.project} issue={item.issue} controls={controls}/>)}
         </section>}
     </>}
   </div>;
