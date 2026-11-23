@@ -17,7 +17,7 @@ export function offerLines(comparison: QuarryComparison, markup: number) {
     const winner = row.options[0];
     if (!winner) return [];
     const tonnes = Number(winner.tonnes.trim().replace(',', '.')) || null;
-    const unitPrice = roundMoney(winner.total * (1 + markup / 100));
+    const unitPrice = roundMoney(winner.total + winner.rate.price * markup / 100);
     return [{material:row.material, tonnes, unitPrice,
       amount:tonnes === null ? null : roundMoney(unitPrice * tonnes)}];
   });

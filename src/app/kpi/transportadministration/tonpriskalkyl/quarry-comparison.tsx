@@ -191,17 +191,17 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       <button type="button" className="secondary" onClick={() => setRetry(value => value+1)}>Försök igen</button></div>}
     {result && <section className={styles.quickOffer} aria-label="Offertpris">
       <h3>Offertpris</h3>
-      <label className={styles.field}>Påslag på material och transport (%)
+      <label className={styles.field}>Påslag på material (%)
         <input inputMode="decimal" placeholder="Ange påslag" value={markup} onChange={event => {setMarkup(event.target.value);setPdfError('');}} disabled={pdfBusy}/>
       </label>
       {markup.trim() && percent === null && <p role="status">Ange ett påslag mellan 0 och 1 000 %.</p>}
       <div className={styles.table}><table>
-        <thead><tr><th>Material</th><th>Täkt</th><th>Underlag kr/ton</th><th>Offert kr/ton</th>{showAmounts && <><th>Ton</th><th>Belopp (kr)</th></>}</tr></thead>
+        <thead><tr><th>Material</th><th>Täkt</th><th>Material kr/ton</th><th>Frakt kr/ton</th><th>Offert kr/ton</th>{showAmounts && <><th>Ton</th><th>Belopp (kr)</th></>}</tr></thead>
         <tbody>{result.map(row => {
           const winner = row.options[0];
           const line = lines.find(item => item.material === row.material);
           return <tr key={row.material}><td>{row.material}</td><td>{winner?.site.name ?? 'Körunderlag saknas'}</td>
-            <td>{winner ? offerMoney.format(winner.total) : '–'}</td><td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : '–'}</td>
+            <td>{winner ? offerMoney.format(winner.rate.price) : '–'}</td><td>{winner ? offerMoney.format(winner.freight) : '–'}</td><td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : '–'}</td>
             {showAmounts && <><td>{line?.tonnes != null ? offerQuantity.format(line.tonnes) : '–'}</td>
               <td>{line?.amount != null ? offerMoney.format(line.amount) : '–'}</td></>}</tr>;
         })}</tbody>
