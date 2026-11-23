@@ -64,7 +64,7 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
     page.drawRectangle({x:left,y:y-7,width:right-left,height:24,color:green});
     text('Material',left+8,y,10,true,white);
     number('Mängd (ton)',columns.tonnes,y,true,white);
-    number('Kr/ton',columns.unit,y,true,white);
+    number('Lev. kr/ton',columns.unit,y,true,white);
     number('Belopp (kr)',columns.amount,y,true,white);
     y -= 24;
   }
