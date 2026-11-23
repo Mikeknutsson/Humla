@@ -1,13 +1,16 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect, useEffectEvent, useRef, useState} from 'react';
+import Link from 'next/link';
+import {Download} from 'lucide-react';
+import {offerLines, offerMoney, offerQuantity, offerTotal, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
-import {calculateQuarryComparison} from './actions';
+import {calculateQuarryComparison, downloadQuarryOffer} from './actions';
 import styles from './workspace.module.css';
 
 const kr = new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -39,73 +42,131 @@ export function ReturnLoadFields({value, rates, onChange}: {
   </div>;
 }
 
-export default function QuarryComparisonWorkspace({sites, rates, draft, date, onApply}: {
-  sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
+export default function QuarryComparisonWorkspace({sites, rates, draft, date, onApply, onDetailsChange}: {
+  sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void; onDetailsChange:(patch: Partial<OfferDetails>) => void;
 }) {
   const mapsKey = useGoogleMapsKey();
   const [destination,setDestination] = useState({address:'',id:undefined as string | undefined});
+  const [committed,setCommitted] = useState('');
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
   const [withoutReturn,setWithoutReturn] = useState<string[]>([]);
   const [returnLoad,setReturnLoad] = useState<ReturnLoad>();
   const [manual,setManual] = useState<Record<string,Leg>>({});
-  const [result,setResult] = useState<QuarryComparison>();
-  const [error,setError] = useState('');
-  const [busy,setBusy] = useState(false);
-  const [applied,setApplied] = useState(false);
+  const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
+  const [retry,setRetry] = useState(0);
+  const [applied,setApplied] = useState('');
+  const [markup,setMarkup] = useState('');
+  const [pdfBusy,setPdfBusy] = useState(false);
+  const [pdfError,setPdfError] = useState('');
+  const routes = useRef(new Map<string,Promise<Leg>>());
   const purchase = rates.filter(rate => rate.kind === 'purchase');
   const names = [...new Set(purchase.map(comparisonMaterial))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
   const candidates = sites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
+  const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
+  const routesAvailable = candidates.some(site => manual[site.id]?.miles.trim() || (mapsKey && (site.address || site.mapPlaceId)));
+  const ready = Boolean(destination.address.trim() && committed === destination.address && materials.length && routesAvailable);
+  const inputKey = JSON.stringify([date,destination,materials,manual,returnLoad,withoutReturn,draft.profile,draft.vehicles,
+    candidates.map(site => [site.id,site.address,site.mapPlaceId]),retry,Boolean(mapsKey)]);
+  const current = request?.key === inputKey && ready ? request : undefined;
+  const result = current?.comparison;
+  const busy = ready && !current;
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
+  const percent = parseOfferMarkup(markup);
+  const lines = result && percent !== null ? offerLines(result,percent) : [];
+  const total = offerTotal(lines);
+  const showAmounts = lines.some(line => line.tonnes !== null);
+  const complete = lines.length === materials.length && lines.length > 0 &&
+    lines.every(line => Number.isFinite(line.unitPrice) && line.unitPrice >= 0);
 
-  function clearResult() {setResult(undefined);setApplied(false);setError('');}
-  function toggle(name: string) {
-    setSelected(selected.includes(name) ? selected.filter(item => item !== name) : [...selected,name]);
-    clearResult();
+  function changeDestination(address: string, id?: string) {
+    setDestination({address,id});
+    setCommitted(id || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(address) ? address : '');
+    setManual({});
+    routes.current.clear();
+    setPdfError('');
   }
 
-  async function compare() {
-    setBusy(true);
-    clearResult();
+  function toggle(name: string) {
+    setSelected(items => items.includes(name) ? items.filter(item => item !== name) : [...items,name]);
+    setPdfError('');
+  }
+
+  const compare = useEffectEvent(async (key: string, signal: AbortSignal) => {
     try {
       const rounds = await Promise.all(candidates.map(async site => {
         let leg = manual[site.id];
         if (!leg?.miles && mapsKey && (site.address || site.mapPlaceId)) {
-          try {
-            const estimate = await googleRoadEstimate(mapsKey,{address:site.address,id:site.mapPlaceId},destination);
-            leg = {miles:estimate.miles,driveMinutes:''};
-          } catch { /* The result identifies sites without a usable route. */ }
+          const routeKey = JSON.stringify([mapsKey,site.address,site.mapPlaceId,destination]);
+          let lookup = routes.current.get(routeKey);
+          if (!lookup) {
+            lookup = googleRoadEstimate(mapsKey,{address:site.address,id:site.mapPlaceId},destination)
+              .then(estimate => ({miles:estimate.miles,driveMinutes:''}));
+            routes.current.set(routeKey,lookup);
+          }
+          try {leg = await lookup;} catch {
+            if (routes.current.get(routeKey) === lookup) routes.current.delete(routeKey);
+          }
         }
         return {...newRound(crypto.randomUUID()), pickup:site.address,pickupSiteId:site.id,pickupPlaceId:site.mapPlaceId,
           delivery:destination.address,deliveryPlaceId:destination.id,returnLoad:withoutReturn.includes(site.id) ? undefined : returnLoad,outbound:leg ?? {miles:'',driveMinutes:''}};
       }));
-      const response = await calculateQuarryComparison(date,selected.map(name => ({name,tonnes:quantities[name] ?? ''})),rounds,draft);
-      setResult(response.comparison);
-      if (response.error) setError(response.error);
-    } catch {setError('Jämförelsen kunde inte beräknas. Försök igen.');}
-    finally {setBusy(false);}
+      if (signal.aborted) return;
+      const response = await calculateQuarryComparison(date,materials,rounds,draft);
+      if (!signal.aborted) setRequest({key,rounds,comparison:response.comparison,error:response.error});
+    } catch {
+      if (!signal.aborted) setRequest({key,error:'Jämförelsen kunde inte beräknas. Försök igen.'});
+    }
+  });
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void compare(inputKey,controller.signal),300);
+    return () => {window.clearTimeout(timer);controller.abort();};
+  },[ready,inputKey]);
+
+  async function savePdf() {
+    if (!complete || !current?.rounds) return;
+    setPdfBusy(true);
+    setPdfError('');
+    try {
+      const response = await downloadQuarryOffer(date,materials,current.rounds,draft,destination.address,markup,lines.map(line => line.unitPrice),
+        {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms});
+      if (!response.pdf) {setPdfError(response.error ?? 'PDF-offerten kunde inte skapas.');return;}
+      const bytes = Uint8Array.from(atob(response.pdf),character => character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Offert-material-${date}.pdf`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url),30_000);
+    } catch {setPdfError('PDF-offerten kunde inte skapas. Försök igen.');}
+    finally {setPdfBusy(false);}
   }
 
-  return <section className="panel">
-    <h2>Hitta billigaste täkt</h2>
-    <fieldset disabled={busy} className={styles.form}>
+  return <section className={`panel ${styles.quickFlow}`}>
+    <h2>Leverans och material</h2>
+    <fieldset disabled={pdfBusy} className={styles.form}>
       <div className={styles.grid}>
         <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
-          onChange={(address,id) => {setDestination({address,id});setManual({});clearResult();}}/>
+          onChange={changeDestination} onCommit={setCommitted}/>
       </div>
       <MaterialMultiSelect label="Material att jämföra" options={names.map(name => ({id:name,label:name}))}
         selected={new Set(selected)} onToggle={toggle}/>
+      <details open={!mapsKey && !!selected.length || undefined}><summary>Mängder, returlast och körunderlag</summary>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
         <p>Med mängd räknas hela rundor, även om sista lasset blir ett dellass.</p>
         <div className={styles.grid}>{selected.map(name => <label className={styles.field} key={name}>{name} (ton)
-          <input inputMode="decimal" value={quantities[name] ?? ''} onChange={event => {setQuantities({...quantities,[name]:event.target.value});clearResult();}}/>
+          <input inputMode="decimal" value={quantities[name] ?? ''} onChange={event => setQuantities({...quantities,[name]:event.target.value})}/>
         </label>)}</div>
       </details>}
-      <ReturnLoadFields value={returnLoad} rates={rates} onChange={value => {setReturnLoad(value);clearResult();}}/>
+      <ReturnLoadFields value={returnLoad} rates={rates} onChange={setReturnLoad}/>
       {returnLoad && candidates.length > 1 && <details><summary>Undantag för returlast</summary>
         {candidates.map(site => <label className={styles.field} key={site.id}>
           <span><input type="checkbox" checked={withoutReturn.includes(site.id)} onChange={event => {
-            setWithoutReturn(event.target.checked ? [...withoutReturn,site.id] : withoutReturn.filter(id => id !== site.id));clearResult();
+            setWithoutReturn(event.target.checked ? [...withoutReturn,site.id] : withoutReturn.filter(id => id !== site.id));
           }}/> Ingen returlast från rundan via {site.name}</span>
         </label>)}
       </details>}
@@ -115,19 +176,57 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         {candidates.map(site => <div className={styles.grid} key={site.id}>
           <span>{site.name}{!site.address && !site.mapPlaceId && <small> · Infartsadress saknas</small>}</span>
           <label className={styles.field}>{site.name} · Enkel väg (mil)<input value={manual[site.id]?.miles ?? ''} inputMode="decimal"
-            onChange={event => {setManual({...manual,[site.id]:{miles:event.target.value,driveMinutes:manual[site.id]?.driveMinutes ?? ''}});clearResult();}}/></label>
+            onChange={event => setManual({...manual,[site.id]:{miles:event.target.value,driveMinutes:manual[site.id]?.driveMinutes ?? ''}})}/></label>
           <label className={styles.field}>{site.name} · Körtid (min)<input value={manual[site.id]?.driveMinutes ?? ''} inputMode="decimal"
-            onChange={event => {setManual({...manual,[site.id]:{miles:manual[site.id]?.miles ?? '',driveMinutes:event.target.value}});clearResult();}}/></label>
+            onChange={event => setManual({...manual,[site.id]:{miles:manual[site.id]?.miles ?? '',driveMinutes:event.target.value}})}/></label>
         </div>)}
       </details>}
-      <div className={styles.actions}>
-        <button className={styles.primary} type="button" disabled={!destination.address.trim() || !selected.length || busy}
-          onClick={() => void compare()}>{busy ? 'Jämför täkter…' : 'Jämför täkter'}</button>
-        <span>Materialpris + frakt med bil + kärra</span>
-      </div>
+      </details>
     </fieldset>
-    {error && <p role="alert">{error}</p>}
-    {result?.map(row => <section className={styles.card} key={row.material}>
+    {!mapsKey && <p role="status">Google Maps behöver aktiveras. Du kan tills vidare ange mil under körunderlag. <Link href="/integrationer/google">Öppna Google-inställningar</Link></p>}
+    {mapsKey && destination.address.trim() && materials.length > 0 && committed === destination.address && !routesAvailable &&
+      <p role="status">Infartsadress eller körsträcka saknas för de valda materialen.</p>}
+    {busy && <p role="status">Jämför materialpris och frakt med bil + kärra…</p>}
+    {current?.error && <div className={styles.actions}><p role="alert">{current.error}</p>
+      <button type="button" className="secondary" onClick={() => setRetry(value => value+1)}>Försök igen</button></div>}
+    {result && <section className={styles.quickOffer} aria-label="Offertpris">
+      <h3>Offertpris</h3>
+      <label className={styles.field}>Påslag på material och transport (%)
+        <input inputMode="decimal" placeholder="Ange påslag" value={markup} onChange={event => {setMarkup(event.target.value);setPdfError('');}} disabled={pdfBusy}/>
+      </label>
+      {markup.trim() && percent === null && <p role="status">Ange ett påslag mellan 0 och 1 000 %.</p>}
+      <div className={styles.table}><table>
+        <thead><tr><th>Material</th><th>Täkt</th><th>Underlag kr/ton</th><th>Offert kr/ton</th>{showAmounts && <><th>Ton</th><th>Belopp (kr)</th></>}</tr></thead>
+        <tbody>{result.map(row => {
+          const winner = row.options[0];
+          const line = lines.find(item => item.material === row.material);
+          return <tr key={row.material}><td>{row.material}</td><td>{winner?.site.name ?? 'Körunderlag saknas'}</td>
+            <td>{winner ? offerMoney.format(winner.total) : '–'}</td><td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : '–'}</td>
+            {showAmounts && <><td>{line?.tonnes != null ? offerQuantity.format(line.tonnes) : '–'}</td>
+              <td>{line?.amount != null ? offerMoney.format(line.amount) : '–'}</td></>}</tr>;
+        })}</tbody>
+      </table></div>
+      {total !== null && <p><strong>Totalt exkl. moms {offerMoney.format(total)} kr</strong></p>}
+      {result.some(row => row.missing.length > 0) && <p role="status">Jämförelsen omfattar täkter med tillgängligt körunderlag. Se vilka som saknas nedan.</p>}
+      <details>
+        <summary>Kund, projekt och offertvillkor</summary>
+        <fieldset className={styles.grid} disabled={pdfBusy}>
+          {([['customer','Kund'],['project','Projekt'],['validity','Giltig till'],['terms','Offertvillkor']] as const).map(([key,label]) =>
+            <label key={key} className={styles.field}>{label}<input type={key === 'validity' ? 'date' : 'text'} maxLength={240}
+              value={draft[key]} onChange={event => onDetailsChange({[key]:event.target.value})}/></label>)}
+        </fieldset>
+      </details>
+      <div className={styles.actions}>
+        <button type="button" className={styles.primary} disabled={!complete || pdfBusy} onClick={() => void savePdf()}>
+          <Download size={16}/>{pdfBusy ? 'Skapar PDF…' : 'Ladda ner offert som PDF'}
+        </button>
+      </div>
+      {!complete && percent !== null && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
+      {pdfError && <div className={styles.actions}><p role="alert">{pdfError}</p>
+        <button type="button" className="secondary" onClick={() => {setPdfError('');setRetry(value => value+1);}}>Räkna om</button></div>}
+    </section>}
+    {result && <details><summary>Visa täktjämförelse</summary>
+    {result.map(row => <section className={styles.card} key={row.material}>
       <h3>{row.material}</h3>
       {row.options[0] ? <strong>{row.missing.length ? 'Billigast av beräknade täkter' : 'Billigast'} · {row.options[0].site.name} · {kr.format(row.options[0].total)} kr/ton</strong>
         : <p>Inget komplett körunderlag för materialet.</p>}
@@ -139,7 +238,8 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
             <td>{kr.format(option.rate.price)}</td><td>{kr.format(option.freight)}</td><td>{kr.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}
     </section>)}
-    {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied}
-      onClick={() => {onApply(winners);setApplied(true);}}>{applied ? 'Tillagt i kalkylen' : 'Använd billigaste täkter i kalkylen'}</button>}
+    {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied === inputKey}
+      onClick={() => {onApply(winners);setApplied(inputKey);}}>{applied === inputKey ? 'Tillagt i kalkylen' : 'Använd billigaste täkter i kalkylen'}</button>}
+    </details>}
   </section>;
 }

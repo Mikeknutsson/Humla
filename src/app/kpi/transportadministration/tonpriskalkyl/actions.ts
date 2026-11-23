@@ -1,5 +1,7 @@
 'use server';
 
+import {offerLines, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
+import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
 import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
 import {effectiveSiteRates, stockholmDate} from '@/lib/hub/material-price-bank';
@@ -48,4 +50,28 @@ export async function calculateQuarryComparison(date: string, materials: {name: 
   if (!bank) return {error:'Prisbanken kunde inte hämtas.'};
   try {return {comparison:compareQuarries(bank,date,materials,rounds,draft)};}
   catch {return {error:'Kontrollera mil, ekipage och returparametrar.'};}
+}
+
+export async function downloadQuarryOffer(
+  date: string, materials: {name: string; tonnes: string}[], rounds: Round[], draft: TonPriceDraft,
+  delivery: string, markupText: string, expectedPrices: number[], details: OfferDetails,
+) {
+  const markup = parseOfferMarkup(markupText);
+  if (markup === null) return {error:'Ange ett påslag mellan 0 och 1 000 %.'};
+  if (typeof delivery !== 'string' || !delivery.trim() || delivery.length > 240 ||
+    !details || [details.customer, details.project, details.validity, details.terms].some(value => typeof value !== 'string' || value.length > 240)) {
+    return {error:'Kontrollera offertuppgifterna.'};
+  }
+  const result = await calculateQuarryComparison(date,materials,rounds,draft);
+  if (!result.comparison) return {error:result.error};
+  const lines = offerLines(result.comparison,markup);
+  if (!lines.length || lines.length !== materials.length || lines.some(line => !Number.isFinite(line.unitPrice) || line.unitPrice < 0)) {
+    return {error:'Kontrollera att alla valda material har ett giltigt offertpris.'};
+  }
+  if (!Array.isArray(expectedPrices) || lines.length !== expectedPrices.length ||
+    lines.some((line,index) => line.unitPrice !== expectedPrices[index])) {
+    return {error:'Offertpriserna har ändrats. Räkna om kalkylen och kontrollera priserna.'};
+  }
+  const pdf = await tonPriceOfferPdf(delivery,stockholmDate(),details,lines);
+  return {pdf:Buffer.from(pdf).toString('base64')};
 }
