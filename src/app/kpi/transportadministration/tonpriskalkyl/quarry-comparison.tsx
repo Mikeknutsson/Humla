@@ -2,7 +2,6 @@
 
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
-import {Download} from 'lucide-react';
 import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
@@ -11,6 +10,7 @@ import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
 import {calculateQuarryComparison, downloadQuarryOffer} from './actions';
+import OfferDownloads from './offer-downloads';
 import styles from './workspace.module.css';
 
 const kr = new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -65,8 +65,6 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const [retry,setRetry] = useState(0);
   const [applied,setApplied] = useState('');
   const [markup,setMarkup] = useState('');
-  const [pdfBusy,setPdfBusy] = useState(false);
-  const [pdfError,setPdfError] = useState('');
   const routes = useRef(new Map<string,Promise<Leg>>());
   const purchase = rates.filter(rate => rate.kind === 'purchase');
   const names = [...new Set(purchase.map(comparisonMaterial))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
@@ -95,12 +93,10 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     setCommitted(id || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(address) ? address : '');
     setManual({});
     routes.current.clear();
-    setPdfError('');
   }
 
   function toggle(name: string) {
     setSelected(items => items.includes(name) ? items.filter(item => item !== name) : [...items,name]);
-    setPdfError('');
   }
 
   const compare = useEffectEvent(async (key: string, signal: AbortSignal) => {
@@ -136,30 +132,9 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     return () => {window.clearTimeout(timer);controller.abort();};
   },[ready,inputKey]);
 
-  async function savePdf() {
-    if (!complete || !current?.rounds) return;
-    setPdfBusy(true);
-    setPdfError('');
-    try {
-      const response = await downloadQuarryOffer(date,materials,current.rounds,draft,destination.address,markup,lines.map(line => line.unitPrice),
-        {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms});
-      if (!response.pdf) {setPdfError(response.error ?? 'PDF-offerten kunde inte skapas.');return;}
-      const bytes = Uint8Array.from(atob(response.pdf),character => character.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Offert-material-${date}.pdf`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url),30_000);
-    } catch {setPdfError('PDF-offerten kunde inte skapas. Försök igen.');}
-    finally {setPdfBusy(false);}
-  }
-
   return <section className={`panel ${styles.quickFlow}`}>
     <h2>Leverans och material</h2>
-    <fieldset disabled={pdfBusy} className={styles.form}>
+    <fieldset className={styles.form}>
       <div className={styles.grid}>
         <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
           placeholder="Gatuadress och ort" onChange={changeDestination} onCommit={setCommitted}/>
@@ -227,7 +202,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     {result && <section className={styles.quickOffer} aria-label="Offertpris">
       <h3>Offertpris</h3>
       <label className={styles.field}>Påslag på material (%)
-        <input inputMode="decimal" placeholder="Ange påslag" value={markup} onChange={event => {setMarkup(event.target.value);setPdfError('');}} disabled={pdfBusy}/>
+        <input inputMode="decimal" placeholder="Ange påslag" value={markup} onChange={event => {setMarkup(event.target.value);setPdfError('');}}/>
       </label>
       {markup.trim() && percent === null && <p role="status">Ange ett påslag mellan 0 och 1 000 %.</p>}
       <div className={styles.table}><table>
@@ -242,20 +217,17 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       {result.some(row => row.missing.length > 0) && <p role="status">Jämförelsen omfattar täkter med tillgängligt körunderlag. Se vilka som saknas nedan.</p>}
       <details>
         <summary>Kund, projekt och offertvillkor</summary>
-        <fieldset className={styles.grid} disabled={pdfBusy}>
+        <fieldset className={styles.grid}>
           {([['customer','Kund'],['project','Projekt'],['validity','Giltig till'],['terms','Offertvillkor']] as const).map(([key,label]) =>
             <label key={key} className={styles.field}>{label}<input type={key === 'validity' ? 'date' : 'text'} maxLength={240}
               value={draft[key]} onChange={event => onDetailsChange({[key]:event.target.value})}/></label>)}
         </fieldset>
       </details>
-      <div className={styles.actions}>
-        <button type="button" className={styles.primary} disabled={!complete || pdfBusy} onClick={() => void savePdf()}>
-          <Download size={16}/>{pdfBusy ? 'Skapar PDF…' : 'Ladda ner offert som PDF'}
-        </button>
-      </div>
+      <OfferDownloads key={JSON.stringify([inputKey,markup,draft.customer,draft.project,draft.validity,draft.terms])}
+        date={date} disabled={!complete || !current?.rounds} onRetry={() => setRetry(value => value+1)}
+        create={() => downloadQuarryOffer(date,materials,current!.rounds!,draft,destination.address,markup,lines.map(line => line.unitPrice),
+          {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms})}/>
       {!complete && percent !== null && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
-      {pdfError && <div className={styles.actions}><p role="alert">{pdfError}</p>
-        <button type="button" className="secondary" onClick={() => {setPdfError('');setRetry(value => value+1);}}>Räkna om</button></div>}
     </section>}
     {result && <details><summary>Visa täktjämförelse</summary>
     {result.map(row => <section className={styles.card} key={row.material}>

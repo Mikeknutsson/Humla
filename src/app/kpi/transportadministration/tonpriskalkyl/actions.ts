@@ -1,14 +1,15 @@
 'use server';
 
-import {offerLines, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
+import {advancedOfferLines, offerLines, parseOfferMarkup, type OfferDetails, type OfferLine} from '@/lib/hub/ton-price-offer';
+import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-delivery-plan';
 import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
 import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
-import {effectiveSiteRates, stockholmDate} from '@/lib/hub/material-price-bank';
+import {effectiveSiteRates, stockholmDate, type MaterialSite} from '@/lib/hub/material-price-bank';
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
 import {calculateTonPrices, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
-export async function recalculateTonPrices(draft: TonPriceDraft) {
+async function prepareTonPrices(draft: TonPriceDraft, includeSites = false) {
   const access = await tonPriceAccess();
   if (!access) return {error: 'Behörighet saknas.'};
   if (!draft || !Array.isArray(draft.rounds) || !Array.isArray(draft.materials) ||
@@ -17,9 +18,13 @@ export async function recalculateTonPrices(draft: TonPriceDraft) {
     return {error: 'Kalkylen kunde inte läsas.'};
   }
   try {
-    if (draft.materials.some(row => row.bankRateId)) {
+    const usesBankRates = draft.materials.some(row => row.bankRateId);
+    const usesBankSites = includeSites && draft.rounds.some(round => round.pickupSiteId || round.deliverySiteId);
+    let sites: MaterialSite[] = [];
+    if (usesBankRates || usesBankSites) {
       const bank = await readPriceBank(access);
       if (!bank) return {error: 'Prisbanken kunde inte hämtas.'};
+      sites = bank.sites;
       const date = draft.priceDate || stockholmDate();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return {error: 'Ange ett giltigt prisdatum.'};
       const byRate = new Map(effectiveSiteRates(bank.rates, date).map(rate => [rate.id, rate]));
@@ -35,10 +40,24 @@ export async function recalculateTonPrices(draft: TonPriceDraft) {
         row.bankKind = rate.kind;
       }
     }
-    return {result: calculateTonPrices(draft)};
+    return {result: calculateTonPrices(draft), sites};
   } catch {
     return {error: 'Kalkylen innehåller ogiltiga värden.'};
   }
+}
+
+export async function recalculateTonPrices(draft: TonPriceDraft) {
+  const {result,error} = await prepareTonPrices(draft);
+  return {result,error};
+}
+
+async function offerDocuments(delivery: string, priceDate: string, details: OfferDetails, lines: OfferLine[], plan: DeliveryPlanLine[]) {
+  const date = stockholmDate();
+  const [pdf, deliveryPlan] = await Promise.all([
+    tonPriceOfferPdf(delivery,date,details,lines),
+    tonPriceOfferPdf(delivery,date,details,[],plan,priceDate),
+  ]);
+  return {pdf:Buffer.from(pdf).toString('base64'), deliveryPlan:Buffer.from(deliveryPlan).toString('base64')};
 }
 
 export async function calculateQuarryComparison(date: string, materials: {name: string; tonnes: string}[], rounds: Round[], draft: TonPriceDraft) {
@@ -52,6 +71,11 @@ export async function calculateQuarryComparison(date: string, materials: {name: 
   catch {return {error:'Kontrollera mil, ekipage och returparametrar.'};}
 }
 
+function validOfferDetails(details: OfferDetails) {
+  return details && [details.customer, details.project, details.validity, details.terms]
+    .every(value => typeof value === 'string' && value.length <= 240);
+}
+
 export async function downloadQuarryOffer(
   date: string, materials: {name: string; tonnes: string}[], rounds: Round[], draft: TonPriceDraft,
   delivery: string, markupText: string, expectedPrices: number[], details: OfferDetails,
@@ -59,7 +83,7 @@ export async function downloadQuarryOffer(
   const markup = parseOfferMarkup(markupText);
   if (markup === null) return {error:'Ange ett påslag mellan 0 och 1 000 %.'};
   if (typeof delivery !== 'string' || !delivery.trim() || delivery.length > 240 ||
-    !details || [details.customer, details.project, details.validity, details.terms].some(value => typeof value !== 'string' || value.length > 240)) {
+    !validOfferDetails(details)) {
     return {error:'Kontrollera offertuppgifterna.'};
   }
   const result = await calculateQuarryComparison(date,materials,rounds,draft);
@@ -72,6 +96,41 @@ export async function downloadQuarryOffer(
     lines.some((line,index) => line.unitPrice !== expectedPrices[index])) {
     return {error:'Offertpriserna har ändrats. Räkna om kalkylen och kontrollera priserna.'};
   }
-  const pdf = await tonPriceOfferPdf(delivery,stockholmDate(),details,lines);
-  return {pdf:Buffer.from(pdf).toString('base64')};
+  const vehicle = draft.vehicles.find(row => row.id === 'trailer')?.name ?? 'Bil + kärra';
+  const plan = result.comparison.map((row,index) => {
+    const winner = row.options[0];
+    const {site,round,time,rate,freight} = winner;
+    return {
+      ...lines[index], ...deliveryPlanRoute(round,time,vehicle,new Map([[site.id,site]])),
+      tip:false, purchase:rate.price, materialPrice:rate.price * (1 + markup / 100), freight,
+    };
+  });
+  return offerDocuments(delivery,date,details,lines,plan);
+}
+
+export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices: number[]) {
+  if (!validOfferDetails(draft)) return {error:'Kontrollera offertuppgifterna.'};
+  const {result,sites,error} = await prepareTonPrices(draft,true);
+  if (!result) return {error};
+  const lines = advancedOfferLines(draft,result);
+  if (!lines.length || lines.length !== draft.materials.length) return {error:'Kontrollera kalkylen innan du skapar offerten.'};
+  if (!Array.isArray(expectedPrices) || lines.length !== expectedPrices.length ||
+    lines.some((line,index) => line.unitPrice !== expectedPrices[index])) {
+    return {error:'Offertpriserna har ändrats. Räkna om kalkylen och kontrollera priserna.'};
+  }
+  const rounds = new Map(draft.rounds.map(round => [round.id,round]));
+  const times = new Map(result.rounds.map(round => [round.id,round.result]));
+  const bySite = new Map(sites.map(site => [site.id,site]));
+  const plan = result.materials.map((row,index) => {
+    const input = draft.materials[index];
+    const round = rounds.get(input.roundId)!;
+    const vehicle = draft.vehicles.find(option => option.id === input.vehicleId)!.name;
+    return {
+      ...lines[index], ...deliveryPlanRoute(round,times.get(round.id)!,vehicle,bySite),
+      tip:input.bankKind === 'tip', tippingDestination:Boolean(round.deliverySiteId),
+      purchase:row.price!.purchase, materialPrice:row.price!.sale, freight:row.selected!.freight,
+    };
+  });
+  const destinations = new Set(draft.materials.map(input => rounds.get(input.roundId)!.delivery.trim()));
+  return offerDocuments(destinations.size === 1 ? [...destinations][0] : '',draft.priceDate || stockholmDate(),draft,lines,plan);
 }
