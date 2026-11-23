@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import {useEffect, useRef, useState} from 'react';
-import {Calculator, ExternalLink, Plus, Printer, Trash2} from 'lucide-react';
+import {Calculator, ExternalLink, Plus, Trash2} from 'lucide-react';
 import {initialTonPriceDraft, newMaterial, newRound, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
@@ -11,11 +11,12 @@ import {effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type Site
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
 import MaterialMultiSelect from './material-multi-select';
-import {recalculateTonPrices} from './actions';
+import {advancedOfferLines, offerMoney} from '@/lib/hub/ton-price-offer';
+import {downloadAdvancedOffer, recalculateTonPrices} from './actions';
+import OfferDownloads from './offer-downloads';
 import styles from './workspace.module.css';
 
 const decimals = new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 2});
-const whole = new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 0});
 const format = (value: number | undefined | null) => value == null ? '–' : decimals.format(value);
 const profiles = [['reference', 'Excel-last'], ['bk1', 'BK1'], ['bk4', 'BK4']] as const;
 
@@ -251,6 +252,7 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
   }
 
   const complete = result && result.materials.length > 0 && result.materials.every(row => !row.status);
+  const offer = complete ? advancedOfferLines(draft,result) : [];
   return <div className={`content ${styles.workspace}`}>
     {bank && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} draft={draft}
       date={draft.priceDate || today} onApply={useCheapest} onDetailsChange={change}/>}
@@ -325,8 +327,10 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
         </section>
         <div className={styles.actions}>
           <button type="submit" className={styles.primary} disabled={!draft.materials.length || draft.materials.some(staleRate)}><Calculator size={17}/>{busy ? 'Beräknar…' : 'Beräkna tonpris'}</button>
-          {complete && <button type="button" className="secondary" onClick={() => window.print()}><Printer size={16}/> Skriv ut offert / spara PDF</button>}
+
         </div>
+        {complete && <OfferDownloads date={draft.priceDate || today} disabled={busy}
+          create={() => downloadAdvancedOffer(draft,offer.map(line => line.unitPrice))} onRetry={() => void calculate()}/>}
         {error && <p role="alert">{error}</p>}
       </fieldset>
     </form>
@@ -339,7 +343,7 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
           [format(result.totals.amount), 'Kalkylvärde med mängd (kr)']].map(([value, label]) =>
           <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
       </div>
-      <p>Lass, mil och timmar inkluderar sista dellasset. Beloppen räknas med kalkylens decimaler. Offerten visar pris per ton i hela kronor.</p>
+      <p>Lass, mil och timmar inkluderar sista dellasset. Beloppen räknas med kalkylens decimaler. Offerten visar pris per ton.</p>
       {!complete && <p role="status">Totalsumman omfattar färdiga rader med angiven mängd.</p>}
       {result.rounds.map(({id, result: time}, index) => <p key={id}>
         <strong>{draft.rounds[index].pickup || `Runda ${index + 1}`}</strong> · {format(time?.miles)} mil · {format(time?.minutes)} min per runda
@@ -363,12 +367,10 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
       {draft.customer && <p>Kund {draft.customer}</p>}
       {draft.project && <p>Projekt {draft.project}</p>}
       {draft.validity && <p>Giltig till {draft.validity}</p>}
-      <div className={styles.table}><table><thead><tr><th>Material</th><th>Leveransplats</th><th>Ekipage</th><th>Pris kr/ton</th></tr></thead>
-        <tbody>{draft.materials.map((material, index) => <tr key={material.id}>
-          <td>{material.transportOnly ? 'Enbart transport' : material.name}</td>
-          <td>{draft.rounds.find(round => round.id === material.roundId)?.delivery || '–'}</td>
-          <td>{draft.vehicles.find(vehicle => vehicle.id === material.vehicleId)?.name}</td>
-          <td>{whole.format(result.materials[index].selected!.delivered)}</td>
+      <div className={styles.table}><table><thead><tr><th>Fraktion</th><th>Pris kr/ton</th><th>Tillägg enkelbil kr/ton</th></tr></thead>
+        <tbody>{offer.map((line,index) => <tr key={draft.materials[index].id}>
+          <td>{line.material}{line.quotedVehicle && <small> · {line.quotedVehicle}</small>}</td><td>{offerMoney.format(line.unitPrice)}</td>
+          <td>{line.truckSupplement === null ? 'Beräknas separat' : offerMoney.format(line.truckSupplement)}</td>
         </tr>)}</tbody>
       </table></div>
       {draft.terms && <p>{draft.terms}</p>}
