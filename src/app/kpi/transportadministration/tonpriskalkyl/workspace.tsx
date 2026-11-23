@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Calculator, ExternalLink, Plus, Trash2} from 'lucide-react';
 import {initialTonPriceDraft, newMaterial, newRound, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
@@ -18,6 +18,7 @@ import styles from './workspace.module.css';
 
 const decimals = new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 2});
 const format = (value: number | undefined | null) => value == null ? '–' : decimals.format(value);
+const formatPrice = (value: number | undefined | null) => value == null ? '–' : offerMoney.format(value);
 const profiles = [['reference', 'Excel-last'], ['bk1', 'BK1'], ['bk4', 'BK4']] as const;
 
 function Field({label, value, onChange, numeric = false, placeholder, type = 'text'}: {
@@ -99,7 +100,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     {routeStatus && <small role="status">{routeStatus}</small>}
     {(round.pickupSiteId || round.deliverySiteId) && (rates.length === 0 ? <p>Inga tonpriser för vald plats och datum.</p> :
       <MaterialMultiSelect label="Material och tippavgifter" selected={checked} options={rates.map(rate => ({
-        id:rate.id, label:rate.material, note:`${rate.kind === 'tip' ? 'Tippavgift · ' : ''}${format(rate.price)} kr/ton`,
+        id:rate.id, label:rate.material, note:`${rate.kind === 'tip' ? 'Tippavgift · ' : ''}${formatPrice(rate.price)} kr/ton`,
       }))} onToggle={id => {const rate = rates.find(item => item.id === id); if (rate) toggleRate(rate);}}/>)}
     <details>
       <summary>Ställ in körtid, retur och tid på plats</summary>
@@ -150,7 +151,7 @@ function MaterialEditor({material, index, draft, change, remove, expired}: {
     {!material.transportOnly && <details><summary>Prisinställningar</summary><div className={styles.grid}>
       {!material.bankRateId && <>{field('listPrice', 'Listpris (kr/ton)')}{field('discount', 'Inköpsrabatt (%)')}
       {field('purchase', 'Inköpspris (kr/ton)', 'Beräknas från listpris')}</>}
-      {material.bankRateId && <span>Prisbanken {material.purchase} kr/ton</span>}
+      {material.bankRateId && <span>Prisbanken {formatPrice(Number(material.purchase))} kr/ton</span>}
       {field('markup', 'Materialpåslag (%)')}{field('sale', 'Eget säljpris (kr/ton)', 'Beräknas från inköp')}
     </div></details>}
     <div className={styles.actions}>
@@ -164,7 +165,7 @@ function replace<T extends {id: string}>(items: T[], id: string, patch: Partial<
   return items.map(item => item.id === id ? {...item, ...patch} : item);
 }
 
-export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: string; bank: MaterialPriceBank | null; today: string}) {
+export default function TonPriceWorkspace({draftKey, bank, today, children}: {draftKey: string; bank: MaterialPriceBank | null; today: string; children: ReactNode}) {
   const [draft, setDraft] = useState<TonPriceDraft>(() => ({...initialTonPriceDraft, priceDate:today, materials:[]}));
   const latestDraft = useRef(draft);
   const activeRates = effectiveSiteRates(bank?.rates ?? [], draft.priceDate || today).filter(rate => rate.unit === 'ton');
@@ -254,6 +255,7 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
   const complete = result && result.materials.length > 0 && result.materials.every(row => !row.status);
   const offer = complete ? advancedOfferLines(draft,result) : [];
   return <div className={`content ${styles.workspace}`}>
+    <div className={styles.actions}><a href="#offertarkiv">Öppna offertarkivet</a></div>
     {bank && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} draft={draft}
       date={draft.priceDate || today} onApply={useCheapest} onDetailsChange={change}/>}
     <details className={styles.advanced}>
@@ -329,7 +331,7 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
           <button type="submit" className={styles.primary} disabled={!draft.materials.length || draft.materials.some(staleRate)}><Calculator size={17}/>{busy ? 'Beräknar…' : 'Beräkna tonpris'}</button>
 
         </div>
-        {complete && <OfferDownloads date={draft.priceDate || today} disabled={busy}
+        {complete && <OfferDownloads disabled={busy}
           create={() => downloadAdvancedOffer(draft,offer.map(line => line.unitPrice))} onRetry={() => void calculate()}/>}
         {error && <p role="alert">{error}</p>}
       </fieldset>
@@ -339,25 +341,25 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
       <div className={styles.metrics}>
         {[[format(result.totals.trips), 'Lass'], [format(result.totals.miles), 'Mil'], [format(result.totals.hours), 'Timmar'],
           ...(result.totals.returnTonnes ? [[format(result.totals.returnTonnes), 'Returlast (ton)']] : []),
-          [format(result.totals.freightAmount), 'Frakt (kr)'], [format(result.totals.materialEarnings), 'Materialförtjänst (kr)'],
-          [format(result.totals.amount), 'Kalkylvärde med mängd (kr)']].map(([value, label]) =>
+          [formatPrice(result.totals.freightAmount), 'Frakt (kr)'], [formatPrice(result.totals.materialEarnings), 'Materialförtjänst (kr)'],
+          [formatPrice(result.totals.amount), 'Kalkylvärde med mängd (kr)']].map(([value, label]) =>
           <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
       </div>
       <p>Lass, mil och timmar inkluderar sista dellasset. Beloppen räknas med kalkylens decimaler. Offerten visar pris per ton.</p>
       {!complete && <p role="status">Totalsumman omfattar färdiga rader med angiven mängd.</p>}
       {result.rounds.map(({id, result: time}, index) => <p key={id}>
         <strong>{draft.rounds[index].pickup || `Runda ${index + 1}`}</strong> · {format(time?.miles)} mil · {format(time?.minutes)} min per runda
-        {time?.returnTonnes ? <> · {format(time.returnTonnes)} ton returlast i snitt · {format(time.returnCredit)} kr nettointäkt per runda</> : null}
+        {time?.returnTonnes ? <> · {format(time.returnTonnes)} ton returlast i snitt · {formatPrice(time.returnCredit)} kr nettointäkt per runda</> : null}
       </p>)}
       {result.materials.map((row, index) => <details key={row.id} open>
         <summary>{draft.materials[index].transportOnly ? 'Enbart transport' : draft.materials[index].name || `Rad ${index + 1}`}</summary>
         {row.status && <p role="status">{row.status}</p>}
-        {row.price && <p>Inköp {format(row.price.purchase)} kr/ton · Materialpris {format(row.price.sale)} kr/ton</p>}
+        {row.price && <p>Inköp {formatPrice(row.price.purchase)} kr/ton · Materialpris {formatPrice(row.price.sale)} kr/ton</p>}
         <div className={styles.table}><table><thead><tr><th>Ekipage</th><th>Viktunderlag</th><th>Last (ton)</th><th>Totalvikt (ton)</th><th>Frakt kr/ton</th><th>Levererat kr/ton</th></tr></thead>
           <tbody>{row.options.flatMap((option, i) => (option.id === 'cassette' && !specialCassette ? [] : visibleProfiles).map(([profile, label]) => {
             const price = option.prices[profile];
             return <tr key={`${option.id}-${profile}`}><td>{draft.vehicles[i].name}</td><td>{label}</td>
-              <td>{format(price?.load)}</td><td>{format(price?.gross)}</td><td>{format(price?.freight)}</td><td>{format(price?.delivered)}</td></tr>;
+              <td>{format(price?.load)}</td><td>{format(price?.gross)}</td><td>{formatPrice(price?.freight)}</td><td>{formatPrice(price?.delivered)}</td></tr>;
           }))}</tbody></table></div>
       </details>)}
     </section>}
@@ -378,5 +380,6 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
       </table></div>
       {draft.terms && <p>{draft.terms}</p>}
     </section>}
+    {children}
   </div>;
 }
