@@ -9,6 +9,7 @@ import {materialPriceBankPath} from '@/app/_components/kpi-transport-administrat
 import {effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
+import MaterialMultiSelect from './material-multi-select';
 import {recalculateTonPrices} from './actions';
 import styles from './workspace.module.css';
 
@@ -77,10 +78,10 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     </div>
     <div className={styles.grid}>
       {round.pickup && round.pickupSiteId ? <p>{round.pickup}</p> :
-        <GoogleAddressField label="Hämtningsadress" value={round.pickup} className={styles.field}
+        <GoogleAddressField label="Hämtningsadress" value={round.pickup} placeId={round.pickupPlaceId} className={styles.field}
           onChange={(pickup, pickupPlaceId) => change({pickup,pickupPlaceId,...resetDistance})}/>}
       {round.delivery && round.deliverySiteId ? <p>{round.delivery}</p> :
-        <GoogleAddressField label="Leveransadress" value={round.delivery} className={styles.field}
+        <GoogleAddressField label="Leveransadress" value={round.delivery} placeId={round.deliveryPlaceId} className={styles.field}
           onChange={(delivery, deliveryPlaceId) => change({delivery,deliveryPlaceId,...resetDistance})}/>}
       <Field label="Körsträcka dit (mil)" value={round.outbound.miles} numeric
         onChange={miles => change({outbound:{...round.outbound,miles}})}/>
@@ -92,16 +93,10 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
         target="_blank" rel="noreferrer"><ExternalLink size={14}/> Visa rutt i Google Maps</a>}
     </div>
     {routeStatus && <small role="status">{routeStatus}</small>}
-    {(round.pickupSiteId || round.deliverySiteId) && <fieldset className={styles.card}>
-      <legend>Bocka i material och tippavgifter</legend>
-      {rates.length === 0 ? <p>Inga tonpriser för vald plats och datum.</p> : <div className={styles.rateOptions}>
-        {rates.map(rate => <label key={rate.id}>
-          <input type="checkbox" checked={checked.has(rate.id)} onChange={() => toggleRate(rate)}/>
-          <span>{rate.material}{rate.kind === 'tip' && <small> Tippavgift</small>}</span>
-          <strong>{format(rate.price)} kr/ton</strong>
-        </label>)}
-      </div>}
-    </fieldset>}
+    {(round.pickupSiteId || round.deliverySiteId) && (rates.length === 0 ? <p>Inga tonpriser för vald plats och datum.</p> :
+      <MaterialMultiSelect label="Material och tippavgifter" selected={checked} options={rates.map(rate => ({
+        id:rate.id, label:rate.material, note:`${rate.kind === 'tip' ? 'Tippavgift · ' : ''}${format(rate.price)} kr/ton`,
+      }))} onToggle={id => {const rate = rates.find(item => item.id === id); if (rate) toggleRate(rate);}}/>)}
     <details>
       <summary>Ställ in körtid, retur och tid på plats</summary>
       <div className={styles.actions}>
@@ -113,7 +108,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
         <Field label="Körtid dit (min)" value={round.outbound.driveMinutes} numeric placeholder="Använd schablon"
           onChange={driveMinutes => change({outbound:{...round.outbound,driveMinutes}})}/>
         {!round.mirror && <>
-          <GoogleAddressField label="Returadress (valfri)" value={round.returnTo} className={styles.field}
+          <GoogleAddressField label="Returadress (valfri)" value={round.returnTo} placeId={round.returnPlaceId} className={styles.field}
             onChange={(returnTo,returnPlaceId) => change({returnTo,returnPlaceId,inbound:resetDistance.inbound})}/>
           <Field label="Retur (mil)" value={round.inbound.miles} numeric onChange={miles => change({inbound:{...round.inbound,miles}})}/>
           <Field label="Körtid retur (min)" value={round.inbound.driveMinutes} numeric placeholder="Använd schablon"

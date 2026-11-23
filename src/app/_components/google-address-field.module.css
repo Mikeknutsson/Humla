@@ -1,0 +1,5 @@
+.picker { display: grid; gap: 8px; min-width: 0; }
+.picker p { margin: 0; }
+.map { width: 100%; min-height: 310px; overflow: hidden; border-radius: 8px; background: #eef1f3; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.actions small { overflow-wrap: anywhere; }

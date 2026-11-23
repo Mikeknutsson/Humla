@@ -62,7 +62,7 @@ export default function PriceBankWorkspace({bank, today, canManage}: {bank: Mate
           <label className={styles.field}>Typ<select value={edit.kind} onChange={event => setEdit({...edit,kind:event.target.value as MaterialSite['kind']})}>
             {Object.entries(kinds).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
           </select></label>
-          <GoogleAddressField label="Infartsadress" value={edit.address} className={styles.field}
+          <GoogleAddressField label="Infartsadress" value={edit.address} placeId={edit.mapPlaceId} className={styles.field}
             onChange={(address, mapPlaceId) => setEdit({...edit,address,mapPlaceId:mapPlaceId ?? ''})}/>
         </div>
         <div className={styles.actions}><button className={styles.primary} disabled={busy}>Spara plats</button>
