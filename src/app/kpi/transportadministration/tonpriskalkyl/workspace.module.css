@@ -51,3 +51,7 @@
 @media print {
   .advanced, .quickFlow { display: none !important; }
 }
+
+.progress:not(:empty) { border-inline-start: 3px solid #27815f; padding: 7px 12px; margin-top: 12px; }
+.routeRow { padding: 8px 0; border-top: 1px solid #87909a65; }
+.routeRow a, .routeRow small { display: block; }

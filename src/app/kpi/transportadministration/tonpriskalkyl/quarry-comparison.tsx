@@ -16,6 +16,13 @@ import styles from './workspace.module.css';
 const kr = new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
 type Option = QuarryComparison[number]['options'][number];
 
+function directionsUrl(site: MaterialSite, destination: {address: string; id?: string}) {
+  const query = new URLSearchParams({api:'1', origin:site.address || site.name, destination:destination.address, travelmode:'driving'});
+  if (site.mapPlaceId) query.set('origin_place_id',site.mapPlaceId);
+  if (destination.id) query.set('destination_place_id',destination.id);
+  return `https://www.google.com/maps/dir/?${query}`;
+}
+
 export function ReturnLoadFields({value, rates, onChange}: {
   value?: ReturnLoad; rates: SiteRate[]; onChange:(value?: ReturnLoad) => void;
 }) {
@@ -65,13 +72,17 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const candidates = sites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
   const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
   const routesAvailable = candidates.some(site => manual[site.id]?.miles.trim() || (mapsKey && (site.address || site.mapPlaceId)));
-  const ready = Boolean(destination.address.trim() && committed === destination.address && materials.length && routesAvailable);
+  const hasAddress = Boolean(destination.address.trim());
+  const addressConfirmed = hasAddress && committed === destination.address;
+  const ready = Boolean(addressConfirmed && materials.length && routesAvailable);
   const inputKey = JSON.stringify([date,destination,materials,manual,returnLoad,withoutReturn,draft.profile,draft.vehicles,
     candidates.map(site => [site.id,site.address,site.mapPlaceId]),retry,Boolean(mapsKey)]);
   const current = request?.key === inputKey && ready ? request : undefined;
   const result = current?.comparison;
   const busy = ready && !current;
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
+  const missingRoutes = current?.rounds?.some(round => !round.outbound.miles.trim());
+  const needsManual = !mapsKey || !routesAvailable || missingRoutes;
   const percent = parseOfferMarkup(markup);
   const lines = result && percent !== null ? offerLines(result,percent) : [];
   const total = offerTotal(lines);
@@ -151,11 +162,11 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     <fieldset disabled={pdfBusy} className={styles.form}>
       <div className={styles.grid}>
         <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
-          onChange={changeDestination} onCommit={setCommitted}/>
+          placeholder="Gatuadress och ort" onChange={changeDestination} onCommit={setCommitted}/>
       </div>
       <MaterialMultiSelect label="Material att jämföra" options={names.map(name => ({id:name,label:name}))}
         selected={new Set(selected)} onToggle={toggle}/>
-      <details open={!mapsKey && !!selected.length || undefined}><summary>Mängder, returlast och körunderlag</summary>
+      <details><summary>Mängder och returlast</summary>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
         <p>Med mängd räknas hela rundor, även om sista lasset blir ett dellass.</p>
         <div className={styles.grid}>{selected.map(name => <label className={styles.field} key={name}>{name} (ton)
@@ -170,23 +181,40 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           }}/> Ingen returlast från rundan via {site.name}</span>
         </label>)}
       </details>}
-      {candidates.length > 0 && <details open={!mapsKey || undefined}>
-        <summary>Körsträcka och körtid per täkt</summary>
-        <p>Humla använder 11 min/mil om du bara anger mil. Ange lastbilens körtid om den är känd.</p>
-        {candidates.map(site => <div className={styles.grid} key={site.id}>
-          <span>{site.name}{!site.address && !site.mapPlaceId && <small> · Infartsadress saknas</small>}</span>
-          <label className={styles.field}>{site.name} · Enkel väg (mil)<input value={manual[site.id]?.miles ?? ''} inputMode="decimal"
-            onChange={event => setManual({...manual,[site.id]:{miles:event.target.value,driveMinutes:manual[site.id]?.driveMinutes ?? ''}})}/></label>
-          <label className={styles.field}>{site.name} · Körtid (min)<input value={manual[site.id]?.driveMinutes ?? ''} inputMode="decimal"
-            onChange={event => setManual({...manual,[site.id]:{miles:manual[site.id]?.miles ?? '',driveMinutes:event.target.value}})}/></label>
-        </div>)}
-      </details>}
       </details>
+      {hasAddress && candidates.length > 0 && <details open={needsManual || undefined}>
+        <summary>{needsManual ? 'Ange körsträcka per täkt' : 'Justera körsträcka eller körtid'}</summary>
+        {!mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
+          {' '}<Link href="/integrationer/google">Öppna Google-inställningar</Link></p> :
+          missingRoutes ? <p>Google kunde inte hämta alla rutter. Lägg till körsträckan för de täkter som saknas.</p> : null}
+        <p>Ange mil enkel väg. Om körtiden lämnas tom räknar Humla med 11 min/mil.</p>
+        {candidates.map(site => {
+          const route = current?.rounds?.find(round => round.pickupSiteId === site.id)?.outbound;
+          return <div className={`${styles.grid} ${styles.routeRow}`} key={site.id}>
+            <div><strong>{site.name}</strong>
+              {site.address || site.mapPlaceId ? <a href={directionsUrl(site,destination)} target="_blank" rel="noreferrer">Visa vägen i Google Maps</a> :
+                <small>Infartsadress saknas i Prisbanken.</small>}
+            </div>
+            <label className={styles.field}>Enkel väg (mil)<input aria-label={`${site.name} · Enkel väg (mil)`}
+              value={manual[site.id]?.miles ?? ''} placeholder={route?.miles || 't.ex. 2,5'} inputMode="decimal"
+              onChange={event => setManual({...manual,[site.id]:{miles:event.target.value,driveMinutes:manual[site.id]?.driveMinutes ?? ''}})}/></label>
+            <label className={styles.field}>Körtid (min, valfritt)<input aria-label={`${site.name} · Körtid (min)`}
+              value={manual[site.id]?.driveMinutes ?? ''} placeholder={route?.driveMinutes || '11 min/mil'} inputMode="decimal"
+              onChange={event => setManual({...manual,[site.id]:{miles:manual[site.id]?.miles || route?.miles || '',driveMinutes:event.target.value}})}/></label>
+          </div>;
+        })}
+      </details>}
+      {hasAddress && materials.length > 0 && routesAvailable && !addressConfirmed &&
+        <button type="button" className={styles.primary} onClick={() => setCommitted(destination.address)}>Beräkna levererat pris</button>}
     </fieldset>
-    {!mapsKey && <p role="status">Google Maps behöver aktiveras. Du kan tills vidare ange mil under körunderlag. <Link href="/integrationer/google">Öppna Google-inställningar</Link></p>}
-    {mapsKey && destination.address.trim() && materials.length > 0 && committed === destination.address && !routesAvailable &&
-      <p role="status">Infartsadress eller körsträcka saknas för de valda materialen.</p>}
-    {busy && <p role="status">Jämför materialpris och frakt med bil + kärra…</p>}
+    <div className={styles.progress} role="status">
+      {!hasAddress ? 'Ange leveransadress för projektet.' :
+        !materials.length ? 'Välj material för att fortsätta.' :
+        !candidates.length ? 'Prisbanken saknar en täkt för de valda materialen på prisdatumet.' :
+        !routesAvailable ? 'Ange körsträcka för minst en täkt för att räkna fram priset.' :
+        !addressConfirmed ? 'Bekräfta adressen med Enter eller Beräkna levererat pris.' :
+        busy ? 'Jämför materialpris och frakt med bil + kärra…' : null}
+    </div>
     {current?.error && <div className={styles.actions}><p role="alert">{current.error}</p>
       <button type="button" className="secondary" onClick={() => setRetry(value => value+1)}>Försök igen</button></div>}
     {result && <section className={styles.quickOffer} aria-label="Offertpris">
@@ -200,7 +228,8 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         <tbody>{result.map(row => {
           const line = lines.find(item => item.material === row.material);
           return <tr key={row.material}><td>{row.material}</td>
-            <td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : row.options.length ? 'Ange påslag' : 'Körunderlag saknas'}</td>
+            <td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : row.options[0]
+              ? <>{offerMoney.format(row.options[0].total)} <small>före påslag</small></> : 'Körunderlag saknas'}</td>
             {showAmounts && <><td>{line?.tonnes != null ? offerQuantity.format(line.tonnes) : '–'}</td>
               <td>{line?.amount != null ? offerMoney.format(line.amount) : '–'}</td></>}</tr>;
         })}</tbody>
