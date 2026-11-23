@@ -11,7 +11,7 @@ import {effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type Site
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
 import MaterialMultiSelect from './material-multi-select';
-import {advancedOfferLines, offerMoney} from '@/lib/hub/ton-price-offer';
+import {advancedOfferLines, offerMoney, truckSupplementArticles} from '@/lib/hub/ton-price-offer';
 import {downloadAdvancedOffer, recalculateTonPrices} from './actions';
 import OfferDownloads from './offer-downloads';
 import styles from './workspace.module.css';
@@ -367,10 +367,13 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
       {draft.customer && <p>Kund {draft.customer}</p>}
       {draft.project && <p>Projekt {draft.project}</p>}
       {draft.validity && <p>Giltig till {draft.validity}</p>}
-      <div className={styles.table}><table><thead><tr><th>Fraktion</th><th>Pris kr/ton</th><th>Tillägg enkelbil kr/ton</th></tr></thead>
+      <div className={styles.table}><table><thead><tr><th>Fraktion</th><th>Pris kr/ton</th></tr></thead>
         <tbody>{offer.map((line,index) => <tr key={draft.materials[index].id}>
           <td>{line.material}{line.quotedVehicle && <small> · {line.quotedVehicle}</small>}</td><td>{offerMoney.format(line.unitPrice)}</td>
-          <td>{line.truckSupplement === null ? 'Beräknas separat' : offerMoney.format(line.truckSupplement)}</td>
+        </tr>)}
+        {truckSupplementArticles(offer).map(article => <tr key={article.key}>
+          <td>Tillägg enkelbil{article.label && <small> · {article.label}</small>}</td>
+          <td>{article.price === null ? 'Beräknas separat' : offerMoney.format(article.price)}</td>
         </tr>)}</tbody>
       </table></div>
       {draft.terms && <p>{draft.terms}</p>}
