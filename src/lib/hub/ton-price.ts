@@ -1,6 +1,10 @@
+export type ReturnLoad = {material: string; tonnes: string; share: string; contribution: string; extraMiles: string; extraMinutes: string};
+export const emptyReturnLoad: ReturnLoad = {material:'',tonnes:'',share:'100',contribution:'',extraMiles:'0',extraMinutes:'0'};
 export type Leg = {miles: string; driveMinutes: string};
 export type Round = {
   id: string; pickup: string; delivery: string; returnTo: string;
+  returnLoad?: ReturnLoad;
+  pickupSiteId?: string; deliverySiteId?: string; pickupPlaceId?: string; deliveryPlaceId?: string; returnPlaceId?: string;
   outbound: Leg; inbound: Leg; mirror: boolean;
   minutesPerMile: string; loading: string; unloading: string; waiting: string;
 };
@@ -10,16 +14,18 @@ export type Vehicle = {
 };
 export type Material = {
   id: string; name: string; roundId: string; vehicleId: string; transportOnly: boolean;
+  bankRateId?: string; bankSiteId?: string; bankKind?: 'purchase' | 'tip';
   listPrice: string; discount: string; purchase: string; markup: string; sale: string; tonnes: string;
 };
 export type TonPriceDraft = {
   customer: string; project: string; validity: string; terms: string;
+  priceDate?: string; specialCassette?: boolean; showBk4?: boolean;
   profile: 'reference' | 'bk1' | 'bk4';
   rounds: Round[]; vehicles: Vehicle[]; materials: Material[];
 };
 
 function number(value: string, max: number, min = 0) {
-  if (typeof value !== 'string' || !/^\d{1,9}(?:[,.]\d{1,6})?$/.test(value.trim())) return null;
+  if (typeof value !== 'string' || !/^-?\d{1,9}(?:[,.]\d{1,6})?$/.test(value.trim())) return null;
   const parsed = Number(value.trim().replace(',', '.'));
   return parsed >= min && parsed <= max ? parsed : null;
 }
@@ -43,7 +49,18 @@ export function calculateRound(round: Round) {
   const miles = outbound.miles + inbound.miles;
   const drive = outbound.minutes + inbound.minutes;
   const minutes = drive + loading + unloading + waiting;
-  return minutes > 0 ? {miles, drive, minutes} : null;
+  if (minutes <= 0) return null;
+  const load = round.returnLoad;
+  if (!load) return {miles, drive, minutes, returnCredit:0, returnTonnes:0, returnLoadWeight:0};
+  const tonnes = number(load.tonnes, 100, 0.001);
+  const share = number(load.share, 100);
+  const contribution = number(load.contribution, 100000, -100000);
+  const extraMiles = number(load.extraMiles, 1000);
+  const extraMinutes = number(load.extraMinutes, 10000);
+  if (tonnes === null || share === null || contribution === null || extraMiles === null || extraMinutes === null) return null;
+  const fraction = share / 100;
+  return {miles:miles + extraMiles * fraction, drive, minutes:minutes + extraMinutes * fraction,
+    returnCredit:tonnes * contribution * fraction, returnTonnes:tonnes * fraction, returnLoadWeight:fraction > 0 ? tonnes : 0};
 }
 
 function materialPrice(input: Material) {
@@ -53,12 +70,12 @@ function materialPrice(input: Material) {
   const discount = number(input.discount, 100);
   const purchase = input.purchase.trim() === ''
     ? list === null || discount === null ? null : list * (1 - discount / 100)
-    : number(input.purchase, 100000);
+    : number(input.purchase, 100000, input.bankKind === 'tip' ? -100000 : 0);
   if (purchase === null) return null;
   const markup = number(input.markup, 1000);
   const sale = input.sale.trim() === ''
-    ? markup === null ? null : purchase * (1 + markup / 100)
-    : number(input.sale, 100000);
+    ? markup === null ? null : (purchase + Math.abs(purchase) * markup / 100)
+    : number(input.sale, 100000, input.bankKind === 'tip' ? -100000 : 0);
   return sale === null ? null : {purchase, sale};
 }
 
@@ -83,19 +100,20 @@ export function calculateTonPrices(draft: TonPriceDraft) {
         id: vehicle.id,
         prices: Object.fromEntries(profiles.map(profile => {
           const {load, gross} = vehicleLoad(vehicle, profile);
-          if (!time || !price || hourly === null || load === null) return [profile, null];
-          const freight = hourly * time.minutes / 60 / load;
+          if (!time || !price || hourly === null || load === null || time.returnLoadWeight > load) return [profile, null];
+          const freight = (hourly * time.minutes / 60 - time.returnCredit) / load;
           const delivered = price.sale + freight;
           const trips = tonnes === null ? null : Math.ceil(Math.round(tonnes * 1e6) / Math.round(load * 1e6));
           return [profile, {load, gross, freight, delivered, trips,
             miles: trips === null ? null : trips * time.miles,
             hours: trips === null ? null : trips * time.minutes / 60,
+            returnTonnes: trips === null ? null : trips * time.returnTonnes,
             freightAmount: tonnes === null ? null : freight * tonnes,
             materialEarnings: tonnes === null ? null : (price.sale - price.purchase) * tonnes,
             amount: tonnes === null ? null : delivered * tonnes}];
         })) as Record<TonPriceDraft['profile'], {
           load: number; gross: number | null; freight: number; delivered: number; trips: number | null;
-          miles: number | null; hours: number | null; freightAmount: number | null;
+          miles: number | null; hours: number | null; returnTonnes: number | null; freightAmount: number | null;
           materialEarnings: number | null; amount: number | null;
         } | null>,
       };
@@ -103,7 +121,7 @@ export function calculateTonPrices(draft: TonPriceDraft) {
     const selected = options.find(option => option.id === material.vehicleId)?.prices[draft.profile];
     const status = !time ? 'Fyll i körsträcka och tid för rundan.'
       : !price ? 'Ange materialnamn och inköpspris eller listpris med rabatt.'
-      : !selected ? 'Kontrollera ekipagets timpris och viktuppgifter.'
+      : !selected ? 'Kontrollera ekipagets timpris, vikt och eventuell returlast.'
       : material.tonnes.trim() !== '' && tonnes === null ? 'Kontrollera mängden.'
       : null;
     return {id: material.id, price, tonnes, options, selected, status};
@@ -113,10 +131,11 @@ export function calculateTonPrices(draft: TonPriceDraft) {
     trips: sum.trips + (selected?.trips ?? 0),
     miles: sum.miles + (selected?.miles ?? 0),
     hours: sum.hours + (selected?.hours ?? 0),
+    returnTonnes: sum.returnTonnes + (selected?.returnTonnes ?? 0),
     freightAmount: sum.freightAmount + (selected?.freightAmount ?? 0),
     materialEarnings: sum.materialEarnings + (selected?.materialEarnings ?? 0),
     amount: sum.amount + (selected?.amount ?? 0),
-  }), {trips: 0, miles: 0, hours: 0, freightAmount: 0, materialEarnings: 0, amount: 0});
+  }), {trips: 0, miles: 0, hours: 0, returnTonnes: 0, freightAmount: 0, materialEarnings: 0, amount: 0});
   return {rounds, materials, totals};
 }
 

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {Calculator, ChevronRight, ClipboardCheck, PackageCheck, Truck} from 'lucide-react';
+import {Calculator, ChevronRight, ClipboardCheck, Database, PackageCheck, Truck} from 'lucide-react';
 import styles from './kpi-followup-nav.module.css';
 
 export const settlementPath = '/kpi/transportadministration/avrakningskontroll';
@@ -8,7 +8,9 @@ export const materialPath = '/kpi/transportadministration/materialkontroll-johan
 
 export const tonPricePath = '/kpi/transportadministration/tonpriskalkyl';
 
-export type TransportAdministrationPage = boolean | 'material' | 'ton-price';
+export const materialPriceBankPath = '/kpi/transportadministration/prisbank';
+
+export type TransportAdministrationPage = boolean | 'material' | 'ton-price' | 'price-bank';
 
 export function KpiTransportAdministrationNav({active = false, onNavigate}: {
   active?: TransportAdministrationPage;
@@ -28,6 +30,10 @@ export function KpiTransportAdministrationNav({active = false, onNavigate}: {
       <Link href={tonPricePath} prefetch={false} className={active === 'ton-price' ? 'active' : undefined}
         aria-current={active === 'ton-price' ? 'page' : undefined} onClick={onNavigate}>
         <Calculator size={16}/>Tonpriskalkyl
+      </Link>
+      <Link href={materialPriceBankPath} prefetch={false} className={active === 'price-bank' ? 'active' : undefined}
+        aria-current={active === 'price-bank' ? 'page' : undefined} onClick={onNavigate}>
+        <Database size={16}/>Prisbank
       </Link>
     </div>
   </details>;
