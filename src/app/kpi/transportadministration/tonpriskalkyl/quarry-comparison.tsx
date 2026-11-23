@@ -5,11 +5,11 @@ import {GoogleAddressField, googleMapsAvailable, googleRoadEstimate} from '@/app
 import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
+import MaterialMultiSelect from './material-multi-select';
 import {calculateQuarryComparison} from './actions';
 import styles from './workspace.module.css';
 
 const kr = new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
-const materialLabel = (value: string) => value.toLocaleLowerCase('sv-SE').trim().replace(/[–/]/g,'-');
 type Option = QuarryComparison[number]['options'][number];
 
 export function ReturnLoadFields({value, rates, onChange}: {
@@ -42,7 +42,6 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
 }) {
   const [destination,setDestination] = useState({address:'',id:undefined as string | undefined});
-  const [query,setQuery] = useState('');
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
   const [withoutReturn,setWithoutReturn] = useState<string[]>([]);
@@ -55,7 +54,6 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const purchase = rates.filter(rate => rate.kind === 'purchase');
   const names = [...new Set(purchase.map(comparisonMaterial))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
   const candidates = sites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
-  const visible = names.filter(name => selected.includes(name) || materialLabel(name).includes(materialLabel(query)));
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
 
   function clearResult() {setResult(undefined);setApplied(false);setError('');}
@@ -90,14 +88,11 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     <h2>Hitta billigaste täkt</h2>
     <fieldset disabled={busy} className={styles.form}>
       <div className={styles.grid}>
-        <GoogleAddressField label="Projektets leveransadress" value={destination.address} className={styles.field}
+        <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
           onChange={(address,id) => {setDestination({address,id});setManual({});clearResult();}}/>
-        <label className={styles.field}>Sök material<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Till exempel 0–32"/></label>
       </div>
-      <div className={styles.comparisonMaterials}>
-        {visible.map(name => <label key={name}><input type="checkbox" checked={selected.includes(name)} onChange={() => toggle(name)}/> {name}</label>)}
-        {!visible.length && <p>Inga material matchar sökningen.</p>}
-      </div>
+      <MaterialMultiSelect label="Material att jämföra" options={names.map(name => ({id:name,label:name}))}
+        selected={new Set(selected)} onToggle={toggle}/>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
         <p>Med mängd räknas hela rundor, även om sista lasset blir ett dellass.</p>
         <div className={styles.grid}>{selected.map(name => <label className={styles.field} key={name}>{name} (ton)
