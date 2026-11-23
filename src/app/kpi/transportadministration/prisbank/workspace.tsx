@@ -76,7 +76,7 @@ export default function PriceBankWorkspace({bank, today, canManage}: {bank: Mate
         <label><input type="checkbox" checked={all} onChange={event => setAll(event.target.checked)}/> Visa alla versioner</label>
       </div>
       <div className={styles.table}><table><thead><tr><th>Material</th><th>Typ</th><th>Pris</th><th>Gäller från</th><th>Gäller t.o.m.</th><th>Källa</th></tr></thead>
-        <tbody>{shown.map(rate => <tr key={rate.id}><td>{rate.material}</td><td>{rate.kind === 'tip' ? 'Tippavgift' : 'Nettoinköp'}</td>
+        <tbody>{shown.map(rate => <tr key={rate.id}><td>{rate.material}</td><td>{rate.kind === 'tip' ? 'Tippavgift' : 'Materialpris'}</td>
           <td>{currency.format(rate.price)} kr/{rate.unit}</td><td>{rate.validFrom ?? '–'}</td><td>{rate.validTo ?? '–'}</td><td>{rate.source}</td></tr>)}</tbody>
       </table></div>
       {!shown.length && <p>Inga prisrader för urvalet.</p>}

@@ -37,8 +37,9 @@ export function comparisonMaterial(rate: SiteRate) {
   const normalized = name.replace(/\s+SS-EN\s+\d+(?=\s|$)/gi,'').replace(/\s+/g,' ').trim();
   const fraction = normalized.match(/\b\d+-\d+\b/)?.[0];
   if (!fraction) return normalized;
+  if (/^makadam (tvättad \d+-\d+|\d+-\d+ tvättad)$/i.test(normalized)) return `Makadam ${fraction} tvättad`;
   if (/\b(tvättad|torr|klass|eller)\b/i.test(normalized)) return normalized;
   if (/^(bärlager|bergkross)\s/i.test(normalized) && /^0-(32|45|63)$/.test(fraction)) return `Bärlager / bergkross ${fraction}`;
-  if (/^förstärkning(s(lager)?)?\s/i.test(normalized)) return `Förstärkningslager ${fraction}`;
+  if (/^förstärkning(s(lager)?)?\s/i.test(normalized) || /^bergkross 0-(90|125|150|200)$/i.test(normalized)) return `Förstärkningslager ${fraction}`;
   return normalized;
 }

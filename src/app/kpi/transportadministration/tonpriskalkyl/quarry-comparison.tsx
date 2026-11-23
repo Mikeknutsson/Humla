@@ -126,7 +126,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       <div className={styles.actions}>
         <button className={styles.primary} type="button" disabled={!destination.address.trim() || !selected.length || busy}
           onClick={() => void compare()}>{busy ? 'Jämför täkter…' : 'Jämför täkter'}</button>
-        <span>Nettoinköp + frakt med bil + kärra</span>
+        <span>Materialpris + frakt med bil + kärra</span>
       </div>
     </fieldset>
     {error && <p role="alert">{error}</p>}
@@ -137,9 +137,9 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       {row.missing.length > 0 && <p>Körunderlag saknas eller kan inte användas för {row.missing.join(', ')}.</p>}
       {row.options.length > 0 && <details>
         <summary>Visa jämförelse</summary>
-        <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Inköp kr/ton</th><th>Frakt kr/ton</th><th>Summa kr/ton</th></tr></thead>
+        <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Material kr/ton</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
           <tbody>{row.options.map(option => <tr key={option.rate.id}><td>{option.site.name}</td><td>{option.rate.material}</td>
-            <td>{kr.format(option.rate.price)}</td><td>{kr.format(option.freight)}</td><td>{kr.format(option.total)}</td></tr>)}</tbody></table></div>
+            <td>{kr.format(option.rate.price)}</td><td>{kr.format(option.freight)}</td><td>{kr.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}
     </section>)}
     {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied}
