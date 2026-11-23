@@ -1,7 +1,8 @@
 'use client';
 
 import {useState} from 'react';
-import {GoogleAddressField, googleMapsAvailable, googleRoadEstimate} from '@/app/_components/google-address-field';
+import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
+import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
@@ -41,6 +42,7 @@ export function ReturnLoadFields({value, rates, onChange}: {
 export default function QuarryComparisonWorkspace({sites, rates, draft, date, onApply}: {
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
 }) {
+  const mapsKey = useGoogleMapsKey();
   const [destination,setDestination] = useState({address:'',id:undefined as string | undefined});
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
@@ -68,9 +70,9 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     try {
       const rounds = await Promise.all(candidates.map(async site => {
         let leg = manual[site.id];
-        if (!leg?.miles && googleMapsAvailable && (site.address || site.mapPlaceId)) {
+        if (!leg?.miles && mapsKey && (site.address || site.mapPlaceId)) {
           try {
-            const estimate = await googleRoadEstimate({address:site.address,id:site.mapPlaceId},destination);
+            const estimate = await googleRoadEstimate(mapsKey,{address:site.address,id:site.mapPlaceId},destination);
             leg = {miles:estimate.miles,driveMinutes:''};
           } catch { /* The result identifies sites without a usable route. */ }
         }
@@ -107,7 +109,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           }}/> Ingen returlast från rundan via {site.name}</span>
         </label>)}
       </details>}
-      {candidates.length > 0 && <details open={!googleMapsAvailable || undefined}>
+      {candidates.length > 0 && <details open={!mapsKey || undefined}>
         <summary>Körsträcka och körtid per täkt</summary>
         <p>Humla använder 11 min/mil om du bara anger mil. Ange lastbilens körtid om den är känd.</p>
         {candidates.map(site => <div className={styles.grid} key={site.id}>
