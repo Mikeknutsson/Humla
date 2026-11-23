@@ -3,6 +3,7 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import {MapPin} from 'lucide-react';
 import styles from './google-address-field.module.css';
+import {useGoogleMapsKey} from './google-maps-provider';
 
 type Point = {lat: number; lng: number};
 type LatLng = {toJSON: () => Point};
@@ -38,10 +39,9 @@ type Maps = {
   }) => Marker}>;
 };
 type GoogleWindow = Window & {google?: {maps: Maps}; humlaMapsReady?: () => void};
-const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 let pendingPlaces: Promise<Places> | undefined;
 
-function loadPlaces() {
+function loadPlaces(mapsKey: string) {
   const browser = window as GoogleWindow;
   if (browser.google?.maps?.importLibrary) return browser.google.maps.importLibrary('places');
   pendingPlaces ??= new Promise<Places>((resolve, reject) => {
@@ -61,7 +61,7 @@ function loadPlaces() {
     script.onerror = fail;
     script.async = true;
     script.src = `https://maps.googleapis.com/maps/api/js?${new URLSearchParams({
-      key: mapsKey ?? '', loading: 'async', callback: 'humlaMapsReady', language: 'sv', region: 'SE', v: 'weekly',
+      key: mapsKey, loading: 'async', callback: 'humlaMapsReady', language: 'sv', region: 'SE', v: 'weekly',
     })}`;
     document.head.append(script);
   }).catch(error => {
@@ -83,10 +83,8 @@ function pointLabel(point: Point) {
   return `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
 }
 
-export const googleMapsAvailable = Boolean(mapsKey);
-
-export async function googleRoadEstimate(origin: {address: string; id?: string}, destination: {address: string; id?: string}) {
-  const {Place} = await loadPlaces();
+export async function googleRoadEstimate(mapsKey: string, origin: {address: string; id?: string}, destination: {address: string; id?: string}) {
+  const {Place} = await loadPlaces(mapsKey);
   const {Route} = await (window as GoogleWindow).google!.maps.importLibrary('routes');
   const {routes} = await Route.computeRoutes({
     origin: parsePoint(origin.address) ?? (origin.id ? new Place({id:origin.id}) : origin.address),
@@ -99,8 +97,8 @@ export async function googleRoadEstimate(origin: {address: string; id?: string},
     driveMinutes:String(Number((first.durationMillis / 60000).toFixed(1)))};
 }
 
-function MapPicker({value, placeId, label, onChoose, onClose}: {
-  value: string; placeId?: string; label: string; onChoose: (choice: PointChoice) => void; onClose: () => void;
+function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
+  mapsKey: string; value: string; placeId?: string; label: string; onChoose: (choice: PointChoice) => void; onClose: () => void;
 }) {
   const [choice, setChoice] = useState<PointChoice>();
   const [error, setError] = useState('');
@@ -118,7 +116,7 @@ function MapPicker({value, placeId, label, onChoose, onClose}: {
     const listeners: Listener[] = [];
 
     async function initialize() {
-      const {PlaceAutocompleteElement, Place} = await loadPlaces();
+      const {PlaceAutocompleteElement, Place} = await loadPlaces(mapsKey);
       const maps = (window as GoogleWindow).google!.maps;
       const [{Map}, {Marker}] = await Promise.all([maps.importLibrary('maps'), maps.importLibrary('marker')]);
       if (!active || !container || !mapContainer) return;
@@ -196,7 +194,7 @@ function MapPicker({value, placeId, label, onChoose, onClose}: {
       container.replaceChildren();
       mapContainer.replaceChildren();
     };
-  }, [label, placeId, value]);
+  }, [label, mapsKey, placeId, value]);
 
   return <section className={styles.picker} data-map-picker aria-labelledby={caption}>
     <p id={caption}>Sök en plats, klicka på kartan eller dra nålen till infarten.</p>
@@ -214,6 +212,7 @@ function MapPicker({value, placeId, label, onChoose, onClose}: {
 export function GoogleAddressField({label, value, placeId, onChange, className}: {
   label: string; value: string; placeId?: string; onChange: (value: string, placeId?: string) => void; className?: string;
 }) {
+  const mapsKey = useGoogleMapsKey();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const fallbackUrl = `https://www.google.com/maps/search/?${new URLSearchParams({api: '1', query: value || 'Sverige'})}`;
@@ -229,7 +228,7 @@ export function GoogleAddressField({label, value, placeId, onChange, className}:
     {mapsKey ? <button type="button" className="secondary" aria-expanded={open} ref={trigger}
       onClick={() => setOpen(!open)}><MapPin size={14}/> Välj på kartan</button>
       : <a className="secondary" href={fallbackUrl} target="_blank" rel="noreferrer"><MapPin size={14}/> Öppna Google Maps</a>}
-    {open && <MapPicker label={label} value={value} placeId={placeId} onClose={close}
+    {open && mapsKey && <MapPicker mapsKey={mapsKey} label={label} value={value} placeId={placeId} onClose={close}
       onChoose={choice => {onChange(choice.address, choice.placeId);close();}}/>}
   </div>;
 }

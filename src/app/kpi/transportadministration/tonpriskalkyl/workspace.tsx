@@ -4,7 +4,8 @@ import Link from 'next/link';
 import {useEffect, useRef, useState} from 'react';
 import {Calculator, ExternalLink, Plus, Printer, Trash2} from 'lucide-react';
 import {initialTonPriceDraft, newMaterial, newRound, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
-import {GoogleAddressField, googleMapsAvailable, googleRoadEstimate} from '@/app/_components/google-address-field';
+import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
+import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
 import {effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
@@ -40,17 +41,19 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
 }) {
   const field = (key: 'minutesPerMile' | 'loading' | 'unloading' | 'waiting', label: string) =>
     <Field key={key} label={label} value={round[key]} onChange={value => change({[key]: value})} numeric/>;
+  const mapsKey = useGoogleMapsKey();
   const returnTo = round.returnTo.trim() || round.pickup.trim();
   const [fetching, setFetching] = useState(false);
   const [routeStatus, setRouteStatus] = useState('');
   async function estimateRoute() {
+    if (!mapsKey) return;
     setFetching(true);
     setRouteStatus('');
     const pickup = {address:round.pickup,id:round.pickupPlaceId};
     const delivery = {address:round.delivery,id:round.deliveryPlaceId};
     try {
-      const [outbound, inbound] = await Promise.all([googleRoadEstimate(pickup,delivery),
-        round.mirror ? null : googleRoadEstimate(delivery,{address:returnTo,id:round.returnTo ? round.returnPlaceId : round.pickupPlaceId})]);
+      const [outbound, inbound] = await Promise.all([googleRoadEstimate(mapsKey,pickup,delivery),
+        round.mirror ? null : googleRoadEstimate(mapsKey,delivery,{address:returnTo,id:round.returnTo ? round.returnPlaceId : round.pickupPlaceId})]);
       change({outbound, ...(inbound ? {inbound} : {})});
       setRouteStatus('Google Maps bilrutt. Justera mil och körtid vid behov för lastbil.');
     } catch {
@@ -87,7 +90,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
         onChange={miles => change({outbound:{...round.outbound,miles}})}/>
     </div>
     <div className={styles.actions}>
-      {googleMapsAvailable && round.pickup.trim() && round.delivery.trim() && <button type="button" className="secondary"
+      {mapsKey && round.pickup.trim() && round.delivery.trim() && <button type="button" className="secondary"
         onClick={() => void estimateRoute()}>{fetching ? 'Hämtar rutt…' : 'Hämta mil och körtid från Google Maps'}</button>}
       {round.pickup.trim() && round.delivery.trim() && <a href={mapLink(round.pickup, round.delivery, round.pickupPlaceId, round.deliveryPlaceId)}
         target="_blank" rel="noreferrer"><ExternalLink size={14}/> Visa rutt i Google Maps</a>}
