@@ -3,7 +3,7 @@
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
 import {Download} from 'lucide-react';
-import {offerLines, offerMoney, offerQuantity, offerTotal, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
+import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
@@ -87,8 +87,6 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const needsManual = isTestAddress || !mapsKey || !routesAvailable || missingRoutes;
   const percent = parseOfferMarkup(markup);
   const lines = result && percent !== null ? offerLines(result,percent) : [];
-  const total = offerTotal(lines);
-  const showAmounts = lines.some(line => line.tonnes !== null);
   const complete = lines.length === materials.length && lines.length > 0 &&
     lines.every(line => Number.isFinite(line.unitPrice) && line.unitPrice >= 0);
 
@@ -233,17 +231,14 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       </label>
       {markup.trim() && percent === null && <p role="status">Ange ett påslag mellan 0 och 1 000 %.</p>}
       <div className={styles.table}><table>
-        <thead><tr><th>Material</th><th>Levererat pris (kr/ton)</th>{showAmounts && <><th>Ton</th><th>Belopp (kr)</th></>}</tr></thead>
+        <thead><tr><th>Fraktion</th><th>Levererat pris (kr/ton)</th></tr></thead>
         <tbody>{result.map(row => {
           const line = lines.find(item => item.material === row.material);
           return <tr key={row.material}><td>{row.material}</td>
             <td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : row.options[0]
-              ? <>{offerMoney.format(row.options[0].total)} <small>före påslag</small></> : 'Körunderlag saknas'}</td>
-            {showAmounts && <><td>{line?.tonnes != null ? offerQuantity.format(line.tonnes) : '–'}</td>
-              <td>{line?.amount != null ? offerMoney.format(line.amount) : '–'}</td></>}</tr>;
+              ? <>{offerMoney.format(row.options[0].total)} <small>före påslag</small></> : 'Körunderlag saknas'}</td></tr>;
         })}</tbody>
       </table></div>
-      {total !== null && <p><strong>Totalt exkl. moms {offerMoney.format(total)} kr</strong></p>}
       {result.some(row => row.missing.length > 0) && <p role="status">Jämförelsen omfattar täkter med tillgängligt körunderlag. Se vilka som saknas nedan.</p>}
       <details>
         <summary>Kund, projekt och offertvillkor</summary>
