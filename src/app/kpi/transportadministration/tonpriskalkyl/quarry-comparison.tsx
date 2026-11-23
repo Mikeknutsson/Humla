@@ -15,6 +15,7 @@ import styles from './workspace.module.css';
 
 const kr = new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
 type Option = QuarryComparison[number]['options'][number];
+const testAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 
 function directionsUrl(site: MaterialSite, destination: {address: string; id?: string}) {
   const query = new URLSearchParams({api:'1', origin:site.address || site.name, destination:destination.address, travelmode:'driving'});
@@ -71,8 +72,9 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const names = [...new Set(purchase.map(comparisonMaterial))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
   const candidates = sites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
   const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
-  const routesAvailable = candidates.some(site => manual[site.id]?.miles.trim() || (mapsKey && (site.address || site.mapPlaceId)));
+  const routesAvailable = candidates.some(site => manual[site.id]?.miles.trim() || (mapsKey && destination.address !== testAddress && (site.address || site.mapPlaceId)));
   const hasAddress = Boolean(destination.address.trim());
+  const isTestAddress = destination.address === testAddress;
   const addressConfirmed = hasAddress && committed === destination.address;
   const ready = Boolean(addressConfirmed && materials.length && routesAvailable);
   const inputKey = JSON.stringify([date,destination,materials,manual,returnLoad,withoutReturn,draft.profile,draft.vehicles,
@@ -82,7 +84,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const busy = ready && !current;
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
   const missingRoutes = current?.rounds?.some(round => !round.outbound.miles.trim());
-  const needsManual = !mapsKey || !routesAvailable || missingRoutes;
+  const needsManual = isTestAddress || !mapsKey || !routesAvailable || missingRoutes;
   const percent = parseOfferMarkup(markup);
   const lines = result && percent !== null ? offerLines(result,percent) : [];
   const total = offerTotal(lines);
@@ -107,7 +109,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     try {
       const rounds = await Promise.all(candidates.map(async site => {
         let leg = manual[site.id];
-        if (!leg?.miles && mapsKey && (site.address || site.mapPlaceId)) {
+        if (!leg?.miles && mapsKey && !isTestAddress && (site.address || site.mapPlaceId)) {
           const routeKey = JSON.stringify([mapsKey,site.address,site.mapPlaceId,destination]);
           let lookup = routes.current.get(routeKey);
           if (!lookup) {
@@ -164,6 +166,12 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
           placeholder="Gatuadress och ort" onChange={changeDestination} onCommit={setCommitted}/>
       </div>
+      {!mapsKey && !hasAddress && <div className={styles.actions}>
+        <button type="button" className="secondary" onClick={() => {
+          changeDestination(testAddress);
+          setCommitted(testAddress);
+        }}>Använd testadress i Ronneby</button>
+      </div>}
       <MaterialMultiSelect label="Material att jämföra" options={names.map(name => ({id:name,label:name}))}
         selected={new Set(selected)} onToggle={toggle}/>
       <details><summary>Mängder och returlast</summary>
@@ -184,7 +192,8 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       </details>
       {hasAddress && candidates.length > 0 && <details open={needsManual || undefined}>
         <summary>{needsManual ? 'Ange körsträcka per täkt' : 'Justera körsträcka eller körtid'}</summary>
-        {!mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
+        {isTestAddress ? <p>För testadressen kan du ange ett exempelavstånd, till exempel 2,5 mil enkel väg.</p>
+          : !mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
           {' '}<Link href="/integrationer/google">Öppna Google-inställningar</Link></p> :
           missingRoutes ? <p>Google kunde inte hämta alla rutter. Lägg till körsträckan för de täkter som saknas.</p> : null}
         <p>Ange mil enkel väg. Om körtiden lämnas tom räknar Humla med 11 min/mil.</p>
@@ -192,8 +201,8 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           const route = current?.rounds?.find(round => round.pickupSiteId === site.id)?.outbound;
           return <div className={`${styles.grid} ${styles.routeRow}`} key={site.id}>
             <div><strong>{site.name}</strong>
-              {site.address || site.mapPlaceId ? <a href={directionsUrl(site,destination)} target="_blank" rel="noreferrer">Visa vägen i Google Maps</a> :
-                <small>Infartsadress saknas i Prisbanken.</small>}
+              {!isTestAddress && (site.address || site.mapPlaceId ? <a href={directionsUrl(site,destination)} target="_blank" rel="noreferrer">Visa vägen i Google Maps</a> :
+                <small>Infartsadress saknas i Prisbanken.</small>)}
             </div>
             <label className={styles.field}>Enkel väg (mil)<input aria-label={`${site.name} · Enkel väg (mil)`}
               value={manual[site.id]?.miles ?? ''} placeholder={route?.miles || 't.ex. 2,5'} inputMode="decimal"
