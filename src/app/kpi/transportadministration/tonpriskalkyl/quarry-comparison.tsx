@@ -13,7 +13,6 @@ import {calculateQuarryComparison, downloadQuarryOffer} from './actions';
 import OfferDownloads from './offer-downloads';
 import styles from './workspace.module.css';
 
-const kr = new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
 type Option = QuarryComparison[number]['options'][number];
 const testAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 
@@ -224,7 +223,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         </fieldset>
       </details>
       <OfferDownloads key={JSON.stringify([inputKey,markup,draft.customer,draft.project,draft.validity,draft.terms])}
-        date={date} disabled={!complete || !current?.rounds} onRetry={() => setRetry(value => value+1)}
+        disabled={!complete || !current?.rounds} onRetry={() => setRetry(value => value+1)}
         create={() => downloadQuarryOffer(date,materials,current!.rounds!,draft,destination.address,markup,lines.map(line => line.unitPrice),
           {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms})}/>
       {!complete && percent !== null && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
@@ -232,14 +231,14 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     {result && <details><summary>Visa täktjämförelse</summary>
     {result.map(row => <section className={styles.card} key={row.material}>
       <h3>{row.material}</h3>
-      {row.options[0] ? <strong>{row.missing.length ? 'Billigast av beräknade täkter' : 'Billigast'} · {row.options[0].site.name} · {kr.format(row.options[0].total)} kr/ton</strong>
+      {row.options[0] ? <strong>{row.missing.length ? 'Billigast av beräknade täkter' : 'Billigast'} · {row.options[0].site.name} · {offerMoney.format(row.options[0].total)} kr/ton</strong>
         : <p>Inget komplett körunderlag för materialet.</p>}
       {row.missing.length > 0 && <p>Körunderlag saknas eller kan inte användas för {row.missing.join(', ')}.</p>}
       {row.options.length > 0 && <details>
         <summary>Visa jämförelse</summary>
         <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Material kr/ton</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
           <tbody>{row.options.map(option => <tr key={option.rate.id}><td>{option.site.name}</td><td>{option.rate.material}</td>
-            <td>{kr.format(option.rate.price)}</td><td>{kr.format(option.freight)}</td><td>{kr.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
+            <td>{offerMoney.format(option.rate.price)}</td><td>{offerMoney.format(option.freight)}</td><td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}
     </section>)}
     {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied === inputKey}

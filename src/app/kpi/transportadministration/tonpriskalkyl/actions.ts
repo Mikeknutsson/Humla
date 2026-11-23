@@ -1,5 +1,9 @@
 'use server';
 
+import {revalidatePath} from 'next/cache';
+import {archiveOffer, findArchivedOffer, offerFingerprint} from '@/lib/hub/ton-price-offer-archive';
+import {tonPricePath} from '@/app/_components/kpi-transport-administration-nav';
+
 import {advancedOfferLines, offerLines, parseOfferMarkup, type OfferDetails, type OfferLine} from '@/lib/hub/ton-price-offer';
 import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-delivery-plan';
 import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
@@ -9,8 +13,9 @@ import {effectiveSiteRates, stockholmDate, type MaterialSite} from '@/lib/hub/ma
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
 import {calculateTonPrices, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
-async function prepareTonPrices(draft: TonPriceDraft, includeSites = false) {
-  const access = await tonPriceAccess();
+type Access = NonNullable<Awaited<ReturnType<typeof tonPriceAccess>>>;
+
+async function prepareTonPrices(access: Access | null, draft: TonPriceDraft, includeSites = false) {
   if (!access) return {error: 'Behörighet saknas.'};
   if (!draft || !Array.isArray(draft.rounds) || !Array.isArray(draft.materials) ||
     !Array.isArray(draft.vehicles) || draft.rounds.length > 30 || draft.materials.length > 100 ||
@@ -47,22 +52,38 @@ async function prepareTonPrices(draft: TonPriceDraft, includeSites = false) {
 }
 
 export async function recalculateTonPrices(draft: TonPriceDraft) {
-  const {result,error} = await prepareTonPrices(draft);
+  const {result,error} = await prepareTonPrices(await tonPriceAccess(),draft);
   return {result,error};
 }
 
-async function offerDocuments(delivery: string, priceDate: string, details: OfferDetails, lines: OfferLine[], plan: DeliveryPlanLine[]) {
+async function offerDocuments(access: Access, delivery: string, priceDate: string, details: OfferDetails, lines: OfferLine[], plan: DeliveryPlanLine[]) {
   const date = stockholmDate();
-  const [pdf, deliveryPlan] = await Promise.all([
-    tonPriceOfferPdf(delivery,date,details,lines),
-    tonPriceOfferPdf(delivery,date,details,[],plan,priceDate),
-  ]);
-  return {pdf:Buffer.from(pdf).toString('base64'), deliveryPlan:Buffer.from(deliveryPlan).toString('base64')};
+  const {customer,project,validity,terms} = details;
+  const fingerprint = offerFingerprint([date,delivery,priceDate,customer,project,validity,terms,lines,plan]);
+  try {
+    let id = await findArchivedOffer(access,fingerprint);
+    if (!id) {
+      const [pdf, deliveryPlan] = await Promise.all([
+        tonPriceOfferPdf(delivery,date,details,lines),
+        tonPriceOfferPdf(delivery,date,details,[],plan,priceDate),
+      ]);
+      id = await archiveOffer(access,{
+        offer_date:date, customer, project,
+        destinations:[...new Set(plan.map(row => row.delivery).filter(Boolean))],
+        materials:[...new Set(lines.map(line => line.material))],
+      },fingerprint,pdf,deliveryPlan);
+    }
+    revalidatePath(tonPricePath);
+    return {id};
+  } catch (error) {
+    console.error('Could not archive ton-price offer',error instanceof Error ? error.message : 'database error');
+    return {error:'Offerten kunde inte sparas i arkivet. Försök igen.'};
+  }
 }
 
-export async function calculateQuarryComparison(date: string, materials: {name: string; tonnes: string}[], rounds: Round[], draft: TonPriceDraft) {
-  const access = await tonPriceAccess();
-  if (!access) return {error:'Behörighet saknas.'};
+type QuarryMaterial = {name: string; tonnes: string};
+
+async function compareForAccess(access: Access, date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || materials.length > 100 || rounds.length > 100 ||
     !['reference','bk1','bk4'].includes(draft.profile) || draft.vehicles.length !== 3) return {error:'Ogiltigt jämförelseunderlag.'};
   const bank = await readPriceBank(access);
@@ -71,13 +92,19 @@ export async function calculateQuarryComparison(date: string, materials: {name: 
   catch {return {error:'Kontrollera mil, ekipage och returparametrar.'};}
 }
 
+export async function calculateQuarryComparison(date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft) {
+  const access = await tonPriceAccess();
+  if (!access) return {error:'Behörighet saknas.',comparison:undefined};
+  return compareForAccess(access,date,materials,rounds,draft);
+}
+
 function validOfferDetails(details: OfferDetails) {
   return details && [details.customer, details.project, details.validity, details.terms]
     .every(value => typeof value === 'string' && value.length <= 240);
 }
 
 export async function downloadQuarryOffer(
-  date: string, materials: {name: string; tonnes: string}[], rounds: Round[], draft: TonPriceDraft,
+  date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft,
   delivery: string, markupText: string, expectedPrices: number[], details: OfferDetails,
 ) {
   const markup = parseOfferMarkup(markupText);
@@ -86,7 +113,9 @@ export async function downloadQuarryOffer(
     !validOfferDetails(details)) {
     return {error:'Kontrollera offertuppgifterna.'};
   }
-  const result = await calculateQuarryComparison(date,materials,rounds,draft);
+  const access = await tonPriceAccess();
+  if (!access) return {error:'Behörighet saknas.'};
+  const result = await compareForAccess(access,date,materials,rounds,draft);
   if (!result.comparison) return {error:result.error};
   const lines = offerLines(result.comparison,markup);
   if (!lines.length || lines.length !== materials.length || lines.some(line => !Number.isFinite(line.unitPrice) || line.unitPrice < 0)) {
@@ -105,12 +134,14 @@ export async function downloadQuarryOffer(
       tip:false, purchase:rate.price, materialPrice:rate.price * (1 + markup / 100), freight,
     };
   });
-  return offerDocuments(delivery,date,details,lines,plan);
+  return offerDocuments(access,delivery,date,details,lines,plan);
 }
 
 export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices: number[]) {
   if (!validOfferDetails(draft)) return {error:'Kontrollera offertuppgifterna.'};
-  const {result,sites,error} = await prepareTonPrices(draft,true);
+  const access = await tonPriceAccess();
+  if (!access) return {error:'Behörighet saknas.'};
+  const {result,sites,error} = await prepareTonPrices(access,draft,true);
   if (!result) return {error};
   const lines = advancedOfferLines(draft,result);
   if (!lines.length || lines.length !== draft.materials.length) return {error:'Kontrollera kalkylen innan du skapar offerten.'};
@@ -132,5 +163,5 @@ export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices
     };
   });
   const destinations = new Set(draft.materials.map(input => rounds.get(input.roundId)!.delivery.trim()));
-  return offerDocuments(destinations.size === 1 ? [...destinations][0] : '',draft.priceDate || stockholmDate(),draft,lines,plan);
+  return offerDocuments(access,destinations.size === 1 ? [...destinations][0] : '',draft.priceDate || stockholmDate(),draft,lines,plan);
 }

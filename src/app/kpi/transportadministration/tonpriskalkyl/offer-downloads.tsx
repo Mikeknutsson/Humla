@@ -2,46 +2,36 @@
 
 import {useState} from 'react';
 import {Download} from 'lucide-react';
+import {offerPdfUrl} from './offer-pdf-url';
 import styles from './workspace.module.css';
 
-function download(content: string, filename: string) {
-  const bytes = Uint8Array.from(atob(content), character => character.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url),30_000);
-}
-
-export default function OfferDownloads({date, disabled, create, onRetry}: {
-  date: string; disabled: boolean;
-  create: () => Promise<{pdf?: string; deliveryPlan?: string; error?: string}>;
+export default function OfferDownloads({disabled, create, onRetry}: {
+  disabled: boolean;
+  create: () => Promise<{id?: string; error?: string}>;
   onRetry?: () => void;
 }) {
-  const [documents,setDocuments] = useState<{pdf: string; deliveryPlan: string}>();
+  const [id,setId] = useState<string>();
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
 
   async function saveOffer() {
-    if (documents) {
-      download(documents.pdf,`Offert-material-${date}.pdf`);
-      return;
-    }
     setBusy(true);
     setError('');
     try {
       const response = await create();
-      if (!response.pdf || !response.deliveryPlan) {
-        setError(response.error ?? 'Offerten och leveransplanen kunde inte skapas.');
+      if (!response.id) {
+        setError(response.error ?? 'Offerten och leveransplanen kunde inte sparas.');
         return;
       }
-      setDocuments({pdf:response.pdf,deliveryPlan:response.deliveryPlan});
-      download(response.pdf,`Offert-material-${date}.pdf`);
+      setId(response.id);
+      const link = document.createElement('a');
+      link.href = offerPdfUrl(response.id,'offert');
+      link.download = '';
+      document.body.append(link);
+      link.click();
+      link.remove();
     } catch {
-      setError('Offerten och leveransplanen kunde inte skapas. Försök igen.');
+      setError('Offerten och leveransplanen kunde inte sparas. Försök igen.');
     } finally {
       setBusy(false);
     }
@@ -49,14 +39,14 @@ export default function OfferDownloads({date, disabled, create, onRetry}: {
 
   return <>
     <div className={styles.actions}>
-      <button type="button" className={styles.primary} disabled={disabled || busy} onClick={() => void saveOffer()}>
-        <Download size={16}/>{busy ? 'Skapar offert och leveransplan…' : 'Ladda ner offert som PDF'}
-      </button>
-      {documents && <button type="button" className="secondary" disabled={disabled}
-        onClick={() => download(documents.deliveryPlan,`Leveransplan-${date}.pdf`)}>
-        <Download size={16}/> Ladda ner intern leveransplan
+      {id ? <>
+        <a href={offerPdfUrl(id,'offert')} download><Download size={16}/> Ladda ner offert som PDF</a>
+        <a href={offerPdfUrl(id,'leveransplan')} download><Download size={16}/> Ladda ner intern leveransplan</a>
+      </> : <button type="button" className={styles.primary} disabled={disabled || busy} onClick={() => void saveOffer()}>
+        <Download size={16}/>{busy ? 'Sparar offert och leveransplan…' : 'Skapa och spara offert'}
       </button>}
     </div>
+    {id && <p role="status">Offerten och leveransplanen är sparade i <a href="#offertarkiv">offertarkivet</a>.</p>}
     {error && <div className={styles.actions}><p role="alert">{error}</p>
       {onRetry && <button type="button" className="secondary" onClick={() => {setError('');onRetry();}}>Räkna om</button>}
     </div>}

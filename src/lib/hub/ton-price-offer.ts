@@ -2,7 +2,7 @@ import type {QuarryComparison} from './quarry-comparison';
 import type {calculateTonPrices, TonPriceDraft} from './ton-price';
 
 export type OfferDetails = {customer: string; project: string; validity: string; terms: string};
-export const offerMoney = new Intl.NumberFormat('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2});
+export const offerMoney = new Intl.NumberFormat('sv-SE', {maximumFractionDigits:0,signDisplay:'negative'});
 
 export function parseOfferMarkup(value: string) {
   if (!/^\d{1,4}(?:[,.]\d{1,2})?$/.test(value.trim())) return null;
@@ -10,7 +10,10 @@ export function parseOfferMarkup(value: string) {
   return percent <= 1000 ? percent : null;
 }
 
-export const roundOfferMoney = (value: number) => Math.round((value + Math.abs(value) * Number.EPSILON) * 100) / 100;
+export function roundOfferMoney(value: number) {
+  const rounded = Math.round(Math.abs(value));
+  return value < 0 && rounded !== 0 ? -rounded : rounded;
+}
 
 export type OfferLine = {
   material: string;
