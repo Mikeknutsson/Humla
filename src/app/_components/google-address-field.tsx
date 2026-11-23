@@ -209,8 +209,8 @@ function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
   </section>;
 }
 
-export function GoogleAddressField({label, value, placeId, onChange, className}: {
-  label: string; value: string; placeId?: string; onChange: (value: string, placeId?: string) => void; className?: string;
+export function GoogleAddressField({label, value, placeId, onChange, onCommit, className}: {
+  label: string; value: string; placeId?: string; onChange: (value: string, placeId?: string) => void; onCommit?: (value: string) => void; className?: string;
 }) {
   const mapsKey = useGoogleMapsKey();
   const [open, setOpen] = useState(false);
@@ -221,7 +221,13 @@ export function GoogleAddressField({label, value, placeId, onChange, className}:
     trigger.current?.focus();
   }
   return <div className={className}>
-    <label>{label}<input value={value} maxLength={240} onChange={event => {
+    <label>{label}<input value={value} maxLength={240} onBlur={event => onCommit?.(event.currentTarget.value)}
+      onKeyDown={event => {
+        if (event.key === 'Enter' && onCommit) {
+          event.preventDefault();
+          onCommit(event.currentTarget.value);
+        }
+      }} onChange={event => {
       setOpen(false);
       onChange(event.target.value);
     }}/></label>

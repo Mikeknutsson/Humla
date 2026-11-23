@@ -252,6 +252,10 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
 
   const complete = result && result.materials.length > 0 && result.materials.every(row => !row.status);
   return <div className={`content ${styles.workspace}`}>
+    {bank && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} draft={draft}
+      date={draft.priceDate || today} onApply={useCheapest} onDetailsChange={change}/>}
+    <details className={styles.advanced}>
+      <summary>Avancerad kalkyl och inställningar</summary>
     <form className={styles.controls} onSubmit={event => {event.preventDefault(); void calculate();}}>
       <fieldset disabled={busy} className={styles.form}>
         <section className="panel">
@@ -269,8 +273,6 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
             </div>
           </details>
         </section>
-        {bank && <QuarryComparisonWorkspace key={JSON.stringify([draft.priceDate,draft.profile,draft.vehicles])} sites={bank.sites}
-          rates={activeRates} draft={draft} date={draft.priceDate || today} onApply={useCheapest}/>}
         <section className="panel">
           <div className={styles.actions}><h2>Platser och material</h2><Link href={materialPriceBankPath}>Öppna prisbanken</Link></div>
           {!bank && <p role="status">Prisbanken kunde inte hämtas. Manuell kalkyl är tillgänglig.</p>}
@@ -355,6 +357,7 @@ export default function TonPriceWorkspace({draftKey, bank, today}: {draftKey: st
           }))}</tbody></table></div>
       </details>)}
     </section>}
+    </details>
     {complete && <section className={`panel ${styles.offer}`}>
       <h2>Offert · material och transport</h2>
       {draft.customer && <p>Kund {draft.customer}</p>}
