@@ -1,6 +1,6 @@
 import {PDFDocument, StandardFonts, rgb, type PDFPage} from 'pdf-lib';
 import {elleholmsLogoJpeg} from '@/lib/kpi/internal-economy-logo';
-import {offerMoney, offerQuantity, offerTotal, type OfferDetails, type offerLines} from './ton-price-offer';
+import {offerMoney, type OfferDetails, type offerLines} from './ton-price-offer';
 
 const ink = rgb(.08,.11,.10);
 const muted = rgb(.31,.37,.35);
@@ -59,13 +59,11 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
     y = 714;
   }
 
-  const columns = {tonnes:360, unit:449, amount:right-9};
+  const priceEdge = right-9;
   function heading() {
     page.drawRectangle({x:left,y:y-7,width:right-left,height:24,color:green});
-    text('Material',left+8,y,10,true,white);
-    number('Mängd (ton)',columns.tonnes,y,true,white);
-    number('Lev. kr/ton',columns.unit,y,true,white);
-    number('Belopp (kr)',columns.amount,y,true,white);
+    text('Fraktion',left+8,y,10,true,white);
+    number('Levererat pris (kr/ton)',priceEdge,y,true,white);
     y -= 24;
   }
 
@@ -83,23 +81,13 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
   y -= 27;
   heading();
   for (const item of lines) {
-    const rows = wrapped(item.material,240);
+    const rows = wrapped(item.material,priceEdge-left-150);
     const height = Math.max(24,rows.length*14+10);
     if (y-height < 64) {newPage();heading();}
     rows.forEach((row,index) => text(row,left+8,y-index*14));
-    number(item.tonnes === null ? '-' : offerQuantity.format(item.tonnes),columns.tonnes,y);
-    number(offerMoney.format(item.unitPrice),columns.unit,y,true);
-    number(item.amount === null ? '-' : offerMoney.format(item.amount),columns.amount,y);
+    number(offerMoney.format(item.unitPrice),priceEdge,y,true);
     page!.drawLine({start:{x:left,y:y-height+14},end:{x:right,y:y-height+14},color:line,thickness:.6});
     y -= height;
-  }
-
-  const total = offerTotal(lines);
-  if (total !== null) {
-    if (y < 88) newPage();
-    text('Totalt exkl. moms',left+8,y,11,true);
-    number(offerMoney.format(total) + ' kr',columns.amount,y,true);
-    y -= 24;
   }
 
   const terms = wrapped(details.terms,right-left);
