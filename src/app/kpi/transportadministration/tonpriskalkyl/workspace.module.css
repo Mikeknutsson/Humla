@@ -1,0 +1,27 @@
+.workspace, .form, .controls { display: grid; gap: 16px; min-width: 0; }
+.form { border: 0; padding: 0; margin: 0; }
+.grid, .vehicles, .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px; }
+.vehicles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.grid > .pair { grid-column: span 2; }
+.field { display: grid; gap: 5px; min-width: 0; font-size: .875rem; font-weight: 650; align-content: start; }
+.field input, .field select { width: 100%; min-height: 38px; font: inherit; font-weight: 400; color: inherit; background: transparent; border: 1px solid #87909a; border-radius: 6px; padding: 7px 9px; }
+.card { min-width: 0; padding: 12px; border: 1px solid #87909a65; border-radius: 8px; margin: 0 0 12px; display: grid; gap: 12px; }
+.card legend { padding: 0 6px; font-weight: 700; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.actions a, .primary { display: inline-flex; align-items: center; gap: 7px; }
+.primary { background: #18563e; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+.metrics > div { border: 1px solid #87909a65; border-radius: 8px; padding: 12px; display: grid; gap: 6px; }
+.metrics strong { font-size: 1.35rem; }
+.table { overflow-x: auto; }
+.table table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border-bottom: 1px solid #87909a65; padding: 8px; text-align: left; }
+.internal details { margin-top: 12px; }
+.internal summary { cursor: pointer; font-weight: 700; }
+@media (max-width: 570px) { .grid > .pair { grid-column: auto; } }
+@media print {
+  :global(.kpi-app) :global(.sidebar), :global(.kpi-app) :global(.topbar), .controls, .internal { display: none !important; }
+  :global(.kpi-app), :global(.kpi-app) main, .workspace { display: block !important; width: 100%; padding: 0; margin: 0; }
+  .offer { color: #000 !important; background: #fff !important; box-shadow: none; border: 0; }
+  .table { overflow: visible; }
+}

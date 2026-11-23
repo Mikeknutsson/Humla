@@ -3,10 +3,10 @@ import { BarChart3, LayoutDashboard, ArrowLeft } from 'lucide-react';
 import {logout} from "@/app/kpi/login/actions";
 import styles from './kpi-detail-shell.module.css';
 import {KpiFollowupNav, type FollowupPage} from './kpi-followup-nav';
-import {KpiTransportAdministrationNav} from './kpi-transport-administration-nav';
+import {KpiTransportAdministrationNav, type TransportAdministrationPage} from './kpi-transport-administration-nav';
 import {KpiWorkspace,KpiSidebarToggle} from './kpi-workspace';
 
-export function KpiDetailShell({query,children,title='Kostnader & underlag',breadcrumb='Humla Dashboard / Transport / Underlag',extraNavigation,followup,personal=false,transportAdministration=false}:{query:string;children:React.ReactNode;title?:string;breadcrumb?:string;extraNavigation?:React.ReactNode;followup?:FollowupPage;personal?:boolean;transportAdministration?:boolean|'material'}) {
+export function KpiDetailShell({query,children,title='Kostnader & underlag',breadcrumb='Humla Dashboard / Transport / Underlag',extraNavigation,followup,personal=false,transportAdministration=false}:{query:string;children:React.ReactNode;title?:string;breadcrumb?:string;extraNavigation?:React.ReactNode;followup?:FollowupPage;personal?:boolean;transportAdministration?:TransportAdministrationPage}) {
  const p=new URLSearchParams(query);
  for(const k of ['level','grain','page','view','auth_retry']) p.delete(k);
  const overview=`/kpi?${p}`;
