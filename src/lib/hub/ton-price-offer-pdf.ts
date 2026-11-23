@@ -1,6 +1,6 @@
 import {PDFDocument, StandardFonts, rgb, type PDFPage} from 'pdf-lib';
 import {elleholmsLogoJpeg} from '@/lib/kpi/internal-economy-logo';
-import {offerMoney, type OfferDetails, type OfferLine} from './ton-price-offer';
+import {offerMoney, truckSupplementArticles, type OfferDetails, type OfferLine} from './ton-price-offer';
 import type {DeliveryPlanLine} from './ton-price-delivery-plan';
 
 const ink = rgb(.08,.11,.10);
@@ -131,23 +131,30 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
       y -= height;
     }
 
+    const supplements = truckSupplementArticles(lines);
+    const supplementPrice = (price: number | null) => price === null ? 'Beräknas separat' : offerMoney.format(price)+' kr/ton';
     if (y < 134) newPage();
     y -= 9;
     text('Tillägg enkelbil',left,y,13,true,green);
+    if (supplements.length === 1) number(supplementPrice(supplements[0].price),priceEdge,y,true);
     y -= 18;
     text('Gäller när bil + släp ersätts med enkelbil.',left,y,9,false,muted);
     y -= 23;
-    for (const item of lines) {
-      const rows = wrapped(item.material,priceEdge-left-150);
-      const height = Math.max(24,rows.length*14+10);
-      if (y-height < 64) {
-        newPage();
-        text('Tillägg enkelbil',left,y,13,true,green);
-        y -= 24;
+    if (supplements.length > 1) {
+      for (const item of supplements) {
+        const rows = wrapped(item.label,priceEdge-left-150);
+        for (const [index,value] of rows.entries()) {
+          if (y < 64) {
+            newPage();
+            text('Tillägg enkelbil',left,y,13,true,green);
+            y -= 24;
+          }
+          text(value,left+8,y);
+          if (index === 0) number(supplementPrice(item.price),priceEdge,y,true);
+          y -= 14;
+        }
+        y -= 10;
       }
-      rows.forEach((row,index) => text(row,left+8,y-index*14));
-      number(item.truckSupplement === null ? 'Beräknas separat' : offerMoney.format(item.truckSupplement)+' kr/ton',priceEdge,y,true);
-      y -= height;
     }
 
     const terms = wrapped(details.terms,right-left);
