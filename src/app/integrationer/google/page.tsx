@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import {ArrowLeft, CalendarDays, FileSpreadsheet, FolderOpen, Mail, MapPinned, Route} from 'lucide-react';
+import {ArrowLeft, CalendarDays, FileSpreadsheet, FolderOpen, Mail, MapPinned} from 'lucide-react';
 import {GoogleMapsProvider} from '@/app/_components/google-maps-provider';
 import {googleHubAccess} from '@/lib/hub/google-hub-access';
+import {optimizationConfig} from '@/lib/hub/google-route-optimization';
 import {readGoogleMapsConfig} from '@/lib/hub/google-maps-config';
 import MapsSettings from './maps-settings';
 import styles from './page.module.css';
@@ -10,7 +11,6 @@ const proposed = [
   {name:'Google Drive', Icon:FolderOpen, description:'Hämta prislistor från en vald projektmapp och arkivera godkända KMA-dokument och kalkyler där.'},
   {name:'Google Calendar', Icon:CalendarDays, description:'Visa besiktningar, verkstadsbesök och planerade leveranser i en delad kalender.'},
   {name:'Google Sheets', Icon:FileSpreadsheet, description:'Exportera en kalkyl eller en materialavstämning till ett delat blad.'},
-  {name:'Route Matrix och Route Optimization', Icon:Route, description:'Jämför många täkter mot en adress i ett anrop och testa hur flera leveranser och returlass kan samordnas.'},
 ];
 
 const dateTime = new Intl.DateTimeFormat('sv-SE',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Stockholm'});
@@ -40,13 +40,14 @@ export default async function GoogleHubPage() {
         {maps.updatedAt && <p className="mutedcopy">Uppdaterad {dateTime.format(new Date(maps.updatedAt))}</p>}
         {maps.source === 'environment' && <p className="mutedcopy">Nyckeln hämtas från Humlas miljöinställning.</p>}
         {access.isOwner ? <>
-          <GoogleMapsProvider browserKey={maps.browserKey}><MapsSettings canManage={!maps.error}/></GoogleMapsProvider>
+          <GoogleMapsProvider browserKey={maps.browserKey}><MapsSettings canManage={!maps.error} optimizationConfigured={Boolean(optimizationConfig(access.tenantId))}/></GoogleMapsProvider>
           <details className={styles.setup}>
             <summary>Så kopplar du Google Maps</summary>
             <ol>
-              <li>Välj ett Google Cloud-projekt med fakturering och aktivera Maps JavaScript API, Places API (New) och Routes API.</li>
-              <li>Skapa en webbläsarnyckel med webbplatsbegränsning till <code>https://humla-humla.vercel.app/*</code> och API-begränsning till dessa tre API:er.</li>
-              <li>Spara nyckeln här och använd kartan och ruttknappen för att testa.</li>
+              <li>Välj ett Google Cloud-projekt med fakturering och aktivera Maps JavaScript API, Places API (New), Routes API och Address Validation API.</li>
+              <li>Skapa en webbläsarnyckel med webbplatsbegränsning till <code>https://humla-humla.vercel.app/*</code> och API-begränsning till dessa fyra API:er.</li>
+              <li>Spara nyckeln här och testa karta, ruttmatris och adressvalidering.</li>
+              <li>Aktivera Route Optimization API och ge Humlas tjänstkonto behörigheten <code>routeoptimization.locations.use</code>. Tjänstkontot kopplas i Humlas serverinställningar.</li>
             </ol>
             <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Öppna Google Cloud Credentials</a>
           </details>

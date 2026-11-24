@@ -1,12 +1,12 @@
 'use client';
 
 import {useState, type FormEvent} from 'react';
-import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
+import {GoogleAddressField, googleRoadEstimate, googleRouteMatrix, validateGoogleAddress} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
-import {saveGoogleMapsKey} from './actions';
+import {saveGoogleMapsKey, testGoogleRouteOptimization} from './actions';
 import styles from './page.module.css';
 
-export default function MapsSettings({canManage}: {canManage: boolean}) {
+export default function MapsSettings({canManage, optimizationConfigured}: {canManage: boolean; optimizationConfigured: boolean}) {
   const browserKey = useGoogleMapsKey();
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,18 +33,23 @@ export default function MapsSettings({canManage}: {canManage: boolean}) {
     void save(key);
   }
 
-  async function testRoute() {
-    if (!browserKey) return;
+  async function runTest(test: () => Promise<string>, failure: string) {
     setBusy(true);
     setMessage('');
-    try {
-      const estimate = await googleRoadEstimate(browserKey, {address:'56.0528, 14.5819'},
-        point.address ? point : {address:'56.1714, 14.8624'});
-      const formatter = new Intl.NumberFormat('sv-SE', {maximumFractionDigits:2});
-      setMessage(`Google Routes svarar. Testrutt: ${formatter.format(Number(estimate.miles))} mil, ${formatter.format(Number(estimate.driveMinutes))} minuter.`);
-    } catch {
-      setMessage('Google kunde inte beräkna testrutten. Kontrollera nyckeln, faktureringen och att Routes API är aktiverat.');
-    } finally {setBusy(false);}
+    try {setMessage(await test());}
+    catch {setMessage(failure);}
+    finally {setBusy(false);}
+  }
+
+  const origin = {address:'56.0528, 14.5819'};
+  const destination = {address:'56.1714, 14.8624'};
+
+  function testRoute(key: string) {
+    return runTest(async () => {
+      const estimate = await googleRoadEstimate(key,origin,point.address ? point : destination);
+      const formatter = new Intl.NumberFormat('sv-SE',{maximumFractionDigits:2});
+      return `Google Routes svarar. Testrutt: ${formatter.format(Number(estimate.miles))} mil, ${formatter.format(Number(estimate.driveMinutes))} minuter.`;
+    }, 'Google kunde inte beräkna testrutten. Kontrollera nyckeln, faktureringen och att Routes API är aktiverat.');
   }
 
   return <>
@@ -61,8 +66,26 @@ export default function MapsSettings({canManage}: {canManage: boolean}) {
     {canManage && browserKey && <div className={styles.form}>
       <GoogleAddressField label="Testa adressökning och kartnål" value={point.address} placeId={point.id} className={styles.point}
         onChange={(address,id) => setPoint({address,id})}/>
-      <div className={styles.actions}><button type="button" disabled={busy} onClick={() => void testRoute()}>Testa ruttberäkning</button></div>
+      <div className={styles.actions}><button type="button" disabled={busy} onClick={() => void testRoute(browserKey)}>Testa ruttberäkning</button>
+        <button type="button" disabled={busy} onClick={() => void runTest(async () => {
+          const estimates = await googleRouteMatrix(browserKey,[origin,{address:'56.211, 15.278'}],destination);
+          return `Route Matrix gav mil och körtid för ${estimates.filter(Boolean).length} av ${estimates.length} teststräckor.`;
+        },'Route Matrix svarade inte. Kontrollera att Routes API är aktiverat och tillåtet för webbläsarnyckeln.')}>Testa Route Matrix</button>
+        <button type="button" disabled={busy} onClick={() => void runTest(async () => {
+          const result = await validateGoogleAddress(browserKey,'Vasagatan 1, 111 20 Stockholm');
+          return result.formattedAddress
+            ? `Address Validation svarar. ${result.confirmed ? 'Bekräftad testadress' : 'Testadress att granska'}: ${result.formattedAddress}.`
+            : 'Address Validation svarade utan en formaterad testadress.';
+        },'Address Validation svarade inte. Kontrollera att Address Validation API är aktiverat och tillåtet för webbläsarnyckeln.')}>Testa Address Validation</button>
+      </div>
     </div>}
+    <div className={styles.actions}>
+      <button type="button" disabled={busy || !optimizationConfigured} onClick={() => void runTest(async () => {
+        const result = await testGoogleRouteOptimization();
+        return result.error ?? result.message ?? 'Route Optimization svarade utan resultat.';
+      },'Route Optimization kunde inte testas.')}>Testa Route Optimization</button>
+      {!optimizationConfigured && <p className="mutedcopy">Route Optimization väntar på ett tjänstkonto i Humlas serverinställningar.</p>}
+    </div>
     {message && <p role="status">{message}</p>}
   </>;
 }

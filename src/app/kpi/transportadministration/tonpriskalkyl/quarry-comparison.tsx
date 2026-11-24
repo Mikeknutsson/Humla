@@ -3,7 +3,7 @@
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
 import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
-import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
+import {GoogleAddressField, googleRoadEstimate, googleRouteMatrix} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
@@ -100,17 +100,32 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
 
   const compare = useEffectEvent(async (key: string, signal: AbortSignal) => {
     try {
+      const routeKey = (site: MaterialSite) => JSON.stringify([mapsKey,site.address,site.mapPlaceId,destination]);
+      if (mapsKey && !isTestAddress) {
+        const pending = new Map(candidates.filter(site => !manual[site.id]?.miles.trim() &&
+          (site.address || site.mapPlaceId) && !routes.current.has(routeKey(site)))
+          .map(site => [routeKey(site),{address:site.address,id:site.mapPlaceId}]));
+        const entries = [...pending];
+        // One destination leaves room for 49 address- or Place-based origins.
+        for (let start = 0; start < entries.length; start += 49) {
+          const batch = entries.slice(start,start+49);
+          const matrix = googleRouteMatrix(mapsKey,batch.map(([, origin]) => origin),destination);
+          batch.forEach(([route, origin], index) => {
+            routes.current.set(route,matrix.then(estimates => {
+              const estimate = estimates[index];
+              if (!estimate) throw new Error('Ingen rutt');
+              return estimate;
+            },() => googleRoadEstimate(mapsKey,origin,destination)));
+          });
+        }
+      }
       const rounds = await Promise.all(candidates.map(async site => {
         let leg = manual[site.id];
-        if (!leg?.miles && mapsKey && !isTestAddress && (site.address || site.mapPlaceId)) {
-          const routeKey = JSON.stringify([mapsKey,site.address,site.mapPlaceId,destination]);
-          let lookup = routes.current.get(routeKey);
-          if (!lookup) {
-            lookup = googleRoadEstimate(mapsKey,{address:site.address,id:site.mapPlaceId},destination);
-            routes.current.set(routeKey,lookup);
-          }
+        const route = routeKey(site);
+        const lookup = routes.current.get(route);
+        if (!leg?.miles.trim() && lookup) {
           try {leg = await lookup;} catch {
-            if (routes.current.get(routeKey) === lookup) routes.current.delete(routeKey);
+            if (routes.current.get(route) === lookup) routes.current.delete(route);
           }
         }
         return {...newRound(crypto.randomUUID()), pickup:site.address,pickupSiteId:site.id,pickupPlaceId:site.mapPlaceId,
