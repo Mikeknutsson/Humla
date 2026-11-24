@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {useMemo,useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {reportAddress,statusLabels,yardMaterials,yardNumber,yardTotals,type Weighing,type ReportVersion} from '@/lib/hub/sortergard-report';
-import {reviewYard} from './actions';
+import {reviewYard,saveYardFacility} from './actions';
 import styles from './workspace.module.css';
 
 const pageSize=35;
@@ -55,6 +55,16 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
     } catch {setFeedback('Åtgärden kunde inte slutföras. Försök igen.');}
     finally {setBusy(false);}
   }
+  async function saveFacility(row:Weighing,side:'origin'|'destination',address:string) {
+    setBusy(true);setFeedback('');
+    try {
+      const response=await saveYardFacility(year,row.id,side,address);
+      setFeedback(response.error??'Anläggningsadressen används som reserv för den här Flintabkunden.');
+      if(response.saved) router.refresh();
+    } catch {setFeedback('Anläggningsadressen kunde inte sparas.');}
+    finally {setBusy(false);}
+  }
+
   function approve(entries:{id:string;candidate:number;expectedAddress:string}[]) {
     void run('review',{mode:'approve',items:entries},'Adresserna är verifierade och låsta.');
   }
@@ -75,7 +85,7 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
       {version&&<p><strong>Låst version {version.version}</strong> · {version.incomplete?'Ofullständig':'Alla adresser verifierade'}</p>}
       <div className="metrics-grid">{[
         ['Vägningar',rows.length],['Inlevererat (ton)',totals.in],['Utlevererat (ton)',totals.out],['Externleveranser (ton)',totals.external],
-        ['Verifierade',totals.verified],['Sannolika',totals.likely],['Adress saknas',totals.missing],['Obehandlade',totals.pending],
+        ['Verifierade',totals.verified],['Sannolika',totals.likely],['Anläggningsadress (reserv)',totals.fallback],['Adress saknas',totals.missing],['Obehandlade',totals.pending],
       ].map(([label,count])=><div className="metric-card" key={label}><span>{label}</span><strong>{yardNumber.format(Number(count))}</strong></div>)}
       <div className="metric-card"><span>Färdigbehandlade</span><strong>{new Intl.NumberFormat('sv-SE',{style:'percent',maximumFractionDigits:1}).format(ready)}</strong></div></div>
       {!version&&<div className={styles.actions}>
@@ -153,6 +163,10 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
             {detail.kind!=='Inleverans'&&<label>Leveransadress<input value={destination} maxLength={240} onChange={e=>setDestination(e.target.value)}/></label>}
             <button disabled={busy} onClick={()=>void run('review',{mode:'manual',origin,destination,items:[{id:detail.id}]},'Adressen är verifierad och låst.')}>Verifiera och lås adress</button>
           </div>
+          {(detail.status==='missing'||detail.status==='fallback')&&<div className={styles.actions}>
+            {detail.kind!=='Utleverans'&&<button disabled={busy||!origin.trim()} onClick={()=>void saveFacility(detail,'origin',origin)}>Spara som avsändarens anläggningsadress</button>}
+            {detail.kind!=='Inleverans'&&<button disabled={busy||!destination.trim()} onClick={()=>void saveFacility(detail,'destination',destination)}>Spara som mottagarens anläggningsadress</button>}
+          </div>}
         </>}
       </section>}
     </section>

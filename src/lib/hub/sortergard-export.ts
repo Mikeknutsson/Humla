@@ -21,7 +21,7 @@ export function yardExcel(rows:Weighing[],year:number,version?:number) {
     ['Sortergården – Pukavik 3:4'],['Rapportår',year],['Version',version??'Aktuell arbetsversion'],
     ['Status',rows.length&&totals.verified===rows.length?'Alla adresser verifierade':'Ofullständig'],
     ['Inleverans (ton)',totals.in],['Utleverans (ton)',totals.out],['Externleverans (ton)',totals.external],
-    ['Verifierade',totals.verified],['Sannolika',totals.likely],['Saknas',totals.missing],['Obehandlade',totals.pending],
+    ['Verifierade',totals.verified],['Sannolika',totals.likely],['Anläggningsadress (reserv)',totals.fallback],['Saknas',totals.missing],['Obehandlade',totals.pending],
   ]),'Rapportstatus');
   return Uint8Array.from(XLSX.write(workbook,{bookType:'xlsx',type:'buffer'}));
 }
@@ -57,7 +57,7 @@ export async function yardPdf(rows:Weighing[],year:number,version?:number) {
   heading();
   text(`Vägningar ${format(rows.length)} · In ${format(totals.in)} ton · Ut ${format(totals.out)} ton · Externt ${format(totals.external)} ton`,36,760);
   y-=18;
-  text(`Verifierade ${totals.verified} · Sannolika ${totals.likely} · Saknas ${totals.missing} · Obehandlade ${totals.pending}`,36,760);
+  text(`Verifierade ${totals.verified} · Sannolika ${totals.likely} · Anläggningsadress (reserv) ${totals.fallback} · Saknas ${totals.missing} · Obehandlade ${totals.pending}`,36,760);
   y-=33;
   const xs=[36,156,419,499,579,660,727];
   const widths=[112,255,72,72,72,59,79];

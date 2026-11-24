@@ -11,3 +11,4 @@
 .detail dl { display:grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap:6px 15px; }
 .detail dd { margin:0; overflow-wrap:anywhere; }
 .filterNote { font-size:.875rem; }
+.fallback { color:#15456b; background:#dceefe; }
