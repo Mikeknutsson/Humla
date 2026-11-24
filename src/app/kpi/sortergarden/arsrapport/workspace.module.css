@@ -1,0 +1,13 @@
+.actions, .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin-block:12px; }
+.filters label { display:grid; gap:4px; font-size:.875rem; }
+.filters input, .filters select { max-width:230px; min-height:36px; }
+.badge { display:inline-block; border-radius:6px; padding:3px 7px; font-size:.82rem; font-weight:700; }
+.verified { color:#124429; background:#d7efdf; }
+.likely { color:#604700; background:#fff0bb; }
+.missing { color:#851e26; background:#ffe0e1; }
+.pending { color:#394755; background:#e5e9ee; }
+.detail { padding:12px; margin:9px 0; border:1px solid #829088; border-radius:8px; }
+.detail summary { cursor:pointer; }
+.detail dl { display:grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap:6px 15px; }
+.detail dd { margin:0; overflow-wrap:anywhere; }
+.filterNote { font-size:.875rem; }

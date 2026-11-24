@@ -374,6 +374,10 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
         <Link prefetch={false} className={view === "overview" ? "nav-overview active" : "nav-overview"} href={kpiHref("overview")} onClick={switchFinancialView}><LayoutDashboard size={18}/>Översikt</Link>
         <KpiFollowupNav query={periodQuery} expanded={view === "kpi"} active={view === "kpi" ? (costCenter === "20" ? "recycling" : costCenter === "30" ? "trucks" : undefined) : undefined} onNavigate={() => setMobileMenu(false)}/>
         {canManage&&<KpiTransportAdministrationNav onNavigate={() => setMobileMenu(false)}/>}
+        {canManage&&<details className="report-nav-group" style={{margin:"4px 0"}}>
+          <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><Truck size={18}/>Sortergården <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
+          <div style={{paddingLeft:18,display:"grid"}}><Link href="/kpi/sortergarden/arsrapport" prefetch={false} onClick={()=>setMobileMenu(false)}><FileSpreadsheet size={18}/>Årsrapport Miljöförbundet</Link></div>
+        </details>}
         <details className="report-nav-group" open={view === "internal" || view === "monthly"} style={{margin:"4px 0"}}>
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><FileSpreadsheet size={18}/>Rapporter <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>
@@ -386,6 +390,7 @@ export function KpiApp({ internalDefaultPeriod, monthPeriod, overviewMonthly, ac
           <summary style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",padding:"12px 14px",fontWeight:600,listStyle:"none"}}><Settings2 size={18}/>Administration <ChevronRight size={16} style={{marginLeft:"auto"}}/></summary>
           <div style={{paddingLeft:18,display:"grid"}}>
             <Link prefetch={false} className={view === "import" ? "active" : ""} href={kpiHref("import")} onClick={() => setMobileMenu(false)}><UploadCloud size={18}/>Dataimport</Link>
+            {canManage&&<Link prefetch={false} href="/kpi/import/flintab" onClick={()=>setMobileMenu(false)}><UploadCloud size={18}/>Import – Flintab Fordonsvåg</Link>}
             {canManage&&<Link prefetch={false} className={view === "importhistorik" ? "active" : ""} href={kpiHref("importhistorik")} onClick={() => setMobileMenu(false)}><FileSpreadsheet size={18}/>Importhistorik</Link>}
             <Link className={view === "review" ? "active" : ""} href={kpiHref("review")} prefetch={false} onClick={() => setMobileMenu(false)}><CheckCircle2 size={17}/>Granskning</Link>
             <Link href={`/kpi/avstamning?${periodQuery}`} prefetch={false} onClick={() => setMobileMenu(false)}><ShieldCheck size={17}/>Avstämning &amp; regler</Link>
