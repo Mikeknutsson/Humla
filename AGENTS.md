@@ -46,3 +46,13 @@ CORE-001 is introduced additively. Existing KPI mappings must continue to work w
 The current canonical identity foundation is `hub_objects` + `hub_identity_keys`. Extend this identity layer rather than creating a parallel identity registry.
 
 The database also contains the permanent architecture record `humla_architecture_rules.CORE-001`. Code changes that conflict with CORE-001 require an explicit architecture decision rather than a local workaround.
+
+## KPI-001 – Evidence check before classifying revenue and costs
+
+Before changing a financial classification or adding a classification rule:
+
+1. Trace the amount to the original article or invoice row. Compare the invoice, voucher or order reference, date, amount, quantity and unit price where available.
+2. Identify separately charged transport, materials, and tipping or treatment on the same order. Use the vehicle registration and ledger account as supporting evidence.
+3. Compare accounting and operational copies by invoice reference, date and amount. Count each business event once.
+4. Verify ambiguous ownership or a cost split with the original documents or the responsible user. Retain the evidence for the decision.
+5. After applying the classification, reconcile the affected totals, verify that the report still counts the same business events, and check that the rule is repeatable on subsequent imports.
