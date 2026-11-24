@@ -1,3 +1,4 @@
+import {ForemanMonthlyResults,type MonthlyResultPair} from './foreman-monthly-results';
 import {ForemanTime} from './foreman-time';
 import {ForemanMileage} from './foreman-mileage';
 import Link from 'next/link';
@@ -21,7 +22,7 @@ function foremanCardStatus(metrics?: TransportMetrics) {
  return 'neutral';
 }
 
-function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foremanMode=false,dailyTarget,mileage,timeMetrics}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis;costBreakdown?:TransportCostBreakdown[];foremanMode?:boolean;dailyTarget?:DailyRevenueTarget;mileage?:TransportMileage;timeMetrics?:TransportTime}) {
+function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foremanMode=false,dailyTarget,mileage,timeMetrics,monthlyResults}:{label:string;href?:string;metrics:TransportMetrics;previous?:TransportMetrics;analysis?:TransportCardAnalysis;costBreakdown?:TransportCostBreakdown[];foremanMode?:boolean;dailyTarget?:DailyRevenueTarget;mileage?:TransportMileage;timeMetrics?:TransportTime;monthlyResults?:MonthlyResultPair[]}) {
  const status=foremanMode?foremanCardStatus(metrics):metrics.deviation_pp==null?"unknown":metrics.deviation_pp<0?"below":"on-target";
  return <article className={styles.card} data-target-status={status}><div className={styles.cardTop}><h3>{href?<Link prefetch={false} href={href}>{label}</Link>:label}</h3>
  <KpiMarginGauge label={label} margin={metrics.margin_percent} target={metrics.target_margin_percent}/></div>
@@ -34,6 +35,7 @@ function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foreman
  <dt>Fg. år · marginal</dt><dd>{pct(previous?.margin_percent)}</dd>
  <dt>Fg. år · resultat</dt><dd>{money(previous?.result)}</dd>
  </dl>
+ {monthlyResults&&<ForemanMonthlyResults label={label} months={monthlyResults}/>}
  {foremanMode&&<><ForemanMileage value={mileage}/><ForemanTime value={timeMetrics}/></>}
  {analysis&&analysis.insights.length>0&&<details className={styles.explanation} aria-label={`Avvikelse – ${label}`}>
  <summary>{analysis.insights[0].title} · Visa jämförelse</summary>{analysis.insights[0].evidence.map(e=><p key={e}>{e}</p>)}
@@ -44,6 +46,31 @@ function BalanceCard({label,href,metrics,previous,analysis,costBreakdown,foreman
 export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGroup,analyses,hideGroups=false,foremanMode=false,groupUnits=false,dailyTargets,dailyPeriod}:{report:TransportScorecard;prior:TransportScorecard|null;base:string;selectedUnit:string|null;selectedGroup:string|null;analyses?:{units:Record<string,TransportCardAnalysis>;groups:Record<string,TransportCardAnalysis>};hideGroups?:boolean;foremanMode?:boolean;groupUnits?:boolean;dailyTargets?:Record<string,DailyRevenueTarget>;dailyPeriod?:{from:string;to:string;days:number;workdays:number;vacationDays:number}}) {
  const link = (key:string,value:string) => {const p=new URLSearchParams(base);p.set(key,value);return '/kpi/transportledare?'+p;};
  const all=new URLSearchParams(base);all.delete('group');
+ const monthlyByUnit=new Map<string|null,Map<string,number>>();
+ const previousByUnit=new Map<string|null,Map<string,number>>();
+ if(foremanMode) {
+  for(const [rows,byUnit] of [[report.monthly_unit_results,monthlyByUnit],[prior?.monthly_unit_results,previousByUnit]] as const) {
+   for(const {unit_id,month_start,result} of rows??[]) {
+    const values=byUnit.get(unit_id)??new Map<string,number>();
+    values.set(month_start,result);
+    byUnit.set(unit_id,values);
+   }
+  }
+ }
+ const months:string[]=[];
+ if(monthlyByUnit.size||previousByUnit.size) {
+  const selectedMonths=all.get('months')?.split(',').map(Number);
+  const month=new Date(report.from.slice(0,7)+'-01T00:00:00Z');
+  while(month.toISOString().slice(0,10)<=report.to) {
+   if(!selectedMonths||selectedMonths.includes(month.getUTCMonth()+1))months.push(month.toISOString().slice(0,10));
+   month.setUTCMonth(month.getUTCMonth()+1);
+  }
+ }
+ const unitMonths=(id:string|null)=>months.map(month=>({
+  month,
+  current:monthlyByUnit.get(id)?.get(month)??null,
+  previous:previousByUnit.get(id)?.get(`${Number(month.slice(0,4))-1}${month.slice(4)}`)??null,
+ }));
  const unitGroups=new Map<string,TransportScorecard['units']>();
  if(groupUnits){
   const memberships=new Map<string,Set<string>>();
@@ -62,7 +89,7 @@ export function TransportBalanceCards({report,prior,base,selectedUnit,selectedGr
    unitGroups.set(group,units);
   }
  }
- const renderUnit=(u:TransportScorecard['units'][number])=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} dailyTarget={dailyTargets?.[u.unit_id??'']} costBreakdown={u.cost_breakdown} mileage={u.mileage} timeMetrics={u.time_metrics} foremanMode={foremanMode} href={!foremanMode&&u.unit_id?link('unit',u.unit_id):undefined}/>;
+ const renderUnit=(u:TransportScorecard['units'][number])=><BalanceCard key={u.unit_id??'unassigned'} label={u.unit_name??'Ej kopplat till enhet'} metrics={u} previous={prior?.units.find(p=>p.unit_id===u.unit_id)} analysis={analyses?.units[u.unit_id??'unassigned']} dailyTarget={dailyTargets?.[u.unit_id??'']} costBreakdown={u.cost_breakdown} monthlyResults={months.length?unitMonths(u.unit_id):undefined} mileage={u.mileage} timeMetrics={u.time_metrics} foremanMode={foremanMode} href={!foremanMode&&u.unit_id?link('unit',u.unit_id):undefined}/>;
  return <>
  {!hideGroups&&<section className="panel"><h2>{selectedGroup??'Verksamhetsområden'}</h2>
  {selectedGroup&&<Link href={'/kpi/transportledare?'+all}>← Alla verksamhetsområden</Link>}
