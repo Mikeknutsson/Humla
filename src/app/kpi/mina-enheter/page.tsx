@@ -10,6 +10,7 @@ import {TransportBalanceCards} from '@/app/_components/kpi-transport-balance';
 import {buildTransportCardAnalyses} from '@/lib/hub/transport-card-analysis';
 import {ForemanSawBreakdown,type SawBreakdown} from '@/app/_components/foreman-saw-breakdown';
 import {ForemanAreaKpis,type AreaKpis} from '@/app/_components/foreman-area-kpis';
+import {ForemanWeighingKpis,type ForemanWeighingReport} from '@/app/_components/foreman-weighing-kpis';
 import {ForemanResultTrend} from '@/app/_components/foreman-result-trend';
 import type {ForemanTrend} from '@/lib/kpi/foreman-trend';
 import {ForemanPeriodPicker} from '@/app/_components/foreman-period-picker';
@@ -69,6 +70,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  const todayText=`${today.year}-${String(today.month).padStart(2,'0')}-${String(today.day).padStart(2,'0')}`;
  const historyTo=to<todayText?to:todayText;
  const name=combinedTransport?'Transport':owner?profileRows.find(p=>p.user_id===target)?.display_name:member.display_name;
+ const sortergardenView=name?.trim().toLocaleLowerCase('sv-SE')==='sortergården';
  const olaView=/^ola(?:\s|$)/i.test(name?.trim()??'');
  const groupUnits=combinedTransport||olaView;
  const base=new URLSearchParams({from,to,user_id:target,...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})}).toString();
@@ -76,12 +78,15 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <header className="panel"><h2>{owner?name??'Arbetsledarvy':'Mitt område'}</h2><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> {combinedTransport?'Du ser Marcus, Olas och Pierres tilldelade underlag.':'Du ser profilens avgränsade underlag.'} <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
  {controls}</header>
+ {sortergardenView&&<Suspense key={'weighing:'+base} fallback={<section className="panel" role="status">Hämtar vägningar för vald period …</section>}>
+  <WeighingReport db={db} args={args}/>
+ </Suspense>}
  <Suspense key={base} fallback={
   <Suspense fallback={<section className="panel" role="status">Hämtar underlaget för vald period …</section>}>
    <LoadingForemanReport db={db} args={args}/>
   </Suspense>
  }>
-  <ForemanReport db={db} args={args} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} olaView={olaView} combinedTransport={combinedTransport}/>
+  <ForemanReport db={db} args={args} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} olaView={olaView} combinedTransport={combinedTransport} sortergardenView={sortergardenView}/>
  </Suspense>
  </div>;
  return <ForemanDashboard owner={owner} query={period.toString()}>{view}</ForemanDashboard>;
@@ -89,6 +94,11 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
 
 type ForemanClient=Awaited<ReturnType<typeof createClient>>;
 type ForemanArgs={p_tenant:string;p_from:string;p_to:string;p_user:string;p_months?:number[]};
+
+async function WeighingReport({db,args}:{db:ForemanClient;args:ForemanArgs}) {
+ const {data,error}=await db.rpc('hub_foreman_weighing_kpis_v1',args);
+ return <ForemanWeighingKpis report={error?null:data as ForemanWeighingReport|null}/>;
+}
 
 function ForemanTotals({summary}:{summary:TransportScorecard['summary']}) {
  return <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{summary[key]==null?'Underlag saknas':money.format(summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(summary.margin_percent)+' %'}</strong></article></section>;
@@ -103,8 +113,8 @@ async function LoadingForemanReport({db,args}:{db:ForemanClient;args:ForemanArgs
  </>;
 }
 
-async function ForemanReport({db,args,base,continuous,historyTo,groupUnits,olaView,combinedTransport}:{
- db:ForemanClient;args:ForemanArgs;base:string;continuous:boolean;historyTo:string;groupUnits:boolean;olaView:boolean;combinedTransport:boolean;
+async function ForemanReport({db,args,base,continuous,historyTo,groupUnits,olaView,combinedTransport,sortergardenView}:{
+ db:ForemanClient;args:ForemanArgs;base:string;continuous:boolean;historyTo:string;groupUnits:boolean;olaView:boolean;combinedTransport:boolean;sortergardenView:boolean;
 }) {
  const {p_from:from,p_to:to,p_user:target}=args;
  // Load the primary report before optional comparisons compete for database CPU.
@@ -117,13 +127,13 @@ async function ForemanReport({db,args,base,continuous,historyTo,groupUnits,olaVi
  <ForemanTotals summary={report.summary}/>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
  <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
- <KpiDriverCount data={(report as TransportScorecard & {driver_count?:DriverCount}).driver_count}/>
+ {!sortergardenView&&<KpiDriverCount data={(report as TransportScorecard & {driver_count?:DriverCount}).driver_count}/>}
  {!continuous?<section className="panel"><h2>Resultatets utveckling</h2><p>Trenddiagrammet visas inte för ett urval av separata månader.</p></section>:
  <Suspense key={target+from+to+report.generation} fallback={<section className="panel" role="status"><h2>Resultatets utveckling</h2><p>Hämtar trenden …</p></section>}>
   <ResultTrend db={db} args={args} generation={report.generation}/>
  </Suspense>}
  <Suspense key={base+report.generation} fallback={<section className="panel" role="status"><h2>Enheternas balans</h2><p>Hämtar enheter och jämförelse …</p></section>}>
-  <UnitCards db={db} args={args} report={report} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} hideSoldVehicle={olaView}/>
+  <UnitCards db={db} args={args} report={report} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} hideSoldVehicle={olaView} hideVehicleMetrics={sortergardenView}/>
  </Suspense>
  <p>{combinedTransport?'Tilldelade enheter för Marcus, Ola och Pierre på de datum ansvaret gäller.':'Endast dina tilldelade enheter och de datum ansvaret gäller.'} Kostnadsfördelningen visas direkt på varje enhetskort. Inga uppgifter kan ändras i denna vy.</p>
  </>}
@@ -138,7 +148,7 @@ async function ResultTrend({db,args,generation}:{db:ForemanClient;args:ForemanAr
  return <section className="panel"><h2>Resultatets utveckling</h2><p role="status">Trenden kunde inte hämtas. Försök uppdatera vyn.</p></section>;
 }
 
-async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits,hideSoldVehicle}:{db:ForemanClient;args:ForemanArgs;report:TransportScorecard;base:string;continuous:boolean;historyTo:string;groupUnits:boolean;hideSoldVehicle:boolean}) {
+async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits,hideSoldVehicle,hideVehicleMetrics}:{db:ForemanClient;args:ForemanArgs;report:TransportScorecard;base:string;continuous:boolean;historyTo:string;groupUnits:boolean;hideSoldVehicle:boolean;hideVehicleMetrics:boolean}) {
  const [old,history]=await Promise.all([
   db.rpc('hub_foreman_comparison_v1',{...args,p_from:previousYearDate(args.p_from),p_to:previousYearDate(args.p_to)}),
   continuous&&args.p_to>historyTo&&args.p_from<=historyTo
@@ -152,5 +162,5 @@ async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits,hi
  const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
  const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
  const displayedReport=hideSoldVehicle?{...report,units:report.units.filter(unit=>unit.unit_name!=='RKO309')}:report;
- return <TransportBalanceCards report={displayedReport} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(displayedReport,prior)} hideGroups foremanMode groupUnits={groupUnits} dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
+ return <TransportBalanceCards report={displayedReport} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(displayedReport,prior)} hideGroups foremanMode groupUnits={groupUnits} hideVehicleMetrics={hideVehicleMetrics} dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
 }
