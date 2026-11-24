@@ -25,12 +25,27 @@ const regionalCenter = {lat:56.174, lng:14.77};
 type Place = {id?: string; formattedAddress?: string; location?: LatLng | null; fetchFields: (options: {fields: string[]}) => Promise<unknown>};
 type SelectEvent = Event & {placePrediction: {toPlace: () => Place}};
 type Places = {Place: new (options: {id: string}) => Place; PlaceAutocompleteElement: new (options: {includedRegionCodes: string[]}) => HTMLElement};
-type Routes = {Route: {computeRoutes(options: {
-  origin: string | Place | Point; destination: string | Place | Point; travelMode: 'DRIVING'; fields: string[];
-}): Promise<{routes: {distanceMeters?: number; durationMillis?: number}[]}>}};
+type GoogleLocation = {address: string; id?: string};
+type GoogleWaypoint = string | Place | Point;
+type RoadMetrics = {distanceMeters?: number; durationMillis?: number};
+type Routes = {
+  Route: {computeRoutes(options: {
+    origin: GoogleWaypoint; destination: GoogleWaypoint; travelMode: 'DRIVING'; fields: string[];
+  }): Promise<{routes: RoadMetrics[]}>};
+  RouteMatrix: {computeRouteMatrix(options: {
+    origins: GoogleWaypoint[]; destinations: GoogleWaypoint[]; travelMode: 'DRIVING'; fields: string[];
+  }): Promise<{matrix: {rows: {items: RoadMetrics[]}[]}}>};
+};
+type AddressValidation = {AddressValidation: {fetchAddressValidation(options: {
+  address: {regionCode: string; addressLines: string[]};
+}): Promise<{address?: {formattedAddress?: string}; verdict?: {
+  addressComplete?: boolean; validationGranularity?: string; hasUnconfirmedComponents?: boolean;
+  hasInferredComponents?: boolean; hasReplacedComponents?: boolean;
+}}>}};
 type Maps = {
   importLibrary(name: 'places'): Promise<Places>;
   importLibrary(name: 'routes'): Promise<Routes>;
+  importLibrary(name: 'addressValidation'): Promise<AddressValidation>;
   importLibrary(name: 'maps'): Promise<{Map: new (host: HTMLElement, options: {
     center: Point; zoom: number; clickableIcons: boolean; streetViewControl: boolean;
   }) => MapView}>;
@@ -83,18 +98,50 @@ function pointLabel(point: Point) {
   return `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
 }
 
-export async function googleRoadEstimate(mapsKey: string, origin: {address: string; id?: string}, destination: {address: string; id?: string}) {
+function waypoint({address,id}: GoogleLocation, Place: Places['Place']): GoogleWaypoint {
+  return parsePoint(address) ?? (id ? new Place({id}) : address);
+}
+
+function roadEstimate(metrics?: RoadMetrics) {
+  if (metrics?.distanceMeters == null || metrics.durationMillis == null) return undefined;
+  return {miles:String(Number((metrics.distanceMeters / 10000).toFixed(3))),
+    driveMinutes:String(Number((metrics.durationMillis / 60000).toFixed(1)))};
+}
+
+const roadFields = ['distanceMeters','durationMillis'];
+
+export async function googleRoadEstimate(mapsKey: string, origin: GoogleLocation, destination: GoogleLocation) {
   const {Place} = await loadPlaces(mapsKey);
   const {Route} = await (window as GoogleWindow).google!.maps.importLibrary('routes');
   const {routes} = await Route.computeRoutes({
-    origin: parsePoint(origin.address) ?? (origin.id ? new Place({id:origin.id}) : origin.address),
-    destination: parsePoint(destination.address) ?? (destination.id ? new Place({id:destination.id}) : destination.address),
-    travelMode:'DRIVING', fields:['distanceMeters','durationMillis'],
+    origin:waypoint(origin,Place), destination:waypoint(destination,Place), travelMode:'DRIVING', fields:roadFields,
   });
-  const first = routes[0];
-  if (first?.distanceMeters == null || first.durationMillis == null) throw new Error('Ingen rutt');
-  return {miles:String(Number((first.distanceMeters / 10000).toFixed(3))),
-    driveMinutes:String(Number((first.durationMillis / 60000).toFixed(1)))};
+  const estimate = roadEstimate(routes[0]);
+  if (!estimate) throw new Error('Ingen rutt');
+  return estimate;
+}
+
+export async function googleRouteMatrix(mapsKey: string, origins: GoogleLocation[], destination: GoogleLocation) {
+  const {Place} = await loadPlaces(mapsKey);
+  const {RouteMatrix} = await (window as GoogleWindow).google!.maps.importLibrary('routes');
+  const {matrix} = await RouteMatrix.computeRouteMatrix({
+    origins:origins.map(origin => waypoint(origin,Place)), destinations:[waypoint(destination,Place)],
+    travelMode:'DRIVING', fields:roadFields,
+  });
+  return origins.map((_, index) => roadEstimate(matrix.rows[index]?.items[0]));
+}
+
+export async function validateGoogleAddress(mapsKey: string, address: string) {
+  await loadPlaces(mapsKey);
+  const {AddressValidation} = await (window as GoogleWindow).google!.maps.importLibrary('addressValidation');
+  const {address: result, verdict} = await AddressValidation.fetchAddressValidation({
+    address:{regionCode:'SE',addressLines:[address]},
+  });
+  return {
+    formattedAddress:result?.formattedAddress,
+    confirmed:Boolean(verdict?.addressComplete && ['PREMISE','SUB_PREMISE'].includes(verdict.validationGranularity ?? '') &&
+      !verdict.hasUnconfirmedComponents && !verdict.hasInferredComponents && !verdict.hasReplacedComponents),
+  };
 }
 
 function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
