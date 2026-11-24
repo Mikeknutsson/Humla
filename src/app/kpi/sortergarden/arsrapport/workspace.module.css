@@ -12,3 +12,9 @@
 .detail dd { margin:0; overflow-wrap:anywhere; }
 .filterNote { font-size:.875rem; }
 .fallback { color:#15456b; background:#dceefe; }
+
+.addressReview { display: grid; gap: 12px; margin-block: 12px; }
+.addressReview > div { display: grid; gap: 6px; }
+.addressReview > div > label { display: grid; gap: 4px; }
+.addressReview > div > label input { width: min(100%, 28rem); }
+.addressReview > button, .addressReview > div > :is(button, a) { justify-self: start; }

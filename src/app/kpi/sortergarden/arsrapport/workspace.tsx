@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import {GoogleAddressField} from '@/app/_components/google-address-field';
 import {useMemo,useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {reportAddress,statusLabels,yardMaterials,yardNumber,yardTotals,type Weighing,type ReportVersion} from '@/lib/hub/sortergard-report';
@@ -158,9 +159,9 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
             {detail.kind!=='Utleverans'&&<button onClick={()=>setOrigin(item.address)}>Använd som ursprung</button>}
             {detail.kind!=='Inleverans'&&<button onClick={()=>setDestination(item.address)}>Använd som destination</button>}
           </li>):<li>Inga arbetsplatsadresser matchade sökningen.</li>}</ul>}
-          <div className={styles.filters}>
-            {detail.kind!=='Utleverans'&&<label>Ursprungsadress<input value={origin} maxLength={240} onChange={e=>setOrigin(e.target.value)}/></label>}
-            {detail.kind!=='Inleverans'&&<label>Leveransadress<input value={destination} maxLength={240} onChange={e=>setDestination(e.target.value)}/></label>}
+          <div className={styles.addressReview} key={detail.id}>
+            {detail.kind!=='Utleverans'&&<GoogleAddressField label="Ursprungsadress" value={origin} onChange={setOrigin}/>}
+            {detail.kind!=='Inleverans'&&<GoogleAddressField label="Leveransadress" value={destination} onChange={setDestination}/>}
             <button disabled={busy} onClick={()=>void run('review',{mode:'manual',origin,destination,items:[{id:detail.id}]},'Adressen är verifierad och låst.')}>Verifiera och lås adress</button>
           </div>
           {(detail.status==='missing'||detail.status==='fallback')&&<div className={styles.actions}>
