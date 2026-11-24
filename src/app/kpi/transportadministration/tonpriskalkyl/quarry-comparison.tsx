@@ -106,8 +106,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           const routeKey = JSON.stringify([mapsKey,site.address,site.mapPlaceId,destination]);
           let lookup = routes.current.get(routeKey);
           if (!lookup) {
-            lookup = googleRoadEstimate(mapsKey,{address:site.address,id:site.mapPlaceId},destination)
-              .then(estimate => ({miles:estimate.miles,driveMinutes:''}));
+            lookup = googleRoadEstimate(mapsKey,{address:site.address,id:site.mapPlaceId},destination);
             routes.current.set(routeKey,lookup);
           }
           try {leg = await lookup;} catch {
@@ -168,7 +167,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           : !mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
           {' '}<Link href="/integrationer/google">Öppna Google-inställningar</Link></p> :
           missingRoutes ? <p>Google kunde inte hämta alla rutter. Lägg till körsträckan för de täkter som saknas.</p> : null}
-        <p>Ange mil enkel väg. Om körtiden lämnas tom räknar Humla med 11 min/mil.</p>
+        <p>Google uppskattar mil och körtid enkel väg för bil. Justera vid behov för lastbil. Vid manuell körsträcka utan körtid använder Humla 11 min/mil.</p>
         {candidates.map(site => {
           const route = current?.rounds?.find(round => round.pickupSiteId === site.id)?.outbound;
           return <div className={`${styles.grid} ${styles.routeRow}`} key={site.id}>
@@ -236,9 +235,9 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       {row.missing.length > 0 && <p>Körunderlag saknas eller kan inte användas för {row.missing.join(', ')}.</p>}
       {row.options.length > 0 && <details>
         <summary>Visa jämförelse</summary>
-        <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Material kr/ton</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
+        <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Material kr/ton</th><th>Mil enkel väg</th><th>Min enkel väg</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
           <tbody>{row.options.map(option => <tr key={option.rate.id}><td>{option.site.name}</td><td>{option.rate.material}</td>
-            <td>{offerMoney.format(option.rate.price)}</td><td>{offerMoney.format(option.freight)}</td><td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
+            <td>{offerMoney.format(option.rate.price)}</td><td>{option.round.outbound.miles}</td><td>{option.round.outbound.driveMinutes || 'Schablon'}</td><td>{offerMoney.format(option.freight)}</td><td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}
     </section>)}
     {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied === inputKey}
