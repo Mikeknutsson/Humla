@@ -76,7 +76,11 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  <header className="panel"><h2>{owner?name??'Arbetsledarvy':'Mitt område'}</h2><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> {combinedTransport?'Du ser Marcus, Olas och Pierres tilldelade underlag.':'Du ser profilens avgränsade underlag.'} <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
  {controls}</header>
- <Suspense key={base} fallback={<section className="panel" role="status">Hämtar underlaget för vald period …</section>}>
+ <Suspense key={base} fallback={
+  <Suspense fallback={<section className="panel" role="status">Hämtar underlaget för vald period …</section>}>
+   <LoadingForemanReport db={db} args={args}/>
+  </Suspense>
+ }>
   <ForemanReport db={db} args={args} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} olaView={olaView} combinedTransport={combinedTransport}/>
  </Suspense>
  </div>;
@@ -85,6 +89,19 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
 
 type ForemanClient=Awaited<ReturnType<typeof createClient>>;
 type ForemanArgs={p_tenant:string;p_from:string;p_to:string;p_user:string;p_months?:number[]};
+
+function ForemanTotals({summary}:{summary:TransportScorecard['summary']}) {
+ return <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{summary[key]==null?'Underlag saknas':money.format(summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(summary.margin_percent)+' %'}</strong></article></section>;
+}
+
+async function LoadingForemanReport({db,args}:{db:ForemanClient;args:ForemanArgs}) {
+ const {data,error}=await db.rpc('hub_foreman_comparison_v1',args);
+ const report=error?null:data as TransportScorecard|null;
+ return <>
+  {report?.units.length ? <ForemanTotals summary={report.summary}/> : null}
+  <section className="panel" role="status">Hämtar hela underlaget för vald period …</section>
+ </>;
+}
 
 async function ForemanReport({db,args,base,continuous,historyTo,groupUnits,olaView,combinedTransport}:{
  db:ForemanClient;args:ForemanArgs;base:string;continuous:boolean;historyTo:string;groupUnits:boolean;olaView:boolean;combinedTransport:boolean;
@@ -97,7 +114,7 @@ async function ForemanReport({db,args,base,continuous,historyTo,groupUnits,olaVi
  return <>
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
 
- <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
+ <ForemanTotals summary={report.summary}/>
  <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
  <ForemanAreaKpis kpis={(report as TransportScorecard &{area_kpis?:AreaKpis}).area_kpis}/>
  <KpiDriverCount data={(report as TransportScorecard & {driver_count?:DriverCount}).driver_count}/>
@@ -125,7 +142,7 @@ async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits,hi
  const [old,history]=await Promise.all([
   db.rpc('hub_foreman_comparison_v1',{...args,p_from:previousYearDate(args.p_from),p_to:previousYearDate(args.p_to)}),
   continuous&&args.p_to>historyTo&&args.p_from<=historyTo
-   ?db.rpc('hub_transport_leader_scorecard_v4',{...args,p_to:historyTo})
+   ?db.rpc('hub_foreman_comparison_v1',{...args,p_to:historyTo})
    :Promise.resolve(null),
  ]);
  const previous=old.data as TransportScorecard|null;
