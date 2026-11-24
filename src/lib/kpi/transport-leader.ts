@@ -16,6 +16,7 @@ export type TransportScorecard={
  summary:Omit<TransportMetrics,'revenue'|'cost'|'result'> & {revenue:number|null;cost:number|null;result:number|null;unassigned_rows:number};
  units:TransportUnit[];groups:TransportGroup[];breakdown:TransportBreakdown[];
  analysis_inputs?:TransportAnalysisInput[];
+ monthly_unit_results?:{unit_id:string|null;month_start:string;result:number}[]|null;
  sections:{section:string;revenue:number;cost:number;result:number|null;margin_percent:number|null}[];
  transactions:{fact_id:string;occurred_on:string;kind:string;amount:number;category:string;project:string|null;vehicle:string|null;source:string;order_number:string|null;customer:string|null;original:Record<string,unknown>}[];
 };
