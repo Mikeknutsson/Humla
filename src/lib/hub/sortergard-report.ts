@@ -1,14 +1,14 @@
 export type Candidate = {address:string; source:string; reference:string|null; score:number; reason:string};
 export type Weighing = {
   id:string; trans_id:string; day:string; reg:string|null; sender:string|null; recipient:string|null; material:string|null;
-  tonnes:number; stock:string|null; kind:string; status:'verified'|'likely'|'missing'|'pending';
+  tonnes:number; stock:string|null; kind:string; status:'verified'|'likely'|'missing'|'pending'|'fallback';
   origin:string; destination:string; source:string; reason:string; confidence:number; candidates:Candidate[]; raw:Record<string,unknown>;
 };
 export type ReportVersion = {id:string; year:number; version:number; created_at:string; created_by_label:string; incomplete:boolean};
-export const statusLabels = {verified:'Verifierad',likely:'Sannolik',missing:'Adress saknas',pending:'Obehandlad'};
+export const statusLabels = {verified:'Verifierad',likely:'Sannolik',missing:'Adress saknas',pending:'Obehandlad',fallback:'Anläggningsadress (reserv)'};
 export const yardNumber = new Intl.NumberFormat('sv-SE',{maximumFractionDigits:3});
 export function yardTotals(rows: Weighing[]) {
-  const totals = {in:0,out:0,external:0,verified:0,likely:0,missing:0,pending:0};
+  const totals = {in:0,out:0,external:0,verified:0,likely:0,missing:0,pending:0,fallback:0};
   for (const row of rows) {
     totals[row.status]++;
     if (row.kind === 'Inleverans') totals.in += row.tonnes;
