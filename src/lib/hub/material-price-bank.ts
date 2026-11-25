@@ -33,13 +33,17 @@ export function stockholmDate() {
 
 // Keep washed, dry and classified variants distinct. Retain original list rows in results.
 export function comparisonMaterial(rate: SiteRate) {
-  const name = rate.material.trim().replace(/(\d)\s*[/–-]\s*(\d)/g,'$1-$2');
+  const name = rate.material.trim().replace(/(\d)\s*[/–—−-]\s*(\d)/g,'$1-$2');
   const normalized = name.replace(/\s+SS-EN\s+\d+(?=\s|$)/gi,'').replace(/\s+/g,' ').trim();
-  const fraction = normalized.match(/\b\d+-\d+\b/)?.[0];
-  if (!fraction) return normalized;
+  const fractions = normalized.match(/\b\d+-\d+\b/g);
+  if (/^(?:(?:förstärkning(?:slager)?|bergkross) )?(?:0-(?:125|150)|0-125-150|0-125 eller 0-150|0-150 eller 0-125)$/i.test(normalized)) {
+    return '0-125/150';
+  }
+  if (fractions?.length !== 1) return normalized;
+  const [fraction] = fractions;
   if (/^makadam (tvättad \d+-\d+|\d+-\d+ tvättad)$/i.test(normalized)) return `Makadam ${fraction} tvättad`;
   if (/\b(tvättad|torr|klass|eller)\b/i.test(normalized)) return normalized;
   if (/^(bärlager|bergkross)\s/i.test(normalized) && /^0-(32|45|63)$/.test(fraction)) return `Bärlager / bergkross ${fraction}`;
-  if (/^förstärkning(s(lager)?)?\s/i.test(normalized) || /^bergkross 0-(90|125|150|200)$/i.test(normalized)) return `Förstärkningslager ${fraction}`;
+  if (/^förstärkning(s(lager)?)?\s/i.test(normalized) || /^bergkross 0-(90|200)$/i.test(normalized)) return `Förstärkningslager ${fraction}`;
   return normalized;
 }
