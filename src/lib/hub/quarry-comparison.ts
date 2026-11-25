@@ -25,9 +25,15 @@ export function compareQuarries(bank: MaterialPriceBank, date: string, materials
       const truckSupplement = truck ? roundOfferMoney(quotedFreight(truck) - freight) : null;
       return [{site, rate, round, time, tonnes, freight, truckSupplement, total:rate.price + freight}];
     }).sort((a,b) => a.total-b.total || a.site.name.localeCompare(b.site.name,'sv'));
-    const missing = [...new Set(candidates.filter(rate => !options.some(option => option.site.id === rate.siteId))
+    const availableSites = new Set<string>();
+    const bestPerSite = options.filter(option => {
+      if (availableSites.has(option.site.id)) return false;
+      availableSites.add(option.site.id);
+      return true;
+    });
+    const missing = [...new Set(candidates.filter(rate => !availableSites.has(rate.siteId))
       .map(rate => sites.get(rate.siteId)!.name))];
-    return {material, options, missing};
+    return {material, options:bestPerSite, missing};
   });
 }
 
