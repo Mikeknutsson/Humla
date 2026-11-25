@@ -38,7 +38,7 @@ export default function MaterialMultiSelect({label, options, groups, selected, o
         trigger.current?.focus();
       }
     }}>
-      <summary ref={trigger}>
+      <summary ref={trigger} aria-label={label + (labels.length ? ` · ${labels.length} valda` : '')}>
         <span>{labels.length ? `${labels.length} valda` : 'Välj material'}</span>
         <ChevronDown size={16} aria-hidden="true"/>
       </summary>
