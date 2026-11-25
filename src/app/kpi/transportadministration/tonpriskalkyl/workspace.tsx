@@ -8,13 +8,13 @@ import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-a
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
 import {comparisonMaterial, effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
-import {quotedMaterial, type OfferRevision} from '@/lib/hub/ton-price-offer-revision';
+import {maxQuarryOfferJobs, priorJobMaterials, quotedMaterial, sameOfferJob, type OfferRevision, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
 import {offerPdfUrl} from './offer-pdf-url';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
-import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
+import QuarryComparisonWorkspace, {ReturnLoadFields, type QuarryJobState} from './quarry-comparison';
 import MaterialMultiSelect from './material-multi-select';
 import {advancedOfferLines, offerMoney, truckSupplementArticles, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
-import {downloadAdvancedOffer, recalculateTonPrices} from './actions';
+import {downloadAdvancedOffer, downloadQuarryOffer, recalculateTonPrices} from './actions';
 import OfferDownloads from './offer-downloads';
 import {CustomerField, OfferTermsField} from './offer-fields';
 import styles from './workspace.module.css';
@@ -186,6 +186,18 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
   });
   const canSave = !revision || Boolean(snapshot) || reviewed;
   const quoted = revision?.materials ?? [];
+  const [jobCards,setJobCards] = useState<{id: string; kind: SiteRate['kind']; settings?: QuarryOfferSettings; useLegacy?: boolean}[]>(() =>
+    snapshot?.mode === 'quick' ? [snapshot.quick,...(snapshot.additionalJobs ?? [])].map((settings,index) => ({
+      id:String(index),kind:settings.kind,settings,
+    })) : [{id:'first',kind:'purchase',useLegacy:Boolean(revision && !snapshot)}]);
+  const [jobStates,setJobStates] = useState<Record<string,QuarryJobState>>({});
+  const [refresh,setRefresh] = useState(0);
+  const included = jobCards.flatMap(card => jobStates[card.id]?.selected ? [jobStates[card.id]] : []);
+  const jobs = included.flatMap(state => state.job ? [state.job] : []);
+  const duplicateJobs = jobs.some((job,index) => jobs.slice(0,index).some(other => sameOfferJob(job,other)));
+  function addJob(kind: SiteRate['kind']) {
+    setJobCards(cards => [...cards,{id:crypto.randomUUID(),kind}]);
+  }
   const latestDraft = useRef(draft);
   const activeRates = effectiveSiteRates(bank?.rates ?? [], draft.priceDate || today).filter(rate => rate.unit === 'ton');
   const specialCassette = Boolean(draft.specialCassette || draft.materials.some(item => item.vehicleId === 'cassette'));
@@ -277,7 +289,11 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
 
   const complete = result && result.materials.length > 0 && result.materials.every(row => !row.status);
   const offer = complete ? advancedOfferLines(draft,result) : [];
-  const duplicate = offer.some(line => quotedMaterial(quoted,line.material));
+  const duplicate = offer.some((line,index) => {
+    const round = roundById.get(draft.materials[index].roundId);
+    const prior = priorJobMaterials(revision,{kind:line.isTip ? 'tip' : 'purchase',address:(line.isTip ? round?.pickup : round?.delivery) ?? ''});
+    return quotedMaterial(prior,line.material);
+  });
   return <div className={`content ${styles.workspace}`}>
     <div className={styles.actions}><a href="#offertarkiv">Öppna offertarkivet</a></div>
     {revision && <section className="panel" id="komplettering">
@@ -295,8 +311,44 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
         <label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)}/> Jag har kontrollerat underlaget för kompletteringen.</label>
       </>}
     </section>}
-    {bank && snapshot?.mode !== 'advanced' && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} workifyPrices={workifyPrices} draft={draft}
-      date={draft.priceDate || today} revision={revision} canSave={canSave} onApply={useCheapest} onDetailsChange={change} onUseReference={() => change({profile:'reference'})}/>}
+    {bank && snapshot?.mode !== 'advanced' && <>
+      {jobCards.map((card,index) => <QuarryComparisonWorkspace key={card.id} sites={bank.sites} rates={activeRates}
+        workifyPrices={workifyPrices} draft={draft} date={draft.priceDate || today} revision={revision} saved={card.settings}
+        defaultKind={card.kind} useLegacy={Boolean(card.useLegacy)} refresh={refresh}
+        heading={jobCards.length === 1 ? 'Leverans och material' : `Uppdrag ${index+1}`}
+        onQuoteChange={state => setJobStates(previous => ({...previous,[card.id]:state}))}
+        onRemove={jobCards.length > 1 ? () => {
+          setJobCards(cards => cards.filter(item => item.id !== card.id));
+          setJobStates(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => id !== card.id)));
+        } : undefined}
+        onApply={useCheapest} onUseReference={() => change({profile:'reference'})}/>)}
+      <section className="panel">
+        <div className={styles.actions}>
+          <button type="button" className="secondary" disabled={jobCards.length >= maxQuarryOfferJobs} onClick={() => addJob('purchase')}><Plus size={16}/> Lägg till leverans</button>
+          <button type="button" className="secondary" disabled={jobCards.length >= maxQuarryOfferJobs} onClick={() => addJob('tip')}><Plus size={16}/> Lägg till bortkörning</button>
+        </div>
+        {included.length > 0 && <>
+          <h2>{revision ? 'Offertkomplettering' : 'Gemensam offert'}</h2>
+          <p>{included.length} uppdrag med valda material.</p>
+          <details>
+            <summary>Kund, projekt och offertvillkor</summary>
+            <div className={styles.grid}>
+              <CustomerField value={draft.customer} onChange={customer => change({customer})}/>
+              <Field label="Projekt" value={draft.project} onChange={project => change({project})}/>
+              <Field label="Giltig till" type="date" value={draft.validity} onChange={validity => change({validity})}/>
+              <OfferTermsField value={draft.terms} onChange={terms => change({terms})}/>
+            </div>
+          </details>
+          {jobs.length !== included.length && <p role="status">Kontrollera att alla uppdrag med valda material har ett offertpris.</p>}
+          {duplicateJobs && <p role="status">Samla material för samma uppdragstyp och adress på ett uppdrag.</p>}
+          <OfferDownloads key={JSON.stringify([jobs,draft.customer,draft.project,draft.validity,draft.terms,draft.priceDate])}
+            disabled={!jobs.length || jobs.length !== included.length || duplicateJobs || !canSave} supplement={Boolean(revision)}
+            onRetry={() => setRefresh(value => value+1)}
+            create={() => downloadQuarryOffer(draft.priceDate || today,jobs,draft,
+              {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms},revision?.id)}/>
+        </>}
+      </section>
+    </>}
     <details className={styles.advanced} open={snapshot?.mode === 'advanced' ? true : undefined}>
       <summary>Avancerad kalkyl och inställningar</summary>
     <form className={styles.controls} onSubmit={event => {event.preventDefault(); void calculate();}}>
@@ -321,7 +373,7 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
           {!bank && <p role="status">Prisbanken kunde inte hämtas. Manuell kalkyl är tillgänglig.</p>}
           {draft.rounds.map((round, index) => <RoundEditor key={round.id} round={round} index={index}
             sites={bank?.sites ?? []}
-            rates={activeRates.filter(rate => !quotedMaterial(quoted,comparisonMaterial(rate)) &&
+            rates={activeRates.filter(rate => !quotedMaterial(priorJobMaterials(revision,{kind:rate.kind,address:rate.kind === 'tip' ? round.pickup : round.delivery}),comparisonMaterial(rate)) &&
               (rate.kind === 'purchase' && rate.siteId === round.pickupSiteId ||
               rate.kind === 'tip' && rate.siteId === round.deliverySiteId))}
             checked={new Set(draft.materials.filter(row => row.roundId === round.id).map(row => row.bankRateId ?? ''))}
