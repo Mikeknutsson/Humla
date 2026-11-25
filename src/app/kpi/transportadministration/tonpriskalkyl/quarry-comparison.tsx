@@ -3,10 +3,11 @@
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
 import {offerMoney, priceQuarryOffer, type QuarryPricing, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
-import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
+import {googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {compareMaterialFractions, materialGroups, sortergardenSiteIds, standardMaterial, standardMaterialNames, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
-import {priorJobMaterials, quotedMaterial, type OfferRevision, type QuarryOfferJob, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
+import {priorJobMaterials, quotedMaterial, type ProjectLocation, type OfferRevision, type QuarryOfferJob, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
+import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
@@ -15,12 +16,11 @@ import styles from './workspace.module.css';
 
 type Option = QuarryComparison[number]['options'][number];
 type Direction = 'outbound' | 'inbound';
-type Destination = {address: string; id?: string; point?: Point};
+export const testProjectAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 const emptyLeg: Leg = {miles:'',driveMinutes:''};
 const directions = [['outbound','Till projektet'],['inbound','Tillbaka till täkten']] as const;
-const testAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 
-function directionsUrl(site: MaterialSite, destination: Destination, isTipping: boolean) {
+function directionsUrl(site: MaterialSite, destination: ProjectLocation, isTipping: boolean) {
   const endpoint = destination.point ? `${destination.point.lat},${destination.point.lng}` : destination.address;
   const address = site.address || site.name;
   const query = new URLSearchParams({api:'1',origin:isTipping ? endpoint : address,
@@ -59,26 +59,23 @@ export function ReturnLoadFields({value, rates, onChange}: {
 export type QuarryJobState = {selected: boolean; job?: QuarryOfferJob};
 
 export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onUseReference,
-  revision, saved, defaultKind, useLegacy, refresh, onQuoteChange, heading, onRemove}: {
+  revision, saved, kind, destination, addressConfirmed, onConfirmAddress, refresh, onQuoteChange}: {
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
   workifyPrices: WorkifyOfferPrice[];
   onUseReference: () => void;
-  revision?: OfferRevision; saved?: QuarryOfferSettings; defaultKind: SiteRate['kind']; useLegacy: boolean; refresh: number;
+  revision?: OfferRevision; saved?: QuarryOfferSettings; kind: SiteRate['kind']; refresh: number;
+  destination: ProjectLocation; addressConfirmed: boolean; onConfirmAddress: () => void;
   onQuoteChange:(state: QuarryJobState) => void;
-  heading: string; onRemove?: () => void;
 }) {
   const mapsKey = useGoogleMapsKey();
-  const legacy = useLegacy ? revision?.legacy : undefined;
-  const savedAddress = saved?.destination ?? {address:legacy?.projectAddress ??
-    (useLegacy && revision?.destinations.length === 1 && legacy?.kind !== 'tip' ? revision.destinations[0] : '')};
-  const [destination,setDestination] = useState<Destination>(savedAddress);
-  const [committed,setCommitted] = useState(savedAddress.address);
-  const [kind,setKind] = useState<SiteRate['kind']>(saved?.kind ?? legacy?.kind ?? defaultKind);
+  const legacy = revision?.legacy?.kind === kind ? revision?.legacy : undefined;
+  const destinationKey = JSON.stringify(destination);
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
   const [withoutReturn,setWithoutReturn] = useState<string[]>(saved?.withoutReturn ?? []);
   const [returnLoad,setReturnLoad] = useState<ReturnLoad | undefined>(saved?.returnLoad);
-  const [manual,setManual] = useState<Record<string,Partial<Record<Direction,Leg>>>>(saved?.routes ?? {});
+  const [manualState,setManual] = useState({key:destinationKey,legs:saved?.routes ?? {}});
+  const manual = manualState.key === destinationKey ? manualState.legs : {};
   const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
   const [retry,setRetry] = useState(0);
   const [applied,setApplied] = useState('');
@@ -120,10 +117,9 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   });
   const materials = selected.filter(name => !quotedMaterial(priorMaterials,name)).map(name => ({name,tonnes:quantities[name] ?? ''}));
   const candidates = eligibleSites.filter(site => matchingRates.some(({rate,name}) => rate.siteId === site.id && materials.some(item => item.name === name)));
-  const routesAvailable = candidates.some(site => manual[site.id]?.[primaryDirection]?.miles.trim() || (mapsKey && destination.address !== testAddress && (site.address || site.mapPlaceId)));
+  const routesAvailable = candidates.some(site => manual[site.id]?.[primaryDirection]?.miles.trim() || (mapsKey && destination.address !== testProjectAddress && (site.address || site.mapPlaceId)));
   const hasAddress = Boolean(destination.address.trim());
-  const isTestAddress = destination.address === testAddress;
-  const addressConfirmed = hasAddress && committed === destination.address;
+  const isTestAddress = destination.address === testProjectAddress;
   const ready = Boolean(addressConfirmed && materials.length && routesAvailable);
   const inputKey = JSON.stringify([date,kind,destination,materials,manual,returnLoad,withoutReturn,draft.profile,draft.vehicles,
     candidates.map(site => [site.id,site.address,site.mapPlaceId]),retry,refresh,Boolean(mapsKey)]);
@@ -157,20 +153,16 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
     }));
   }
 
-  function changeDestination(address: string, id?: string, point?: Point) {
-    setDestination({address,id,point});
-    setCommitted(id || point || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(address) ? address : '');
-    setManual({});
-    routes.current.clear();
-  }
-
   function toggle(name: string) {
     setSelected(items => items.includes(name) ? items.filter(item => item !== name) : [...items,name]);
   }
 
   function updateManual(siteId: string, direction: Direction, patch: Partial<Leg>) {
-    setManual(previous => ({...previous,[siteId]:{...previous[siteId],
-      [direction]:{...(previous[siteId]?.[direction] ?? emptyLeg),...patch}}}));
+    setManual(previous => {
+      const legs = previous.key === destinationKey ? previous.legs : {};
+      return {key:destinationKey,legs:{...legs,[siteId]:{...legs[siteId],
+        [direction]:{...(legs[siteId]?.[direction] ?? emptyLeg),...patch}}}};
+    });
   }
 
   const compare = useEffectEvent(async (key: string, signal: AbortSignal) => {
@@ -236,35 +228,29 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
     return () => {window.clearTimeout(timer);controller.abort();};
   },[ready,inputKey]);
 
-  return <section className={`panel ${styles.quickFlow}`}>
-    <div className={styles.actions}>
-      <h2>{heading}</h2>
-      {onRemove && <button type="button" className="secondary" onClick={onRemove}>Ta bort uppdrag</button>}
-    </div>
+  return <section className={styles.projectMaterial}>
     <fieldset className={styles.form}>
-      <label className={styles.field}>Transportuppdrag
-        <select value={kind} onChange={event => {
-          setKind(event.target.value as SiteRate['kind']);
-          setSelected([]);
-        }}>
-          <option value="purchase">Leverera material till projektet</option>
-          <option value="tip">Hämta från projektet och tippa</option>
-        </select>
-      </label>
-      <div className={styles.grid}>
-        <GoogleAddressField label={isTipping ? 'Projektets hämtningsadress' : 'Projektets leveransadress'} value={destination.address} placeId={destination.id} point={destination.point} className={styles.field}
-          placeholder="Gatuadress och ort" autocomplete onChange={changeDestination} onCommit={setCommitted}/>
-      </div>
-      {!mapsKey && !hasAddress && <div className={styles.actions}>
-        <button type="button" className="secondary" onClick={() => {
-          changeDestination(testAddress);
-          setCommitted(testAddress);
-        }}>Använd testadress i Ronneby</button>
-      </div>}
-      <MaterialMultiSelect label={isTipping ? 'Tippmaterial' : 'Material att jämföra'} options={options}
+      <MaterialMultiSelect label={isTipping ? 'Material att köra bort' : 'Material att leverera'} options={options}
         groups={isTipping ? ['Återvinningsmaterial',...(options.some(option => option.group === 'Tippavgifter') ? ['Tippavgifter'] : [])] : materialGroups.slice(0,-1)}
         selected={new Set(materials.map(item => item.name))} onToggle={toggle}/>
-      <details><summary>Mängder och returlast</summary>
+      {isTipping && eligibleSites.length > 0 && <details>
+        <summary>Mottagningsplatser i Prisbanken</summary>
+        <ul className={styles.receivers}>{eligibleSites.map(site => {
+          const ratesAtSite = matchingRates.filter(({rate}) => rate.siteId === site.id);
+          const matchingNames = materials.filter(item => ratesAtSite.some(({name}) => name === item.name)).map(item => item.name);
+          const missingNames = materials.filter(item => !matchingNames.includes(item.name)).map(item => item.name);
+          return <li key={site.id}><strong>{site.name}</strong>
+            {sortergardenIds.has(site.id) && <small>Förstahandsval</small>}
+            {site.address && <small>{site.address}</small>}
+            {site.locationNote && <small>{site.locationNote}</small>}
+            {matchingNames.length > 0 && <small>Tonpris för {matchingNames.join(', ')}</small>}
+            {missingNames.length > 0 ? <small>Tonpris saknas för {missingNames.join(', ')}</small> :
+              !ratesAtSite.length && <small>Inget tonpris registrerat för prisdatumet</small>}
+          </li>;
+        })}</ul>
+        <Link href={materialPriceBankPath}>Öppna Prisbanken för att lägga till tipp och tonpris</Link>
+      </details>}
+      {materials.length > 0 && <details><summary>Mängder och returlast</summary>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
         <p>Med mängd räknas hela rundor, även om sista lasset blir ett dellass.</p>
         <div className={styles.grid}>{selected.map(name => <label className={styles.field} key={name}>{name} (ton)
@@ -279,9 +265,9 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
           }}/> Ingen returlast från rundan via {site.name}</span>
         </label>)}
       </details>}
-      </details>
+      </details>}
       {hasAddress && candidates.length > 0 && <details open={needsManual || undefined}>
-        <summary>{needsManual ? 'Ange körsträcka per täkt' : 'Justera körsträcka eller körtid'}</summary>
+        <summary>{needsManual ? (isTipping ? 'Ange körsträcka per tipp' : 'Ange körsträcka per täkt') : 'Justera körsträcka eller körtid'}</summary>
         {isTestAddress ? <p>För testadressen kan du ange ett exempelavstånd, till exempel 2,5 mil enkel väg.</p>
           : !mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
           {' '}<Link href="/integrationer/google">Öppna Google-inställningar</Link></p> :
@@ -312,20 +298,19 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
         })}
       </details>}
       {hasAddress && materials.length > 0 && routesAvailable && !addressConfirmed &&
-        <button type="button" className={styles.primary} onClick={() => setCommitted(destination.address)}>Beräkna levererat pris</button>}
+        <button type="button" className={styles.primary} onClick={onConfirmAddress}>Beräkna pris</button>}
     </fieldset>
     <div className={styles.progress} role="status">
-      {!hasAddress ? (isTipping ? 'Ange hämtningsadress för projektet.' : 'Ange leveransadress för projektet.') :
-        !materials.length ? 'Välj material för att fortsätta.' :
+      {!materials.length ? null : !hasAddress ? 'Ange projektadress för att beräkna priset.' :
         !candidates.length ? 'Prisbanken saknar en plats med tonpris för de valda materialen på prisdatumet.' :
         !routesAvailable ? 'Ange körsträcka för minst en plats för att räkna fram priset.' :
-        !addressConfirmed ? 'Välj ett adressförslag, sätt en kartnål eller klicka på Beräkna levererat pris.' :
+        !addressConfirmed ? 'Välj ett adressförslag, sätt en kartnål eller klicka på Beräkna pris.' :
         busy ? (isTipping ? 'Jämför tippavgift och frakt med bil + kärra…' : 'Jämför materialpris och frakt med bil + kärra…') : null}
     </div>
     {current?.error && <div className={styles.actions}><p role="alert">{current.error}</p>
       <button type="button" className="secondary" onClick={() => setRetry(value => value+1)}>Försök igen</button></div>}
     {result && <section className={styles.quickOffer} aria-label="Offertpris">
-      <h3>Offertpris</h3>
+      <h3>{isTipping ? 'Offertpris för bortkörning' : 'Offertpris för leverans'}</h3>
       {!isTipping && <><div className={styles.grid}>
         <label className={styles.field}>Prisgrund för uppdraget
           <select value={pricing.mode} onChange={event => setPricing({...pricing,mode:event.target.value as QuarryPricing['mode']})}>

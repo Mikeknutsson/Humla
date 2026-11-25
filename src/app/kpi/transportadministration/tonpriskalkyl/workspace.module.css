@@ -63,3 +63,9 @@
 .progress:not(:empty) { border-inline-start: 3px solid #27815f; padding: 7px 12px; margin-top: 12px; }
 .routeRow { padding: 8px 0; border-top: 1px solid #87909a65; }
 .routeRow a, .routeRow small { display: block; }
+
+.projectMaterials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; align-items: start; }
+.projectMaterial { min-width: 0; }
+.receivers { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.receivers li { display: grid; gap: 3px; padding: 8px 0; border-bottom: 1px solid #87909a65; }
+@media (max-width: 760px) { .projectMaterials { grid-template-columns: minmax(0, 1fr); } }

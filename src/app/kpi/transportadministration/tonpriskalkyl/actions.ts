@@ -4,7 +4,7 @@ import {revalidatePath} from 'next/cache';
 import {archiveOffer, findArchivedOffer, offerFingerprint, openOfferRevision} from '@/lib/hub/ton-price-offer-archive';
 import {tonPricePath} from '@/app/_components/kpi-transport-administration-nav';
 
-import {advancedOfferLines, priceQuarryOffer, type QuarryPricing, type OfferDetails, type OfferSection} from '@/lib/hub/ton-price-offer';
+import {advancedOfferLines, priceQuarryOffer, type OfferDetails, type OfferSection} from '@/lib/hub/ton-price-offer';
 import {maxQuarryOfferJobs, priorJobMaterials, quotedMaterial, sameOfferJob, type OfferRevision, type OfferSnapshot, type QuarryOfferJob, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
 import {readWorkifyMaterialPrices} from '@/lib/hub/workify-material-prices';
 import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-delivery-plan';

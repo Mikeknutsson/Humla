@@ -2,7 +2,7 @@ import type {SiteRate} from './material-price-bank';
 import type {Leg, ReturnLoad, Round, TonPriceDraft} from './ton-price';
 import type {QuarryPricing, WorkifyOfferPrice} from './ton-price-offer';
 
-type ProjectLocation = {
+export type ProjectLocation = {
   address: string;
   id?: string;
   point?: {lat: number; lng: number};
