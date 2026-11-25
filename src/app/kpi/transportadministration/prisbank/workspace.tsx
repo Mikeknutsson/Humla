@@ -3,7 +3,7 @@
 import {useRouter} from 'next/navigation';
 import {useState, type FormEvent} from 'react';
 import {GoogleAddressField} from '@/app/_components/google-address-field';
-import {effectiveSiteRates, type MaterialPriceBank, type MaterialSite} from '@/lib/hub/material-price-bank';
+import {comparisonMaterial, effectiveSiteRates, type MaterialPriceBank, type MaterialSite} from '@/lib/hub/material-price-bank';
 import {savePriceBankEntry} from './actions';
 import styles from '../tonpriskalkyl/workspace.module.css';
 
@@ -75,8 +75,8 @@ export default function PriceBankWorkspace({bank, today, canManage}: {bank: Mate
         <label className={styles.field}>Prisdatum<input type="date" value={date} onChange={event => setDate(event.target.value || today)}/></label>
         <label><input type="checkbox" checked={all} onChange={event => setAll(event.target.checked)}/> Visa alla versioner</label>
       </div>
-      <div className={styles.table}><table><thead><tr><th>Material</th><th>Typ</th><th>Pris</th><th>Gäller från</th><th>Gäller t.o.m.</th><th>Källa</th></tr></thead>
-        <tbody>{shown.map(rate => <tr key={rate.id}><td>{rate.material}</td><td>{rate.kind === 'tip' ? 'Tippavgift' : 'Materialpris'}</td>
+      <div className={styles.table}><table><thead><tr><th>Standardnamn</th><th>Namn i prislistan</th><th>Typ</th><th>Pris</th><th>Gäller från</th><th>Gäller t.o.m.</th><th>Källa</th></tr></thead>
+        <tbody>{shown.map(rate => <tr key={rate.id}><td>{comparisonMaterial(rate)}</td><td>{rate.material}</td><td>{rate.kind === 'tip' ? 'Tippavgift' : 'Materialpris'}</td>
           <td>{currency.format(rate.price)} kr/{rate.unit}</td><td>{rate.validFrom ?? '–'}</td><td>{rate.validTo ?? '–'}</td><td>{rate.source}</td></tr>)}</tbody>
       </table></div>
       {!shown.length && <p>Inga prisrader för urvalet.</p>}
