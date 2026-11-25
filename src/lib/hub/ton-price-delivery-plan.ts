@@ -3,6 +3,7 @@ import type {calculateRound, Round} from './ton-price';
 
 export type DeliveryPlanLine = {
   material: string;
+  pricingSource?: string;
   pickup: string;
   delivery: string;
   tip: boolean;
