@@ -12,7 +12,7 @@ export type QuarryOfferSettings = {
   destination: ProjectLocation;
   kind: SiteRate['kind'];
   pricing: QuarryPricing;
-  routes: Record<string, Partial<Record<'outbound' | 'inbound', Leg>>>;
+  routes: Record<string, Partial<Record<'outbound' | 'inbound' | 'start', Leg>>>;
   withoutReturn: string[];
   returnLoad?: ReturnLoad;
 };

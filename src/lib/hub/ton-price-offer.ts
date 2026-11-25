@@ -71,8 +71,8 @@ export function priceQuarryOffer(comparison: QuarryComparison, pricing: QuarryPr
       const price = source ? matches.find(price => source === 'workify:' + price.article) :
         matches.find(price => !price.includesFreight) ?? matches[0];
       if (!price) return {error:'Workify-pris saknas för fraktionen'};
-      materialPrice = price.price - (price.includesFreight ? winner.freight : 0);
-      deliveredPrice = price.price + (price.includesFreight ? 0 : winner.freight);
+      materialPrice = price.price - (price.includesFreight ? winner.freight - winner.startFreight : 0);
+      deliveredPrice = price.price + (price.includesFreight ? winner.startFreight : winner.freight);
       pricingSource = `Workify STD · ${price.article} · ${price.includesFreight ? 'inkl. transport' : 'materialpris'}`;
     } else {
       const markup = parseOfferMarkup(source === 'markup' && override?.markup.trim() ? override.markup : pricing.markup);

@@ -90,6 +90,7 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
       const krPerTon = (price: number) => offerMoney.format(price)+' kr/ton';
       const adjustment = row.materialPrice - row.purchase;
       const fields = [
+        ['Start från Pukavik',row.start ?? ''],
         ['Hämta från',row.pickup],
         [row.tippingDestination ? 'Tippa på' : 'Leverera till',row.delivery],
         ['Ekipage och runda',row.route],

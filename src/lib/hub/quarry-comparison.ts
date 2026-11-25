@@ -1,6 +1,6 @@
 import {comparisonMaterial, effectiveSiteRates, sortergardenSiteIds, type MaterialPriceBank, type SiteRate} from './material-price-bank';
 import {roundOfferMoney} from './ton-price-offer';
-import {calculateRound, calculateTonPrices, newMaterial, type Round, type TonPriceDraft} from './ton-price';
+import {calculateRound, calculateStartLeg, calculateTonPrices, newMaterial, type Round, type TonPriceDraft} from './ton-price';
 
 export function compareQuarries(bank: MaterialPriceBank, date: string, materials: {name: string; tonnes: string}[],
   rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind'] = 'purchase') {
@@ -15,8 +15,12 @@ export function compareQuarries(bank: MaterialPriceBank, date: string, materials
       const site = sites.get(rate.siteId)!;
       const round = roundsBySite.get(site.id);
       if (!round) {failures.set(site.id,'Körsträcka saknas');return [];}
+      if (!calculateStartLeg(round)) {
+        failures.set(site.id,'Kontrollera startsträckan från Pukavik');
+        return [];
+      }
       const row = {...newMaterial(rate.id, round.id, 'trailer'), name:rate.material,purchase:String(rate.price),bankKind:kind,markup:'0',tonnes};
-      const calculation = calculateTonPrices({...draft, rounds:[round], materials:[row]});
+      const calculation = calculateTonPrices({...draft, rounds:[{...round,autoHandling:true}], materials:[row]});
       const result = calculation.materials[0];
       const time = calculation.rounds[0].result;
       if (!result.selected || result.status || !time) {
@@ -29,12 +33,12 @@ export function compareQuarries(bank: MaterialPriceBank, date: string, materials
         return [];
       }
       const quotedFreight = (option: NonNullable<typeof result.selected>) => result.tonnes && option.trips
-        ? option.freight * option.load * option.trips / result.tonnes
+        ? option.roundFreight * option.load * option.trips / result.tonnes + option.startFreight
         : option.freight;
       const freight = quotedFreight(result.selected);
       const truck = result.options.find(option => option.id === 'truck')?.prices[draft.profile];
       const truckSupplement = truck ? roundOfferMoney(quotedFreight(truck) - freight) : null;
-      return [{site, rate, round, time, tonnes, freight, truckSupplement, preferred:sortergardenIds.has(site.id), total:rate.price + freight}];
+      return [{site, rate, round, time, tonnes, freight, startFreight:result.selected.startFreight, truckSupplement, preferred:sortergardenIds.has(site.id), total:rate.price + freight}];
     }).sort((a,b) => Number(b.preferred)-Number(a.preferred) || a.total-b.total || a.site.name.localeCompare(b.site.name,'sv'));
     const availableSites = new Set<string>();
     const bestPerSite = options.filter(option => {
