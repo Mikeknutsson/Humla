@@ -43,12 +43,21 @@ type AddressValidation = {AddressValidation: {fetchAddressValidation(options: {
   addressComplete?: boolean; validationGranularity?: string; hasUnconfirmedComponents?: boolean;
   hasInferredComponents?: boolean; hasReplacedComponents?: boolean;
 }}>}};
+type GeocodedAddress = {
+  types: string[];
+  formatted_address: string;
+  partial_match?: boolean;
+  address_components: {long_name: string; types: string[]}[];
+  geometry: {location: LatLng};
+};
+type Bounds = {south: number; west: number; north: number; east: number};
 type Maps = {
   importLibrary(name: 'places'): Promise<Places>;
   importLibrary(name: 'routes'): Promise<Routes>;
   importLibrary(name: 'addressValidation'): Promise<AddressValidation>;
   importLibrary(name: 'geocoding'): Promise<{Geocoder: new () => {
-    geocode(request: {location: Point}): Promise<{results: {types: string[]; formatted_address: string}[]}>;
+    geocode(request: {location: Point} | {address: string; componentRestrictions: {country: string}; bounds?: Bounds; fulfillOnZeroResults?: boolean}):
+      Promise<{results: GeocodedAddress[]}>;
   }}>;
   importLibrary(name: 'maps'): Promise<{Map: new (host: HTMLElement, options: {
     center: Point; zoom: number; clickableIcons: boolean; streetViewControl: boolean;
@@ -113,6 +122,20 @@ function roadEstimate(metrics?: RoadMetrics) {
 }
 
 const roadFields = ['distanceMeters','durationMillis'];
+
+export async function geocodeSwedishAddress(mapsKey: string, address: string, bounds?: Bounds) {
+  await loadPlaces(mapsKey);
+  const maps = (window as GoogleWindow).google?.maps;
+  if (!maps) throw new Error('Google Maps is unavailable');
+  const {Geocoder} = await maps.importLibrary('geocoding');
+  try {
+    const {results} = await new Geocoder().geocode({address,componentRestrictions:{country:'SE'},bounds,fulfillOnZeroResults:true});
+    return results;
+  } catch (error) {
+    if (error && typeof error==='object' && 'code' in error && error.code==='ZERO_RESULTS') return [];
+    throw error;
+  }
+}
 
 export async function googleRoadEstimate(mapsKey: string, origin: GoogleLocation, destination: GoogleLocation) {
   const {Place} = await loadPlaces(mapsKey);
