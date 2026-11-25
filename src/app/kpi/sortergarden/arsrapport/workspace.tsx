@@ -7,6 +7,8 @@ import {useRouter} from 'next/navigation';
 import {reportAddress,statusLabels,yardMaterials,yardNumber,yardTotals,type Weighing,type ReportVersion} from '@/lib/hub/sortergard-report';
 import {reviewYard,saveYardFacility} from './actions';
 import styles from './workspace.module.css';
+import YardAddressAssist,{assessYardAddress} from './yard-address-assist';
+import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 
 const pageSize=35;
 const url='/kpi/sortergarden/arsrapport';
@@ -17,6 +19,7 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
   rows:Weighing[];year:number;latest:number;version:ReportVersion|null;archive:ReportVersion[]|null;
 }) {
   const router=useRouter();
+  const mapsKey=useGoogleMapsKey();
   const [filters,setFilters]=useState(filtersDefault);
   const [page,setPage]=useState(0);
   const [selection,setSelection]=useState<string[]>([]);
@@ -64,6 +67,20 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
       if(response.saved) router.refresh();
     } catch {setFeedback('Anläggningsadressen kunde inte sparas.');}
     finally {setBusy(false);}
+  }
+
+  async function assessSelection() {
+    setBusy(true);setFeedback('');
+    let saved=0,failed=0;
+    try {
+      for(let start=0;start<chosen.length;start+=3) {
+        const batch=await Promise.allSettled(chosen.slice(start,start+3).map(row=>assessYardAddress(year,row.id,row.kind,mapsKey)));
+        saved+=batch.filter(result=>result.status==='fulfilled'&&result.value.saved).length;
+        failed+=batch.filter(result=>result.status==='rejected').length;
+      }
+      setFeedback(`${saved} sannolika adresser används. ${chosen.length-saved-failed} rader fick ingen ändring.${failed?` ${failed} sökningar misslyckades.`:''}`);
+      router.refresh();
+    } finally {setBusy(false);}
   }
 
   function approve(entries:{id:string;candidate:number;expectedAddress:string}[]) {
@@ -116,6 +133,7 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
       <p className={styles.filterNote}>{filtered.length} vägningar i urvalet{chosen.length?` · ${chosen.length} markerade`:''}</p>
       {!version&&chosen.length>0&&<details className={styles.detail}><summary>Åtgärda markerade vägningar</summary>
         <div className={styles.actions}>
+          <button disabled={busy||chosen.length>20} onClick={()=>void assessSelection()}>Bedöm markerade med Google (max 20)</button>
           <button disabled={busy||chosen.some(row=>row.status!=='likely'||row.candidates.length!==1)}
             onClick={()=>approve(chosen.map(row=>({id:row.id,candidate:0,expectedAddress:row.candidates[0].address})))}>Massgodkänn entydiga förslag</button>
           <label>Ursprungsadress <input maxLength={240} value={origin} onChange={e=>setOrigin(e.target.value)}/></label>
@@ -150,6 +168,8 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
           {!version&&detail.status==='likely'&&<button disabled={busy} onClick={()=>approve([{id:detail.id,candidate:index,expectedAddress:candidate.address}])}>Godkänn adress</button>}
         </li>)}</ul>}
         {!version&&<>
+          <YardAddressAssist key={year+':'+detail.id} year={year} event={detail.id} kind={detail.kind}
+            apply={(side,address)=>side==='origin'?setOrigin(address):setDestination(address)} onSaved={()=>router.refresh()}/>
           <div className={styles.filters}>
             <label>Sök arbetsorder eller projekt<select value={source} onChange={e=>setSource(e.target.value)}><option>Next</option><option>Workify</option></select></label>
             <label>Nummer eller namn<input value={search} onChange={e=>setSearch(e.target.value)} maxLength={100}/></label>
