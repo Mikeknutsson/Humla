@@ -5,7 +5,10 @@
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .grid > .pair { grid-column: span 2; }
 .field { display: grid; gap: 5px; min-width: 0; font-size: .875rem; font-weight: 650; align-content: start; }
-.field input, .field select { width: 100%; min-height: 38px; font: inherit; font-weight: 400; color: inherit; background: transparent; border: 1px solid #87909a; border-radius: 6px; padding: 7px 9px; }
+.field input, .field select, .field textarea { width: 100%; min-height: 38px; font: inherit; font-weight: 400; color: inherit; background: transparent; border: 1px solid #87909a; border-radius: 6px; padding: 7px 9px; }
+.offerTerms { grid-column: 1 / -1; }
+.offerTerms textarea { resize: vertical; }
+.termsPreview { white-space: pre-line; }
 .card { min-width: 0; padding: 12px; border: 1px solid #87909a65; border-radius: 8px; margin: 0 0 12px; display: grid; gap: 12px; }
 .card legend { padding: 0 6px; font-weight: 700; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
