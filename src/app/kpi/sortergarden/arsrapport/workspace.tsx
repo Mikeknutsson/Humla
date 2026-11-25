@@ -85,6 +85,7 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
 
   async function assessReport() {
     if (!mapsKey) return;
+    const key=mapsKey;
     const eligible=rows.filter(row=>row.status!=='verified');
     setBusy(true);setFeedback(`Kontrollerar adresser för ${eligible.length} vägningar …`);
     const responses=new Map<string,ReturnType<typeof searchYardAddress>>();
@@ -98,7 +99,7 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
         let timeout: ReturnType<typeof setTimeout>|undefined;
         try {
           const available=await Promise.race([
-            searchYardAddress(mapsKey!,query),
+            searchYardAddress(key,query),
             new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Google tog för lång tid.')),10000);}),
           ]);
           successfulRequests++;
@@ -109,12 +110,22 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
       responses.set(query.toLocaleLowerCase('sv-SE'),result);
       return result;
     }
+    async function readClues(ids:string[]):Promise<NonNullable<Awaited<ReturnType<typeof loadYardAddressBatch>>['clues']>> {
+      const result=await loadYardAddressBatch(year,ids).catch(()=>undefined);
+      if (result?.clues) return result.clues;
+      if (ids.length>20) {
+        const middle=Math.ceil(ids.length/2);
+        return {...await readClues(ids.slice(0,middle)),...await readClues(ids.slice(middle))};
+      }
+      await new Promise(resolve=>setTimeout(resolve,700));
+      const retried=await loadYardAddressBatch(year,ids);
+      if (!retried.clues) throw new Error(retried.error??'Adressunderlaget kunde inte hämtas.');
+      return retried.clues;
+    }
     try {
       for(let start=0;start<eligible.length;start+=150) {
         const batch=eligible.slice(start,start+150);
-        const result=await loadYardAddressBatch(year,batch.map(row=>row.id));
-        if(result.error||!result.clues) throw new Error(result.error??'Adressunderlaget kunde inte hämtas.');
-        const clues=result.clues;
+        const clues=await readClues(batch.map(row=>row.id));
         const entries=[];
         for (const row of batch) {
           const check=await inspectYardAddresses(clues[row.id]??[],row.kind,search);
