@@ -131,6 +131,7 @@ export async function downloadQuarryOffer(
     const {site,round,time,rate,freight} = winner;
     return {
       ...lines[index], ...deliveryPlanRoute(round,time,vehicle,new Map([[site.id,site]])),
+      material:rate.material === row.material ? row.material : row.material + ' · ' + rate.material,
       tip:false, purchase:rate.price, materialPrice:rate.price * (1 + markup / 100), freight,
     };
   });
