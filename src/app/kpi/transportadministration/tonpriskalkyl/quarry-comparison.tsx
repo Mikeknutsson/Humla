@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
-import {compareMaterialFractions, materialGroups, standardMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {compareMaterialFractions, materialGroups, standardMaterial, standardMaterialNames, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
@@ -76,14 +76,21 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const purchase = rates.filter(rate => rate.kind === 'purchase' && rate.unit === 'ton' && quarryIds.has(rate.siteId))
     .map(rate => ({rate,...standardMaterial(rate)}));
   const materialOptions = new Map<string,{id: string; label: string; group: typeof materialGroups[number]; aliases: Set<string>}>();
+  for (const name of standardMaterialNames) {
+    materialOptions.set(name,{id:name,label:name === '0-125/150' ? 'Förstärkningslager 0-125/150' : name,
+      group:'Standard',aliases:new Set()});
+  }
   for (const {name,group,rate} of purchase) {
     const option = materialOptions.get(name) ?? {id:name,label:name,group,aliases:new Set<string>()};
     option.aliases.add(rate.material);
     materialOptions.set(name,option);
   }
   const options = [...materialOptions.values()].sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
-    compareMaterialFractions(a.label,b.label)).map(option => ({
+    (a.group === 'Standard' ? standardMaterialNames.indexOf(a.id)-standardMaterialNames.indexOf(b.id) :
+      compareMaterialFractions(a.label,b.label))).map(option => ({
     id:option.id,label:option.label,group:option.group,search:[...option.aliases].join(' '),
+    note:option.aliases.size ? undefined : 'Tonpris saknas',
+    disabled:!option.aliases.size && !selected.includes(option.id),
   }));
   const candidates = quarrySites.filter(site => purchase.some(({rate,name}) => rate.siteId === site.id && selected.includes(name)));
   const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
@@ -194,7 +201,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           setCommitted(testAddress);
         }}>Använd testadress i Ronneby</button>
       </div>}
-      <MaterialMultiSelect label="Material att jämföra" options={options}
+      <MaterialMultiSelect label="Material att jämföra" options={options} groups={materialGroups.slice(0,-1)}
         selected={new Set(selected)} onToggle={toggle}/>
       <details><summary>Mängder och returlast</summary>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
