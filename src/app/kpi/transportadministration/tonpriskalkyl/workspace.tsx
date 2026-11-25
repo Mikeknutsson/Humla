@@ -11,7 +11,7 @@ import {comparisonMaterial, effectiveSiteRates, type MaterialPriceBank, type Mat
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
 import MaterialMultiSelect from './material-multi-select';
-import {advancedOfferLines, offerMoney, truckSupplementArticles} from '@/lib/hub/ton-price-offer';
+import {advancedOfferLines, offerMoney, truckSupplementArticles, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
 import {downloadAdvancedOffer, recalculateTonPrices} from './actions';
 import OfferDownloads from './offer-downloads';
 import {CustomerField, OfferTermsField} from './offer-fields';
@@ -169,7 +169,9 @@ function replace<T extends {id: string}>(items: T[], id: string, patch: Partial<
   return items.map(item => item.id === id ? {...item, ...patch} : item);
 }
 
-export default function TonPriceWorkspace({draftKey, bank, today, children}: {draftKey: string; bank: MaterialPriceBank | null; today: string; children: ReactNode}) {
+export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today, children}: {
+  draftKey: string; bank: MaterialPriceBank | null; workifyPrices: WorkifyOfferPrice[]; today: string; children: ReactNode;
+}) {
   const [draft, setDraft] = useState<TonPriceDraft>(() => ({...initialTonPriceDraft, priceDate:today, materials:[]}));
   const latestDraft = useRef(draft);
   const activeRates = effectiveSiteRates(bank?.rates ?? [], draft.priceDate || today).filter(rate => rate.unit === 'ton');
@@ -263,7 +265,7 @@ export default function TonPriceWorkspace({draftKey, bank, today, children}: {dr
   const offer = complete ? advancedOfferLines(draft,result) : [];
   return <div className={`content ${styles.workspace}`}>
     <div className={styles.actions}><a href="#offertarkiv">Öppna offertarkivet</a></div>
-    {bank && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} draft={draft}
+    {bank && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} workifyPrices={workifyPrices} draft={draft}
       date={draft.priceDate || today} onApply={useCheapest} onDetailsChange={change}/>}
     <details className={styles.advanced}>
       <summary>Avancerad kalkyl och inställningar</summary>
