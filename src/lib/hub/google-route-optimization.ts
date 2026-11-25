@@ -64,6 +64,17 @@ export async function optimizeGoogleTours(config: AccessConfig, model: TourModel
     body:JSON.stringify({model,timeout:'5s'}),
     cache:'no-store',signal:AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new Error(`Google Route Optimization returnerade HTTP ${response.status}.`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as {
+      error?: {status?: unknown; details?: {reason?: unknown}[]};
+    } | null;
+    const details = body?.error?.details;
+    const isErrorCode = (value: unknown): value is string =>
+      typeof value === 'string' && /^[A-Z][A-Z0-9_]{2,79}$/.test(value);
+    const reason = Array.isArray(details) ? details.find(detail => isErrorCode(detail?.reason))?.reason : null;
+    const code = isErrorCode(reason) ? reason : body?.error?.status;
+    const hint = isErrorCode(code) ? ` (${code})` : '';
+    throw new Error(`Google Route Optimization returnerade HTTP ${response.status}${hint}.`);
+  }
   return await response.json() as {routes?: {visits?: {isPickup?: boolean}[]}[]};
 }
