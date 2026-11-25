@@ -209,13 +209,14 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
           <button disabled={busy||chosen.some(row=>row.status==='verified')} onClick={()=>void run('review',{mode:'manual',origin,destination,items:chosen.map(row=>({id:row.id}))})}>Tilldela adress till markerade</button>
         </div>
       </details>}
-      <div className="table-wrap"><table><thead><tr>{!version&&<th>Välj</th>}<th>TransId</th><th>Datum / reg.nr</th><th>Avsändare / mottagare</th>
+      <div className="table-wrap"><table><thead><tr>{!version&&<th>Välj</th>}<th>TransId</th><th>Datum / reg.nr</th>{!version&&<><th>Ordernummer</th><th>Referens</th></>}<th>Avsändare / mottagare</th>
         <th>Ursprungs-/leveransadress</th><th>Artikel / lagerplats</th><th>Ton</th><th>Leveranstyp</th><th>Status</th></tr></thead>
         <tbody>{displayed.map(row=><tr key={row.id}>
           {!version&&<td><input type="checkbox" aria-label={`Markera ${row.trans_id}`} checked={selection.includes(row.id)}
             disabled={row.status==='verified'||(selection.length>=150&&!selection.includes(row.id))}
             onChange={e=>setSelection(old=>e.target.checked?[...old,row.id]:old.filter(id=>id!==row.id))}/></td>}
           <td><button onClick={()=>open(row)}>{row.trans_id}</button></td><td>{row.day}<br/>{row.reg}</td>
+          {!version&&<><td>{String(row.raw?.Ordernr??'').trim()||'–'}</td><td>{String(row.raw?.Referens??'').trim()||'–'}</td></>}
           <td>{row.sender}<br/>{row.recipient}</td><td>{reportAddress(row)||'–'}</td>
           <td>{row.material}<br/>{row.stock}</td><td>{yardNumber.format(row.tonnes)}</td><td>{row.kind}</td>
           <td><span className={`${styles.badge} ${styles[row.status]}`}>{statusLabels[row.status]}</span></td>
