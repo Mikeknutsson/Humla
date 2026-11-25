@@ -32,9 +32,11 @@ export function stockholmDate() {
 }
 
 export const materialGroups = [
-  'Bärlager', 'Förstärkningslager', 'Slitlager', 'Bergkross och krossgrus', 'Makadam',
-  'Stenmjöl', 'Sand och naturgrus', 'Fyllnad', 'Jord', 'Natursten', 'Tippavgifter', 'Övrigt',
+  'Stenmjöl och bergkross', 'Makadam', 'Naturgrus och sand', 'Matjord, återvunnet och fyllnadsmaterial',
+  'Tippavgifter', 'Övrigt',
 ] as const;
+
+const [crushedRock,makadam,naturalGravel,soilAndFill,tipping,other] = materialGroups;
 
 type MaterialGroup = typeof materialGroups[number];
 
@@ -48,26 +50,30 @@ const fractionNames = new Map<string,string>([
 ]);
 
 const families: [prefix: RegExp, label: string, group: MaterialGroup][] = [
-  [/^bärlager\b/i, 'Bärlager', 'Bärlager'],
-  [/^förstärkning(?:slager)?\b/i, 'Förstärkningslager', 'Förstärkningslager'],
-  [/^slitlager\b/i, 'Slitlager', 'Slitlager'],
-  [/^bergkross\b/i, 'Bergkross', 'Bergkross och krossgrus'],
-  [/^krossgrus\b/i, 'Krossgrus', 'Bergkross och krossgrus'],
-  [/^makadam\b/i, 'Makadam', 'Makadam'],
-  [/^stenmjöl\b/i, 'Stenmjöl', 'Stenmjöl'],
-  [/^natur\s*singel\b/i, 'Natursingel', 'Sand och naturgrus'],
-  [/^bakbar sandlådesand\b/i, 'Bakbar sandlådesand', 'Sand och naturgrus'],
-  [/^dränering\b/i, 'Dränering', 'Sand och naturgrus'],
-  [/^gjutgrus\b/i, 'Gjutgrus', 'Sand och naturgrus'],
-  [/^murgrus\b/i, 'Murgrus', 'Sand och naturgrus'],
-  [/^rörgrus\s*\/\s*kabelsand\b/i, 'Rörgrus/kabelsand', 'Sand och naturgrus'],
-  [/^tvättad\b/i, 'Tvättad', 'Sand och naturgrus'],
-  [/^grov\s*fyllnad\b/i, 'Grovfyllnad', 'Fyllnad'],
-  [/^fyllnadsmaterial\b/i, 'Fyllnadsmaterial', 'Fyllnad'],
-  [/^moränfyllnad\b/i, 'Moränfyllnad', 'Fyllnad'],
-  [/^matjord\b/i, 'Matjord', 'Jord'],
-  [/^kullersten\b/i, 'Kullersten', 'Natursten'],
-  [/^stengärdsten\b/i, 'Stengärdsten', 'Natursten'],
+  [/^bärlager\b/i, 'Bärlager', crushedRock],
+  [/^förstärkning(?:slager)?\b/i, 'Förstärkningslager', crushedRock],
+  [/^slitlager\b/i, 'Slitlager', crushedRock],
+  [/^bergkross\b/i, 'Bergkross', crushedRock],
+  [/^krossgrus\b/i, 'Krossgrus', crushedRock],
+  [/^makadam\b/i, 'Makadam', makadam],
+  [/^stenmjöl\b/i, 'Stenmjöl', crushedRock],
+  [/^natur\s*singel\b/i, 'Natursingel', naturalGravel],
+  [/^bakbar sandlådesand\b/i, 'Bakbar sandlådesand', naturalGravel],
+  [/^dränering\b/i, 'Dränering', naturalGravel],
+  [/^gjutgrus\b/i, 'Gjutgrus', naturalGravel],
+  [/^murgrus\b/i, 'Murgrus', naturalGravel],
+  [/^rörgrus\s*\/\s*kabelsand\b/i, 'Rörgrus/kabelsand', naturalGravel],
+  [/^tvättad\b/i, 'Tvättad', naturalGravel],
+  [/^grov\s*fyllnad\b/i, 'Grovfyllnad', soilAndFill],
+  [/^fyllnadsmaterial\b/i, 'Fyllnadsmaterial', soilAndFill],
+  [/^moränfyllnad\b/i, 'Moränfyllnad', soilAndFill],
+  [/^matjord\b/i, 'Matjord', soilAndFill],
+  [/^asfaltkross\b|^asfaltskross\b/i, 'Asfaltskross', soilAndFill],
+  [/^betongkross\b/i, 'Betongkross', soilAndFill],
+  [/^naturgrus\b/i, 'Naturgrus', naturalGravel],
+  [/^sand\b/i, 'Sand', naturalGravel],
+  [/^kullersten\b/i, 'Kullersten', naturalGravel],
+  [/^stengärdsten\b/i, 'Stengärdsten', naturalGravel],
 ];
 
 export function standardMaterial(rate: Pick<SiteRate,'material'|'kind'>): {name: string; group: MaterialGroup} {
@@ -76,11 +82,11 @@ export function standardMaterial(rate: Pick<SiteRate,'material'|'kind'>): {name:
     .replace(/\s+SS[- ]EN\s+\d+(?=\s|$)/gi,'')
     .replace(/\s+/g,' ');
   if (rate.kind === 'tip') {
-    return {name:/^schakt(?: \(pukavik\))?$/i.test(normalized) ? 'Schakt' : normalized,group:'Tippavgifter'};
+    return {name:/^schakt(?: \(pukavik\))?$/i.test(normalized) ? 'Schakt' : normalized,group:tipping};
   }
 
   if (/^(?:(?:förstärkning(?:slager)?|bergkross) )?(?:0-(?:125|150)|0-125-150|0-125 eller 0-150|0-150 eller 0-125)$/i.test(normalized)) {
-    return {name:'0-125/150',group:'Förstärkningslager'};
+    return {name:'0-125/150',group:crushedRock};
   }
 
   let name = fractionNames.get(normalized) ?? normalized;
@@ -91,9 +97,23 @@ export function standardMaterial(rate: Pick<SiteRate,'material'|'kind'>): {name:
     .replace(/^tvättad \((dresss?and|fallsand)\) (.+)$/i,(_, sand: string, size: string) =>
       (sand.toLowerCase() === 'fallsand' ? 'Fallsand' : 'Dressand') + ' ' + size + ' tvättad')
     .replace(/\b(Tvättad|Torr|Klass|Diabas|Terminal|Svart|Special)\b/gi,word => word.toLocaleLowerCase('sv-SE'));
-  if (/^(dressand|fallsand)\b/i.test(name)) return {name,group:'Sand och naturgrus'};
+  if (/^(dressand|fallsand)\b/i.test(name)) return {name,group:naturalGravel};
   const family = families.find(([pattern]) => pattern.test(name));
-  return family ? {name:name.replace(family[0],family[1]),group:family[2]} : {name,group:'Övrigt'};
+  return family ? {name:name.replace(family[0],family[1]),group:family[2]} : {name,group:other};
+}
+
+export function compareMaterialFractions(a: string,b: string) {
+  function fraction(name: string) {
+    return name.match(/\b(\d+(?:[,.]\d+)?)-(\d+(?:[,.]\d+)?)\b/)?.slice(1,3)
+      .map(value => Number(value.replace(',','.')));
+  }
+  const left = fraction(a);
+  const right = fraction(b);
+  if (left && right) {
+    const sizeDifference = left[0]-right[0] || left[1]-right[1];
+    if (sizeDifference) return sizeDifference;
+  } else if (left || right) return left ? -1 : 1;
+  return a.localeCompare(b,'sv',{numeric:true});
 }
 
 export function comparisonMaterial(rate: SiteRate) {
