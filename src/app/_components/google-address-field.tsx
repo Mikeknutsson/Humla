@@ -121,14 +121,25 @@ export async function googleRoadEstimate(mapsKey: string, origin: GoogleLocation
   return estimate;
 }
 
-export async function googleRouteMatrix(mapsKey: string, origins: GoogleLocation[], destination: GoogleLocation) {
+async function computeGoogleRouteMatrix(mapsKey: string, origins: GoogleLocation[], destinations: GoogleLocation[]) {
   const {Place} = await loadPlaces(mapsKey);
   const {RouteMatrix} = await (window as GoogleWindow).google!.maps.importLibrary('routes');
   const {matrix} = await RouteMatrix.computeRouteMatrix({
-    origins:origins.map(origin => waypoint(origin,Place)), destinations:[waypoint(destination,Place)],
+    origins:origins.map(origin => waypoint(origin,Place)),
+    destinations:destinations.map(destination => waypoint(destination,Place)),
     travelMode:'DRIVING', fields:roadFields,
   });
-  return origins.map((_, index) => roadEstimate(matrix.rows[index]?.items[0]));
+  return matrix.rows;
+}
+
+export async function googleRouteMatrix(mapsKey: string, origins: GoogleLocation[], destination: GoogleLocation) {
+  const rows = await computeGoogleRouteMatrix(mapsKey,origins,[destination]);
+  return origins.map((_, index) => roadEstimate(rows[index]?.items[0]));
+}
+
+export async function googleReturnRouteMatrix(mapsKey: string, origin: GoogleLocation, destinations: GoogleLocation[]) {
+  const rows = await computeGoogleRouteMatrix(mapsKey,[origin],destinations);
+  return destinations.map((_, index) => roadEstimate(rows[0]?.items[index]));
 }
 
 export async function validateGoogleAddress(mapsKey: string, address: string) {
