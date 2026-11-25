@@ -11,9 +11,17 @@ import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
 import {effectiveSiteRates, stockholmDate, type MaterialSite} from '@/lib/hub/material-price-bank';
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
-import {calculateTonPrices, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
+import {calculateTonPrices, offerTermsMaxLength, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
 type Access = NonNullable<Awaited<ReturnType<typeof tonPriceAccess>>>;
+
+export async function loadWorkifyCustomers() {
+  const access = await tonPriceAccess();
+  if (!access) return null;
+  const {data,error} = await access.db.rpc('hub_ton_price_workify_customers',{p_tenant_id:access.tenantId});
+  if (error) return null;
+  return (data as {name: string}[]).map(row => row.name).sort((a,b) => a.localeCompare(b,'sv'));
+}
 
 async function prepareTonPrices(access: Access | null, draft: TonPriceDraft, includeSites = false) {
   if (!access) return {error: 'Behörighet saknas.'};
@@ -99,8 +107,9 @@ export async function calculateQuarryComparison(date: string, materials: QuarryM
 }
 
 function validOfferDetails(details: OfferDetails) {
-  return details && [details.customer, details.project, details.validity, details.terms]
-    .every(value => typeof value === 'string' && value.length <= 240);
+  return details && [details.customer, details.project, details.validity]
+    .every(value => typeof value === 'string' && value.length <= 240) &&
+    typeof details.terms === 'string' && details.terms.length <= offerTermsMaxLength;
 }
 
 export async function downloadQuarryOffer(
