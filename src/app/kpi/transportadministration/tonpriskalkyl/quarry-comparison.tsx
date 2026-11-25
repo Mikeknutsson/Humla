@@ -172,7 +172,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     <fieldset className={styles.form}>
       <div className={styles.grid}>
         <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
-          placeholder="Gatuadress och ort" onChange={changeDestination} onCommit={setCommitted}/>
+          placeholder="Gatuadress och ort" autocomplete onChange={changeDestination} onCommit={setCommitted}/>
       </div>
       {!mapsKey && !hasAddress && <div className={styles.actions}>
         <button type="button" className="secondary" onClick={() => {
@@ -236,7 +236,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         !materials.length ? 'Välj material för att fortsätta.' :
         !candidates.length ? 'Prisbanken saknar en täkt för de valda materialen på prisdatumet.' :
         !routesAvailable ? 'Ange körsträcka för minst en täkt för att räkna fram priset.' :
-        !addressConfirmed ? 'Bekräfta adressen med Enter eller Beräkna levererat pris.' :
+        !addressConfirmed ? 'Välj ett adressförslag, sätt en kartnål eller klicka på Beräkna levererat pris.' :
         busy ? 'Jämför materialpris och frakt med bil + kärra…' : null}
     </div>
     {current?.error && <div className={styles.actions}><p role="alert">{current.error}</p>
