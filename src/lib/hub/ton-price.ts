@@ -1,11 +1,15 @@
 export type ReturnLoad = {material: string; tonnes: string; share: string; contribution: string; extraMiles: string; extraMinutes: string};
 export const emptyReturnLoad: ReturnLoad = {material:'',tonnes:'',share:'100',contribution:'',extraMiles:'0',extraMinutes:'0'};
 export type Leg = {miles: string; driveMinutes: string};
+export const pukavikStartAddress = 'Karlshamnsvägen 329, 294 93 Sölvesborg';
+export const zeroStartLeg: Leg = {miles:'0',driveMinutes:'0'};
 export type Round = {
   id: string; pickup: string; delivery: string; returnTo: string;
   pickupPoint?: {lat: number; lng: number};
   deliveryPoint?: {lat: number; lng: number};
   returnLoad?: ReturnLoad;
+  start?: Leg;
+  autoHandling?: boolean;
   pickupSiteId?: string; deliverySiteId?: string; pickupPlaceId?: string; deliveryPlaceId?: string; returnPlaceId?: string;
   outbound: Leg; inbound: Leg; mirror: boolean;
   minutesPerMile: string; loading: string; unloading: string; waiting: string;
@@ -52,20 +56,26 @@ function leg(input: Leg, minutesPerMile: number | null) {
   return miles === null || minutes === null ? null : {miles, minutes};
 }
 
+export function calculateStartLeg(round: Round) {
+  return round.start ? leg(round.start,number(round.minutesPerMile,1000,0.01)) : null;
+}
+
 export function calculateRound(round: Round) {
   const speed = number(round.minutesPerMile, 1000, 0.01);
+  const start = round.start ? calculateStartLeg(round) : {miles:0,minutes:0};
   const outbound = leg(round.outbound, speed);
   const inbound = round.mirror ? outbound : leg(round.inbound, speed);
-  const loading = number(round.loading, 10000);
-  const unloading = number(round.unloading, 10000);
+  const standardHandling = outbound && outbound.miles < 1.2 ? 10 : 15;
+  const loading = round.autoHandling ? standardHandling : number(round.loading, 10000);
+  const unloading = round.autoHandling ? standardHandling : number(round.unloading, 10000);
   const waiting = number(round.waiting, 10000);
-  if (!outbound || !inbound || loading === null || unloading === null || waiting === null) return null;
+  if (!start || !outbound || !inbound || loading === null || unloading === null || waiting === null) return null;
   const miles = outbound.miles + inbound.miles;
   const drive = outbound.minutes + inbound.minutes;
   const minutes = drive + loading + unloading + waiting;
   if (minutes <= 0) return null;
   const load = round.returnLoad;
-  if (!load) return {miles, drive, minutes, returnCredit:0, returnTonnes:0, returnLoadWeight:0};
+  if (!load) return {miles, drive, minutes, start, returnCredit:0, returnTonnes:0, returnLoadWeight:0};
   const tonnes = number(load.tonnes, 100, 0.001);
   const share = number(load.share, 100);
   const contribution = number(load.contribution, 100000, -100000);
@@ -73,7 +83,7 @@ export function calculateRound(round: Round) {
   const extraMinutes = number(load.extraMinutes, 10000);
   if (tonnes === null || share === null || contribution === null || extraMiles === null || extraMinutes === null) return null;
   const fraction = share / 100;
-  return {miles:miles + extraMiles * fraction, drive, minutes:minutes + extraMinutes * fraction,
+  return {miles:miles + extraMiles * fraction, drive, minutes:minutes + extraMinutes * fraction, start,
     returnCredit:tonnes * contribution * fraction, returnTonnes:tonnes * fraction, returnLoadWeight:fraction > 0 ? tonnes : 0};
 }
 
@@ -115,18 +125,20 @@ export function calculateTonPrices(draft: TonPriceDraft) {
         prices: Object.fromEntries(profiles.map(profile => {
           const {load, gross} = vehicleLoad(vehicle, profile);
           if (!time || !price || hourly === null || load === null || time.returnLoadWeight > load) return [profile, null];
-          const freight = (hourly * time.minutes / 60 - time.returnCredit) / load;
-          const delivered = price.sale + freight;
           const trips = tonnes === null ? null : Math.ceil(Math.round(tonnes * 1e6) / Math.round(load * 1e6));
-          return [profile, {load, gross, freight, delivered, trips,
-            miles: trips === null ? null : trips * time.miles,
-            hours: trips === null ? null : trips * time.minutes / 60,
+          const roundFreight = (hourly * time.minutes / 60 - time.returnCredit) / load;
+          const startFreight = hourly * time.start.minutes / 60 / (tonnes || load);
+          const freight = roundFreight + startFreight;
+          const delivered = price.sale + freight;
+          return [profile, {load, gross, freight, roundFreight, startFreight, delivered, trips,
+            miles: trips === null ? null : trips * time.miles + (trips ? time.start.miles : 0),
+            hours: trips === null ? null : (trips * time.minutes + (trips ? time.start.minutes : 0)) / 60,
             returnTonnes: trips === null ? null : trips * time.returnTonnes,
             freightAmount: tonnes === null ? null : freight * tonnes,
             materialEarnings: tonnes === null ? null : (price.sale - price.purchase) * tonnes,
             amount: tonnes === null ? null : delivered * tonnes}];
         })) as Record<TonPriceDraft['profile'], {
-          load: number; gross: number | null; freight: number; delivered: number; trips: number | null;
+          load: number; gross: number | null; freight: number; roundFreight: number; startFreight: number; delivered: number; trips: number | null;
           miles: number | null; hours: number | null; returnTonnes: number | null; freightAmount: number | null;
           materialEarnings: number | null; amount: number | null;
         } | null>,
@@ -156,7 +168,7 @@ export function calculateTonPrices(draft: TonPriceDraft) {
 export const newRound = (id: string): Round => ({
   id, pickup: '', delivery: '', returnTo: '', mirror: true,
   outbound: {miles: '', driveMinutes: ''}, inbound: {miles: '', driveMinutes: ''},
-  minutesPerMile: '11', loading: '15', unloading: '15', waiting: '0',
+  minutesPerMile: '11', autoHandling:true, loading: '15', unloading: '15', waiting: '0',
 });
 export const newMaterial = (id: string, roundId: string, vehicleId: string): Material => ({
   id, roundId, vehicleId, name: '', transportOnly: false,

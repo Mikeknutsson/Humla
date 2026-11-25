@@ -9,6 +9,7 @@ export type DeliveryPlanLine = {
   tip: boolean;
   tippingDestination?: boolean;
   route: string;
+  start?: string;
   returnLoad: string;
   purchase: number;
   materialPrice: number;
@@ -36,6 +37,7 @@ export function deliveryPlanRoute(
   return {
     pickup,
     delivery,
+    start:round.start ? [pickup, decimal.format(time.start.miles)+' mil', decimal.format(time.start.minutes)+' min'].join(' · ') : undefined,
     route:fields.join(' · '),
     returnLoad:returns && time.returnTonnes > 0
       ? [returns.material.trim() || 'Fraktion saknas', decimal.format(time.returnLoadWeight)+' ton per returlass',

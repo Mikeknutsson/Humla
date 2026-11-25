@@ -13,7 +13,7 @@ import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
 import {effectiveSiteRates, stockholmDate, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
-import {calculateTonPrices, offerTermsMaxLength, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
+import {calculateStartLeg, calculateTonPrices, offerTermsMaxLength, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
 type Access = NonNullable<Awaited<ReturnType<typeof tonPriceAccess>>>;
 
@@ -55,6 +55,10 @@ async function prepareTonPrices(access: Access | null, draft: TonPriceDraft, inc
         row.bankKind = rate.kind;
         row.name = rate.material;
       }
+    }
+    const usedRounds = new Set(draft.materials.map(row => row.roundId));
+    if (draft.rounds.some(round => usedRounds.has(round.id) && !calculateStartLeg(round))) {
+      return {error:'Ange startsträckan från Pukavik för varje använd runda.'};
     }
     return {result: calculateTonPrices(draft), sites};
   } catch {
@@ -200,7 +204,7 @@ function prepareQuarryJob(
     const siteId = tip ? round.deliverySiteId : round.pickupSiteId;
     if (!siteId || !round.outbound.miles.trim()) continue;
     const returnLeg = round.mirror ? round.outbound : round.inbound;
-    routes[siteId] = tip ? {outbound:returnLeg,inbound:round.outbound} : {outbound:round.outbound,inbound:returnLeg};
+    routes[siteId] = tip ? {outbound:returnLeg,inbound:round.outbound,start:round.start} : {outbound:round.outbound,inbound:returnLeg,start:round.start};
   }
   const settings: QuarryOfferSettings = {
     destination,kind,pricing:{mode:pricing.mode,markup:pricing.markup,overrides:{}},routes,

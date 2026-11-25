@@ -9,13 +9,13 @@ import {compareMaterialFractions, materialGroups, sortergardenSiteIds, standardM
 import {priorJobMaterials, quotedMaterial, type ProjectLocation, type OfferRevision, type QuarryOfferJob, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
-import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
+import {emptyReturnLoad, newRound, pukavikStartAddress, zeroStartLeg, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
 import {calculateQuarryComparison} from './actions';
 import styles from './workspace.module.css';
 
 type Option = QuarryComparison[number]['options'][number];
-type Direction = 'outbound' | 'inbound';
+type Direction = 'outbound' | 'inbound' | 'start';
 export const testProjectAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 const emptyLeg: Leg = {miles:'',driveMinutes:''};
 const directions = [['outbound','Till projektet'],['inbound','Tillbaka till täkten']] as const;
@@ -74,7 +74,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   const [quantities,setQuantities] = useState<Record<string,string>>({});
   const [withoutReturn,setWithoutReturn] = useState<string[]>(saved?.withoutReturn ?? []);
   const [returnLoad,setReturnLoad] = useState<ReturnLoad | undefined>(saved?.returnLoad);
-  const [manualState,setManual] = useState({key:destinationKey,legs:saved?.routes ?? {}});
+  const [manualState,setManual] = useState({key:destinationKey,legs:saved && (kind === 'tip') ? {...saved.routes,'project-start':{start:Object.values(saved.routes).find(route => route.start)?.start}} : saved?.routes ?? {}});
   const manual = manualState.key === destinationKey ? manualState.legs : {};
   const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
   const [retry,setRetry] = useState(0);
@@ -82,6 +82,9 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   const [pricing,setPricing] = useState<QuarryPricing>(saved?.pricing ?? legacy?.pricing ?? {mode:'markup',markup:'0',overrides:{}});
   const routes = useRef(new Map<string,Promise<Leg>>());
   const isTipping = kind === 'tip';
+  const depot = sites.find(site => site.name === 'Sortergården Pukavik');
+  const depotLocation = {address:depot?.address || pukavikStartAddress,id:depot?.mapPlaceId};
+  const startKey = (site: MaterialSite) => isTipping ? 'project-start' : site.id;
   const primaryDirection: Direction = isTipping ? 'inbound' : 'outbound';
   const eligibleSites = sites.filter(site => site.kind !== (isTipping ? 'quarry' : 'tip'));
   const eligibleIds = new Set(eligibleSites.map(site => site.id));
@@ -127,8 +130,9 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   const result = current?.comparison;
   const busy = ready && !current;
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
+  const missingStart = current?.rounds?.some(round => !round.start?.miles.trim());
   const missingRoutes = current?.rounds?.some(round => !round.outbound.miles.trim() || (!round.mirror && !round.inbound.miles.trim()));
-  const needsManual = isTestAddress || !mapsKey || !routesAvailable || missingRoutes;
+  const needsManual = isTestAddress || !mapsKey || !routesAvailable || missingRoutes || missingStart;
   const activePricing = {...pricing,overrides:Object.fromEntries(Object.entries(pricing.overrides)
     .filter(([name]) => selected.includes(name)))};
   const priced = result ? priceQuarryOffer(result,activePricing,workifyPrices) : [];
@@ -202,11 +206,40 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
           return emptyLeg;
         }
       }
+      const startTarget = (site: MaterialSite) => isTipping ? destination : {address:site.address,id:site.mapPlaceId};
+      const startRouteKey = (site: MaterialSite) => JSON.stringify([mapsKey,'start',depotLocation,startTarget(site)]);
+      if (mapsKey && !isTestAddress) {
+        const pending = new Map(candidates.filter(site => (isTipping || site.id !== depot?.id) &&
+          !manual[startKey(site)]?.start?.miles.trim() && (startTarget(site).address || startTarget(site).id))
+          .filter(site => !routes.current.has(startRouteKey(site))).map(site => [startRouteKey(site),startTarget(site)]));
+        const entries = [...pending];
+        for (let index = 0; index < entries.length; index += 49) {
+          const batch = entries.slice(index,index+49);
+          const matrix = googleReturnRouteMatrix(mapsKey,depotLocation,batch.map(([,target]) => target));
+          batch.forEach(([route,target],position) => {
+            const fallback = () => googleRoadEstimate(mapsKey,depotLocation,target);
+            routes.current.set(route,matrix.then(estimates => estimates[position] ?? fallback(),fallback));
+          });
+        }
+      }
+      async function resolveStart(site: MaterialSite) {
+        if (!isTipping && site.id === depot?.id) return zeroStartLeg;
+        const override = manual[startKey(site)]?.start;
+        if (override?.miles.trim()) return override;
+        const key = startRouteKey(site);
+        try {
+          const estimate = await routes.current.get(key);
+          return estimate ? {...estimate,driveMinutes:override?.driveMinutes.trim() || estimate.driveMinutes} : undefined;
+        } catch {
+          routes.current.delete(key);
+          return undefined;
+        }
+      }
       const rounds = await Promise.all(candidates.map(async site => {
-        const [outbound,inbound] = await Promise.all([resolveLeg(site,'outbound'),resolveLeg(site,'inbound')]);
+        const [outbound,inbound,start] = await Promise.all([resolveLeg(site,'outbound'),resolveLeg(site,'inbound'),resolveStart(site)]);
         const canRoute = mapsKey && !isTestAddress && (site.address || site.mapPlaceId);
         const load = withoutReturn.includes(site.id) ? undefined : returnLoad;
-        const round = {...newRound(crypto.randomUUID()),returnLoad:load};
+        const round = {...newRound(crypto.randomUUID()),returnLoad:load,start};
         return isTipping ? {...round,pickup:destination.address,pickupPlaceId:destination.id,pickupPoint:destination.point,
           delivery:site.address,deliverySiteId:site.id,deliveryPlaceId:site.mapPlaceId,
           outbound:inbound,inbound:outbound,mirror:!canRoute && !outbound.miles.trim()} :
@@ -227,6 +260,17 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
     const timer = window.setTimeout(() => void compare(inputKey,controller.signal),300);
     return () => {window.clearTimeout(timer);controller.abort();};
   },[ready,inputKey]);
+
+  function startFields(siteId: string, label: string, value?: Leg) {
+    const input = manual[siteId]?.start;
+    return <fieldset className={styles.grid}>
+      <legend>{label}</legend>
+      <label className={styles.field}>Körsträcka (mil)<input value={input?.miles ?? ''} placeholder={value?.miles || 'Ange mil'}
+        inputMode="decimal" onChange={event => updateManual(siteId,'start',{miles:event.target.value})}/></label>
+      <label className={styles.field}>Körtid (min, valfritt)<input value={input?.driveMinutes ?? ''} placeholder={value?.driveMinutes || '11 min/mil'}
+        inputMode="decimal" onChange={event => updateManual(siteId,'start',{driveMinutes:event.target.value})}/></label>
+    </fieldset>;
+  }
 
   return <section className={styles.projectMaterial}>
     <fieldset className={styles.form}>
@@ -271,8 +315,10 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
         {isTestAddress ? <p>För testadressen kan du ange ett exempelavstånd, till exempel 2,5 mil enkel väg.</p>
           : !mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
           {' '}<Link href="/integrationer/google">Öppna Google-inställningar</Link></p> :
+          missingStart ? <p>Startsträcka från Pukavik saknas för minst en rutt.</p> :
           missingRoutes ? <p>Google kunde inte hämta alla rutter. Ange körsträckan för den riktning som saknas.</p> : null}
         <p>Google uppskattar körsträcka och körtid för bil i båda riktningarna. Vid manuell sträcka utan körtid används 11 min/mil. För täkter utan kartuppgifter kan samma manuella sträcka användas åt båda håll.</p>
+        {isTipping && startFields('project-start','Start från Pukavik till projektet',current?.rounds?.[0]?.start)}
         {candidates.map(site => {
           const round = current?.rounds?.find(round => (isTipping ? round.deliverySiteId : round.pickupSiteId) === site.id);
           return <div className={styles.routeRow} key={site.id}>
@@ -280,6 +326,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
               {!isTestAddress && (site.address || site.mapPlaceId ? <a href={directionsUrl(site,destination,isTipping)} target="_blank" rel="noreferrer">Visa vägen i Google Maps</a> :
                 <small>Infartsadress saknas i Prisbanken.</small>)}
             </div>
+            {!isTipping && site.id !== depot?.id && startFields(site.id,'Start från Pukavik till täkten',round?.start)}
             {(isTipping ? [['inbound','Till mottagaren'],['outbound','Tillbaka till projektet']] as const : directions).map(([direction,label]) => {
               const leg = direction === primaryDirection ? 'outbound' : 'inbound';
               const route = leg === 'inbound' && round?.mirror ? round.outbound : round?.[leg];
@@ -322,10 +369,10 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
           <input inputMode="decimal" value={pricing.markup} onChange={event => setPricing({...pricing,markup:event.target.value})}/>
         </label>
       </div>
-      <small>Påslag gäller materialet. Workify-priser inklusive transport används som levererat pris.</small></>}
+      <small>Påslag gäller materialet. Vid Workify-pris inklusive transport tillkommer startsträckan från Pukavik.</small></>}
       {isTipping && <small>Priset inkluderar transport och tippavgift. Ersättning för material dras av.</small>}
       <div className={styles.table}><table>
-        <thead><tr><th>Fraktion</th><th>Prisgrund per fraktion</th><th>{isTipping ? 'Pris för bortkörning (kr/ton)' : 'Levererat pris (kr/ton)'}</th></tr></thead>
+        <thead><tr><th>Fraktion</th><th>Prisgrund per fraktion</th><th>{isTipping ? 'Pris för bortkörning (kr/ton)' : 'Levererat pris (kr/ton)'}</th><th>{isTipping ? 'Vald tipp' : 'Vald täkt'}</th></tr></thead>
         <tbody>{result.map((row,index) => {
           const entry = priced[index];
           const override = pricing.overrides[row.material];
@@ -347,6 +394,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
                 onChange={event => changeRowPricing(row.material,{markup:event.target.value})}/>}
             </>}</td>
             <td>{entry.line ? <strong>{offerMoney.format(entry.line.unitPrice)}</strong> : entry.error}</td>
+            <td>{row.options[0]?.site.name ?? '–'}{row.options[0]?.preferred && <small className={styles.siteNote}>Förstahandsval</small>}</td>
           </tr>;
         })}</tbody>
       </table></div>
@@ -358,7 +406,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
       {!complete && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
     </section>}
     {result && <details><summary>{isTipping ? 'Visa jämförelse av mottagningsplatser' : 'Visa täktjämförelse'}</summary>
-    <p>Tiden per runda inkluderar körning i båda riktningarna och 30 minuter för lastning och lossning.</p>
+    <p>Starten från Pukavik räknas en gång per materialrad. Lastning och lossning tar totalt 20 min vid lastad körsträcka under 1,2 mil och 30 min från 1,2 mil.</p>
     {result.map(row => <section className={styles.card} key={row.material}>
       <h3>{row.material}</h3>
       {row.options[0] ? <strong>{row.options[0].preferred ? 'Förstahandsval' : row.missing.length ? 'Billigast av beräknade platser' : 'Billigast'} · {row.options[0].site.name} · {offerMoney.format(row.options[0].total)} kr/ton</strong>
@@ -368,10 +416,11 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
         <summary>Visa jämförelse</summary>
         <div className={styles.table}><table><thead><tr><th>{isTipping ? 'Mottagare' : 'Täkt'}</th><th>Material i prislistan</th>
           <th>{isTipping ? 'Tippavgift kr/ton' : 'Material kr/ton'}</th><th>{isTipping ? 'Mil till mottagare' : 'Mil till projekt'}</th>
-          <th>Mil tillbaka</th><th>Min per runda</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
+          <th>Mil tillbaka</th><th>Start från Pukavik (mil / min)</th><th>Min per runda</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
           <tbody>{row.options.map(option => <tr key={option.rate.id}><td>{option.site.name}</td><td>{option.rate.material}</td>
             <td>{offerMoney.format(option.rate.price)}</td><td>{option.round.outbound.miles}</td>
             <td>{option.round.mirror ? option.round.outbound.miles : option.round.inbound.miles}</td>
+            <td>{option.time.start.miles.toLocaleString('sv-SE')} / {option.time.start.minutes.toLocaleString('sv-SE')}</td>
             <td>{offerMoney.format(option.time.minutes)}</td><td>{offerMoney.format(option.freight)}</td>
             <td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}

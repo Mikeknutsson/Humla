@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Calculator, ExternalLink, Plus, Trash2} from 'lucide-react';
-import {defaultOfferTerms, initialTonPriceDraft, newMaterial, newRound, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
+import {defaultOfferTerms, initialTonPriceDraft, newMaterial, newRound, pukavikStartAddress, zeroStartLeg, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
@@ -45,7 +45,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
   toggleRate: (rate: SiteRate) => void; change: (patch: Partial<Round>) => void; remove?: () => void;
 }) {
   const field = (key: 'minutesPerMile' | 'loading' | 'unloading' | 'waiting', label: string) =>
-    <Field key={key} label={label} value={round[key]} onChange={value => change({[key]: value})} numeric/>;
+    <Field key={key} label={label} value={round[key]} onChange={value => change({[key]:value,...(key === 'loading' || key === 'unloading' ? {autoHandling:false} : {})})} numeric/>;
   const mapsKey = useGoogleMapsKey();
   const returnTo = round.returnTo.trim() || round.pickup.trim();
   const pickupTarget = round.pickupPoint ? `${round.pickupPoint.lat},${round.pickupPoint.lng}` : round.pickup;
@@ -58,11 +58,16 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     setRouteStatus('');
     const pickup = {address:round.pickup,id:round.pickupPlaceId,point:round.pickupPoint};
     const delivery = {address:round.delivery,id:round.deliveryPlaceId,point:round.deliveryPoint};
+    const depot = sites.find(site => site.name === 'Sortergården Pukavik');
+    const startAddress = depot?.address || pukavikStartAddress;
+    const atDepot = Boolean(depot && round.pickupSiteId === depot.id) || (!round.pickupPoint && round.pickup.trim() === startAddress);
+    const startLookup = atDepot ? Promise.resolve(zeroStartLeg) :
+      googleRoadEstimate(mapsKey,{address:startAddress,id:depot?.mapPlaceId},pickup).catch(() => undefined);
     try {
-      const [outbound, inbound] = await Promise.all([googleRoadEstimate(mapsKey,pickup,delivery),
-        round.mirror ? null : googleRoadEstimate(mapsKey,delivery,round.returnTo ? {address:returnTo,id:round.returnPlaceId} : pickup)]);
-      change({outbound, ...(inbound ? {inbound} : {})});
-      setRouteStatus('Google Maps bilrutt. Justera mil och körtid vid behov för lastbil.');
+      const [outbound, inbound, start] = await Promise.all([googleRoadEstimate(mapsKey,pickup,delivery),
+        round.mirror ? null : googleRoadEstimate(mapsKey,delivery,round.returnTo ? {address:returnTo,id:round.returnPlaceId} : pickup),startLookup]);
+      change({outbound,...(inbound ? {inbound} : {}),...(start ? {start} : {})});
+      setRouteStatus(start ? 'Google Maps bilrutt. Justera mil och körtid vid behov för lastbil.' : 'Startsträckan från Pukavik kunde inte hämtas. Ange den under körinställningarna.');
     } catch {
       setRouteStatus('Google Maps kunde inte hämta rutten. Fyll i mil och körtid manuellt.');
     } finally {setFetching(false);}
@@ -71,7 +76,8 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
   const selectSite = (role: 'pickup' | 'delivery', id: string) => {
     const site = sites.find(item => item.id === id);
     const address = site?.address || '';
-    if (role === 'pickup') change({pickupSiteId:id,pickup:address,pickupPlaceId:site?.mapPlaceId,pickupPoint:undefined,...resetDistance});
+    if (role === 'pickup') change({pickupSiteId:id,pickup:address,pickupPlaceId:site?.mapPlaceId,pickupPoint:undefined,...resetDistance,
+      start:site?.name === 'Sortergården Pukavik' ? zeroStartLeg : undefined});
     else change({deliverySiteId:id,delivery:address,deliveryPlaceId:site?.mapPlaceId,deliveryPoint:undefined,...resetDistance});
   };
   return <fieldset className={styles.card} disabled={fetching}>
@@ -89,7 +95,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     <div className={styles.grid}>
       {round.pickup && round.pickupSiteId ? <p>{round.pickup}</p> :
         <GoogleAddressField label="Hämtningsadress" value={round.pickup} placeId={round.pickupPlaceId} point={round.pickupPoint} className={styles.field}
-          onChange={(pickup, pickupPlaceId, pickupPoint) => change({pickup,pickupPlaceId,pickupPoint,...resetDistance})}/>}
+          onChange={(pickup, pickupPlaceId, pickupPoint) => change({pickup,pickupPlaceId,pickupPoint,start:undefined,...resetDistance})}/>}
       {round.delivery && round.deliverySiteId ? <p>{round.delivery}</p> :
         <GoogleAddressField label="Leveransadress" value={round.delivery} placeId={round.deliveryPlaceId} point={round.deliveryPoint} className={styles.field}
           onChange={(delivery, deliveryPlaceId, deliveryPoint) => change({delivery,deliveryPlaceId,deliveryPoint,...resetDistance})}/>}
@@ -117,6 +123,10 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
           target="_blank" rel="noreferrer"><ExternalLink size={14}/> Karta retur</a>}
       </div>
       <div className={styles.grid}>
+        <Field label="Start från Pukavik (mil)" value={round.start?.miles ?? ''} numeric
+          onChange={miles => change({start:{miles,driveMinutes:round.start?.driveMinutes ?? ''}})}/>
+        <Field label="Start från Pukavik (min, valfritt)" value={round.start?.driveMinutes ?? ''} numeric
+          onChange={driveMinutes => change({start:{miles:round.start?.miles ?? '',driveMinutes}})}/>
         <Field label="Körtid dit (min)" value={round.outbound.driveMinutes} numeric placeholder="Använd schablon"
           onChange={driveMinutes => change({outbound:{...round.outbound,driveMinutes}})}/>
         {!round.mirror && <>
@@ -126,8 +136,10 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
           <Field label="Körtid retur (min)" value={round.inbound.driveMinutes} numeric placeholder="Använd schablon"
             onChange={driveMinutes => change({inbound:{...round.inbound,driveMinutes}})}/>
         </>}
-        {field('minutesPerMile', 'Schablon (min/mil)')}{field('loading', 'Lastning (min)')}
-        {field('unloading', 'Lossning (min)')}{field('waiting', 'Väntetid (min)')}
+        {field('minutesPerMile', 'Schablon (min/mil)')}{field('waiting', 'Väntetid (min)')}
+        <label><input type="checkbox" checked={Boolean(round.autoHandling)} onChange={event => change({autoHandling:event.target.checked})}/>
+          {' '}Automatisk last- och losstid (20 eller 30 min totalt)</label>
+        {!round.autoHandling && <>{field('loading', 'Lastning (min)')}{field('unloading', 'Lossning (min)')}</>}
       </div>
     </details>
     <details><summary>Returlast för rundan</summary>
@@ -141,7 +153,7 @@ function MaterialEditor({material, index, draft, change, remove, expired}: {
   material: Material; index: number; draft: TonPriceDraft; change: (patch: Partial<Material>) => void; remove?: () => void; expired: boolean;
 }) {
   const field = (key: 'name' | 'listPrice' | 'discount' | 'purchase' | 'markup' | 'sale' | 'tonnes', label: string, placeholder?: string) =>
-    <Field key={key} label={label} value={material[key]} onChange={value => change({[key]: value})} numeric={key !== 'name'} placeholder={placeholder}/>;
+    <Field key={key} label={label} value={material[key]} onChange={value => change({[key]:value})} numeric={key !== 'name'} placeholder={placeholder}/>;
   return <fieldset className={styles.card}>
     <legend>Rad {index + 1}</legend>
     <div className={styles.grid}>
