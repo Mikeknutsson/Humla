@@ -110,7 +110,9 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
       for (const [label,value] of fields) field(label,value,8);
     }
   } else {
-    for (const [label,value] of [['Kund',details.customer],['Projekt',details.project],['Leveransplats',delivery],['Giltig till',details.validity]]) {
+    const onlyTipping = lines.length > 0 && lines.every(item => item.isTip);
+    for (const [label,value] of [['Kund',details.customer],['Projekt',details.project],
+      [onlyTipping ? 'Hämtningsplats' : 'Leveransplats',delivery],['Giltig till',details.validity]]) {
       if (!value.trim()) continue;
       text(label,left,y,9,true,muted);
       const rows = wrapped(value,right-left-100);
@@ -119,7 +121,7 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
     }
 
     y -= 14;
-    text('Material inklusive transport',left,y,13,true,green);
+    text(onlyTipping ? 'Tippning inklusive transport' : 'Material inklusive transport',left,y,13,true,green);
     y -= 27;
     heading();
     for (const item of lines) {
