@@ -3,9 +3,9 @@
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
 import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
-import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix} from '@/app/_components/google-address-field';
+import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
-import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {materialGroups, standardMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
@@ -16,12 +16,14 @@ import styles from './workspace.module.css';
 
 type Option = QuarryComparison[number]['options'][number];
 type Direction = 'outbound' | 'inbound';
+type Destination = {address: string; id?: string; point?: Point};
 const emptyLeg: Leg = {miles:'',driveMinutes:''};
 const directions = [['outbound','Till projektet'],['inbound','Tillbaka till täkten']] as const;
 const testAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 
-function directionsUrl(site: MaterialSite, destination: {address: string; id?: string}) {
-  const query = new URLSearchParams({api:'1', origin:site.address || site.name, destination:destination.address, travelmode:'driving'});
+function directionsUrl(site: MaterialSite, destination: Destination) {
+  const endpoint = destination.point ? `${destination.point.lat},${destination.point.lng}` : destination.address;
+  const query = new URLSearchParams({api:'1', origin:site.address || site.name, destination:endpoint, travelmode:'driving'});
   if (site.mapPlaceId) query.set('origin_place_id',site.mapPlaceId);
   if (destination.id) query.set('destination_place_id',destination.id);
   return `https://www.google.com/maps/dir/?${query}`;
@@ -30,7 +32,7 @@ function directionsUrl(site: MaterialSite, destination: {address: string; id?: s
 export function ReturnLoadFields({value, rates, onChange}: {
   value?: ReturnLoad; rates: SiteRate[]; onChange:(value?: ReturnLoad) => void;
 }) {
-  const names = [...new Set(rates.map(rate => rate.material))];
+  const names = [...new Set(rates.map(rate => standardMaterial(rate).name))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
   return <div className={styles.card}>
     <label><input type="checkbox" checked={!!value} onChange={event => onChange(event.target.checked ? emptyReturnLoad : undefined)}/> Räkna med returlast</label>
     {value && <>
@@ -57,7 +59,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void; onDetailsChange:(patch: Partial<OfferDetails>) => void;
 }) {
   const mapsKey = useGoogleMapsKey();
-  const [destination,setDestination] = useState({address:'',id:undefined as string | undefined});
+  const [destination,setDestination] = useState<Destination>({address:''});
   const [committed,setCommitted] = useState('');
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
@@ -71,9 +73,19 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const routes = useRef(new Map<string,Promise<Leg>>());
   const quarrySites = sites.filter(site => site.kind !== 'tip');
   const quarryIds = new Set(quarrySites.map(site => site.id));
-  const purchase = rates.filter(rate => rate.kind === 'purchase' && rate.unit === 'ton' && quarryIds.has(rate.siteId));
-  const names = [...new Set(purchase.map(comparisonMaterial))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
-  const candidates = quarrySites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
+  const purchase = rates.filter(rate => rate.kind === 'purchase' && rate.unit === 'ton' && quarryIds.has(rate.siteId))
+    .map(rate => ({rate,...standardMaterial(rate)}));
+  const materialOptions = new Map<string,{id: string; label: string; group: typeof materialGroups[number]; aliases: Set<string>}>();
+  for (const {name,group,rate} of purchase) {
+    const option = materialOptions.get(name) ?? {id:name,label:name,group,aliases:new Set<string>()};
+    option.aliases.add(rate.material);
+    materialOptions.set(name,option);
+  }
+  const options = [...materialOptions.values()].sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
+    a.label.localeCompare(b.label,'sv',{numeric:true})).map(option => ({
+    id:option.id,label:option.label,group:option.group,search:[...option.aliases].join(' '),
+  }));
+  const candidates = quarrySites.filter(site => purchase.some(({rate,name}) => rate.siteId === site.id && selected.includes(name)));
   const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
   const routesAvailable = candidates.some(site => manual[site.id]?.outbound?.miles.trim() || (mapsKey && destination.address !== testAddress && (site.address || site.mapPlaceId)));
   const hasAddress = Boolean(destination.address.trim());
@@ -93,9 +105,9 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const complete = lines.length === materials.length && lines.length > 0 &&
     lines.every(line => Number.isFinite(line.unitPrice) && line.unitPrice >= 0);
 
-  function changeDestination(address: string, id?: string) {
-    setDestination({address,id});
-    setCommitted(id || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(address) ? address : '');
+  function changeDestination(address: string, id?: string, point?: Point) {
+    setDestination({address,id,point});
+    setCommitted(id || point || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(address) ? address : '');
     setManual({});
     routes.current.clear();
   }
@@ -151,7 +163,8 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         const canRoute = mapsKey && !isTestAddress && (site.address || site.mapPlaceId);
         const mirror = !canRoute && !inbound.miles.trim();
         return {...newRound(crypto.randomUUID()), pickup:site.address,pickupSiteId:site.id,pickupPlaceId:site.mapPlaceId,
-          delivery:destination.address,deliveryPlaceId:destination.id,returnLoad:withoutReturn.includes(site.id) ? undefined : returnLoad,
+          delivery:destination.address,deliveryPlaceId:destination.id,deliveryPoint:destination.point,
+          returnLoad:withoutReturn.includes(site.id) ? undefined : returnLoad,
           outbound,inbound,mirror};
       }));
       if (signal.aborted) return;
@@ -172,7 +185,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     <h2>Leverans och material</h2>
     <fieldset className={styles.form}>
       <div className={styles.grid}>
-        <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} className={styles.field}
+        <GoogleAddressField label="Projektets leveransadress" value={destination.address} placeId={destination.id} point={destination.point} className={styles.field}
           placeholder="Gatuadress och ort" autocomplete onChange={changeDestination} onCommit={setCommitted}/>
       </div>
       {!mapsKey && !hasAddress && <div className={styles.actions}>
@@ -181,7 +194,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           setCommitted(testAddress);
         }}>Använd testadress i Ronneby</button>
       </div>}
-      <MaterialMultiSelect label="Material att jämföra" options={names.map(name => ({id:name,label:name}))}
+      <MaterialMultiSelect label="Material att jämföra" options={options}
         selected={new Set(selected)} onToggle={toggle}/>
       <details><summary>Mängder och returlast</summary>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
