@@ -46,3 +46,25 @@ export async function saveLikelyYardAddress(year:number,event:string,candidate:C
   if(data) revalidatePath('/kpi/sortergarden/arsrapport');
   return {saved:data===true};
 }
+
+export async function loadYardAddressBatch(year:number,ids:string[]) {
+  const access=await yardAccess();
+  if(!access) return {error:'Behörighet saknas.'};
+  if (!Number.isInteger(year)||!Array.isArray(ids)||!ids.length||ids.length>150) return {error:'Ogiltigt urval.'};
+  const {data,error}=await access.db.rpc('hub_sortergard_address_batch',{
+    p_tenant:access.tenantId,p_year:year,p_ids:ids,
+  });
+  if(error) return {error:'Adressunderlaget kunde inte hämtas.'};
+  return {clues:(data??{}) as Record<string,YardAddressClue[]>};
+}
+
+export async function saveYardAddressBatch(year:number,entries:{id:string;candidate:Candidate}[]) {
+  const access=await yardAccess();
+  if(!access) return {error:'Behörighet saknas.'};
+  if (!Number.isInteger(year)||!Array.isArray(entries)||!entries.length||entries.length>150) return {error:'Ogiltigt urval.'};
+  const {data,error}=await access.db.rpc('hub_sortergard_address_batch_save',{
+    p_tenant:access.tenantId,p_year:year,p_candidates:entries,
+  });
+  if(error) return {error:'De sannolika adresserna kunde inte sparas.'};
+  return {saved:Number(data??0)};
+}
