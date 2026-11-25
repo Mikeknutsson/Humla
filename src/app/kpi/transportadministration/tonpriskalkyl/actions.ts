@@ -51,6 +51,7 @@ async function prepareTonPrices(access: Access | null, draft: TonPriceDraft, inc
         }
         row.purchase = String(rate.price);
         row.bankKind = rate.kind;
+        row.name = rate.material;
       }
     }
     return {result: calculateTonPrices(draft), sites};
@@ -166,8 +167,10 @@ export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices
     const input = draft.materials[index];
     const round = rounds.get(input.roundId)!;
     const vehicle = draft.vehicles.find(option => option.id === input.vehicleId)!.name;
+    const material = lines[index].material;
     return {
       ...lines[index], ...deliveryPlanRoute(round,times.get(round.id)!,vehicle,bySite),
+      material:input.bankRateId && input.name !== material ? material + ' · ' + input.name : material,
       tip:input.bankKind === 'tip', tippingDestination:Boolean(round.deliverySiteId),
       purchase:row.price!.purchase, materialPrice:row.price!.sale, freight:row.selected!.freight,
     };
