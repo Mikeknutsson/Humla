@@ -5,7 +5,7 @@ import {MapPin} from 'lucide-react';
 import styles from './google-address-field.module.css';
 import {useGoogleMapsKey} from './google-maps-provider';
 
-type Point = {lat: number; lng: number};
+export type Point = {lat: number; lng: number};
 type LatLng = {toJSON: () => Point};
 type MapEvent = {latLng?: LatLng | null};
 type Listener = {remove: () => void};
@@ -19,14 +19,14 @@ type Marker = {
   setPosition: (point: Point) => void;
   setMap: (map: MapView | null) => void;
 };
-type PointChoice = {address: string; placeId?: string};
+type PointChoice = {address: string; placeId?: string; point?: Point};
 const regionalCenter = {lat:56.174, lng:14.77};
 
 type Place = {id?: string; formattedAddress?: string; location?: LatLng | null; fetchFields: (options: {fields: string[]}) => Promise<unknown>};
 type SelectEvent = Event & {placePrediction: {toPlace: () => Place}};
 type PlaceAutocomplete = HTMLElement & {value: string; placeholder: string; maxlength: number};
 type Places = {Place: new (options: {id: string}) => Place; PlaceAutocompleteElement: new (options: {includedRegionCodes: string[]}) => PlaceAutocomplete};
-type GoogleLocation = {address: string; id?: string};
+type GoogleLocation = {address: string; id?: string; point?: Point};
 type GoogleWaypoint = string | Place | Point;
 type RoadMetrics = {distanceMeters?: number; durationMillis?: number};
 type Routes = {
@@ -47,6 +47,9 @@ type Maps = {
   importLibrary(name: 'places'): Promise<Places>;
   importLibrary(name: 'routes'): Promise<Routes>;
   importLibrary(name: 'addressValidation'): Promise<AddressValidation>;
+  importLibrary(name: 'geocoding'): Promise<{Geocoder: new () => {
+    geocode(request: {location: Point}): Promise<{results: {types: string[]; formatted_address: string}[]}>;
+  }}>;
   importLibrary(name: 'maps'): Promise<{Map: new (host: HTMLElement, options: {
     center: Point; zoom: number; clickableIcons: boolean; streetViewControl: boolean;
   }) => MapView}>;
@@ -99,8 +102,8 @@ function pointLabel(point: Point) {
   return `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
 }
 
-function waypoint({address,id}: GoogleLocation, Place: Places['Place']): GoogleWaypoint {
-  return parsePoint(address) ?? (id ? new Place({id}) : address);
+function waypoint({address,id,point}: GoogleLocation, Place: Places['Place']): GoogleWaypoint {
+  return point ?? parsePoint(address) ?? (id ? new Place({id}) : address);
 }
 
 function roadEstimate(metrics?: RoadMetrics) {
@@ -156,19 +159,23 @@ export async function validateGoogleAddress(mapsKey: string, address: string) {
   };
 }
 
-function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
-  mapsKey: string; value: string; placeId?: string; label: string; onChoose: (choice: PointChoice) => void; onClose: () => void;
+function MapPicker({mapsKey, value, placeId, point, label, followsInput, onChoose, onClose}: {
+  mapsKey: string; value: string; placeId?: string; point?: Point; label: string; followsInput?: boolean;
+  onChoose: (choice: PointChoice) => void; onClose: () => void;
 }) {
   const [choice, setChoice] = useState<PointChoice>();
   const [error, setError] = useState('');
+  const [resolving,setResolving] = useState(false);
   const searchHost = useRef<HTMLDivElement>(null);
   const mapHost = useRef<HTMLDivElement>(null);
+  const syncSelection = useRef<(selection: PointChoice) => void>(null);
   const caption = useId();
+  const initialChoice = useEffectEvent(() => ({address:value,placeId,point}));
 
   useEffect(() => {
     const container = searchHost.current;
     const mapContainer = mapHost.current;
-    if (!container || !mapContainer) return;
+    if (!mapContainer) return;
     let active = true;
     let selectionVersion = 0;
     let pin: Marker | undefined;
@@ -178,13 +185,11 @@ function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
       const {PlaceAutocompleteElement, Place} = await loadPlaces(mapsKey);
       const maps = (window as GoogleWindow).google!.maps;
       const [{Map}, {Marker}] = await Promise.all([maps.importLibrary('maps'), maps.importLibrary('marker')]);
-      if (!active || !container || !mapContainer) return;
-      const initial = parsePoint(value);
+      if (!active || !mapContainer) return;
+      const selection = initialChoice();
+      const initial = selection.point ?? parsePoint(selection.address);
       const map = new Map(mapContainer, {center:initial ?? regionalCenter, zoom:initial ? 17 : 9, clickableIcons:false, streetViewControl:false});
       const marker = pin = new Marker({draggable:true, title:'Leveranspunkt'});
-      const search = new PlaceAutocompleteElement({includedRegionCodes:['se']});
-      search.setAttribute('aria-label', `Sök på kartan för ${label.toLowerCase()}`);
-
       function showPin(point: Point, selection: PointChoice, zoom = false) {
         marker.setPosition(point);
         marker.setMap(map);
@@ -195,52 +200,80 @@ function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
         }
       }
 
-      function pickPoint(event: MapEvent) {
+      async function pickPoint(event: MapEvent) {
         if (!event.latLng) return;
-        selectionVersion += 1;
-        setError('');
-        const point = event.latLng.toJSON();
-        showPin(point, {address:pointLabel(point)});
-      }
-
-      listeners.push(map.addListener('click', pickPoint), marker.addListener('dragend', pickPoint));
-      search.addEventListener('gmp-error', () => {
-        if (active) setError('Adressökningen kunde inte öppnas. Du kan välja en punkt på kartan.');
-      });
-      search.addEventListener('gmp-select', async event => {
         const request = ++selectionVersion;
         setError('');
+        const point = event.latLng.toJSON();
+        const coordinates = {address:pointLabel(point),point};
+        showPin(point,coordinates);
+        if (!followsInput) return;
+        setResolving(true);
         try {
-          const place = (event as SelectEvent).placePrediction.toPlace();
-          await place.fetchFields({fields:['id','formattedAddress','location']});
+          const {Geocoder} = await maps.importLibrary('geocoding');
+          const {results} = await new Geocoder().geocode({location:point});
           if (!active || request !== selectionVersion) return;
-          if (!place.location) {
-            setError('Platsen saknar en punkt. Välj en punkt på kartan.');
-            return;
-          }
-          const point = place.location.toJSON();
-          showPin(point, place.formattedAddress && place.id
-            ? {address:place.formattedAddress, placeId:place.id}
-            : {address:pointLabel(point)}, true);
+          const address = results.find(result => result.types.some(type => ['street_address','premise','subpremise'].includes(type)));
+          if (address?.formatted_address) setChoice({...coordinates,address:address.formatted_address});
         } catch {
-          if (active && request === selectionVersion) setError('Platsen kunde inte hämtas.');
-        }
-      });
-      container.replaceChildren(search);
-      search.focus();
-
-      if (initial) showPin(initial, {address:value});
-      else if (placeId) {
-        const previous = new Place({id:placeId});
-        try {
-          await previous.fetchFields({fields:['location']});
-          if (active && selectionVersion === 0 && previous.location) {
-            showPin(previous.location.toJSON(), {address:value, placeId}, true);
-          }
-        } catch {
-          // The saved address remains usable if the previous marker cannot be restored.
+          if (active && request === selectionVersion) setError('Ingen gatuadress kunde hämtas. Kartnålen går fortfarande att använda.');
+        } finally {
+          if (active && request === selectionVersion) setResolving(false);
         }
       }
+
+      listeners.push(map.addListener('click', event => void pickPoint(event)), marker.addListener('dragend', event => void pickPoint(event)));
+      if (container && !followsInput) {
+        const search = new PlaceAutocompleteElement({includedRegionCodes:['se']});
+        search.setAttribute('aria-label', `Sök på kartan för ${label.toLowerCase()}`);
+        search.addEventListener('gmp-error', () => {
+          if (active) setError('Adressökningen kunde inte öppnas. Du kan välja en punkt på kartan.');
+        });
+        search.addEventListener('gmp-select', async event => {
+          const request = ++selectionVersion;
+          setError('');
+          try {
+            const place = (event as SelectEvent).placePrediction.toPlace();
+            await place.fetchFields({fields:['id','formattedAddress','location']});
+            if (!active || request !== selectionVersion) return;
+            if (!place.location) {
+              setError('Platsen saknar en punkt. Välj en punkt på kartan.');
+              return;
+            }
+            const point = place.location.toJSON();
+            showPin(point, place.formattedAddress && place.id
+              ? {address:place.formattedAddress, placeId:place.id}
+              : {address:pointLabel(point)}, true);
+          } catch {
+            if (active && request === selectionVersion) setError('Platsen kunde inte hämtas.');
+          }
+        });
+        container.replaceChildren(search);
+        search.focus();
+      }
+
+      async function updatePin(selection: PointChoice) {
+        const request = ++selectionVersion;
+        setResolving(false);
+        setError('');
+        const point = selection.point ?? parsePoint(selection.address);
+        if (point) {
+          showPin(point,selection,true);
+          return;
+        }
+        marker.setMap(null);
+        setChoice(undefined);
+        if (!selection.placeId) return;
+        try {
+          const previous = new Place({id:selection.placeId});
+          await previous.fetchFields({fields:['location']});
+          if (active && request === selectionVersion && previous.location) showPin(previous.location.toJSON(),selection,true);
+        } catch {
+          if (active && request === selectionVersion) setError('Adressen kunde inte visas på kartan.');
+        }
+      }
+      syncSelection.current = selection => void updatePin(selection);
+      syncSelection.current(selection);
     }
 
     void initialize().catch(() => {
@@ -248,29 +281,32 @@ function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
     });
     return () => {
       active = false;
+      syncSelection.current = null;
       listeners.forEach(listener => listener.remove());
       pin?.setMap(null);
-      container.replaceChildren();
+      container?.replaceChildren();
       mapContainer.replaceChildren();
     };
-  }, [label, mapsKey, placeId, value]);
+  }, [label,mapsKey,followsInput]);
+
+  useEffect(() => {syncSelection.current?.({address:value,placeId,point});},[value,placeId,point]);
 
   return <section className={styles.picker} data-map-picker aria-labelledby={caption}>
-    <p id={caption}>Sök en plats, klicka på kartan eller dra nålen till infarten.</p>
-    <div ref={searchHost}/>
+    <p id={caption}>{followsInput ? 'Välj ett adressförslag eller sätt kartnålen vid infarten.' : 'Sök en plats, klicka på kartan eller dra nålen till infarten.'}</p>
+    {!followsInput && <div ref={searchHost}/>}
     <div ref={mapHost} className={styles.map}/>
     {error && <p role="status">{error}</p>}
     <div className={styles.actions}>
-      <button type="button" className="secondary" disabled={!choice} onClick={() => choice && onChoose(choice)}>Använd kartnålen</button>
+      <button type="button" className="secondary" disabled={!choice || resolving} onClick={() => choice && onChoose(choice)}>Använd kartnålen</button>
       <button type="button" className="secondary" onClick={onClose}>Stäng kartan</button>
-      {choice && <small aria-live="polite">{choice.address}</small>}
+      {choice && <small aria-live="polite">{resolving ? 'Söker adress vid kartnålen…' : choice.address}</small>}
     </div>
   </section>;
 }
 
 function InlinePlaceSearch({mapsKey, label, value, placeholder, onChange, onUnavailable}: {
   mapsKey: string; label: string; value: string; placeholder?: string;
-  onChange: (value: string, placeId?: string) => void; onUnavailable: () => void;
+  onChange: (value: string, placeId?: string, point?: Point) => void; onUnavailable: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const element = useRef<PlaceAutocomplete>(null);
@@ -305,14 +341,14 @@ function InlinePlaceSearch({mapsKey, label, value, placeholder, onChange, onUnav
         setStatus('');
         try {
           const place = (event as SelectEvent).placePrediction.toPlace();
-          await place.fetchFields({fields:['id','formattedAddress']});
+          await place.fetchFields({fields:['id','formattedAddress','location']});
           if (!active || request !== selection) return;
           if (!place.id || !place.formattedAddress) {
             setStatus('Välj en adress i listan eller använd kartnålen.');
             return;
           }
           search.value = place.formattedAddress;
-          change(place.formattedAddress,place.id);
+          change(place.formattedAddress,place.id,place.location?.toJSON());
         } catch {
           if (active && request === selection) setStatus('Förslaget kunde inte hämtas. Välj en adress igen eller använd kartnålen.');
         }
@@ -341,8 +377,9 @@ function InlinePlaceSearch({mapsKey, label, value, placeholder, onChange, onUnav
   </div>;
 }
 
-export function GoogleAddressField({label, value, placeId, onChange, onCommit, placeholder, className, autocomplete}: {
-  label: string; value: string; placeId?: string; onChange: (value: string, placeId?: string) => void; onCommit?: (value: string) => void; placeholder?: string; className?: string; autocomplete?: boolean;
+export function GoogleAddressField({label, value, placeId, point, onChange, onCommit, placeholder, className, autocomplete}: {
+  label: string; value: string; placeId?: string; point?: Point; onChange: (value: string, placeId?: string, point?: Point) => void;
+  onCommit?: (value: string) => void; placeholder?: string; className?: string; autocomplete?: boolean;
 }) {
   const mapsKey = useGoogleMapsKey();
   const [open, setOpen] = useState(false);
@@ -355,7 +392,7 @@ export function GoogleAddressField({label, value, placeId, onChange, onCommit, p
   }
   return <div className={className}>
     {autocomplete && mapsKey && !searchUnavailable ? <InlinePlaceSearch mapsKey={mapsKey} label={label} value={value} placeholder={placeholder}
-      onChange={(address,id) => {setOpen(false);onChange(address,id);}} onUnavailable={() => setSearchUnavailable(true)}/> :
+      onChange={(address,id,point) => {if (address.trim()) setOpen(true);onChange(address,id,point);}} onUnavailable={() => setSearchUnavailable(true)}/> :
     <label>{label}<input value={value} placeholder={placeholder} maxLength={240} onBlur={event => onCommit?.(event.currentTarget.value)}
       onKeyDown={event => {
         if (event.key === 'Enter' && onCommit) {
@@ -363,14 +400,19 @@ export function GoogleAddressField({label, value, placeId, onChange, onCommit, p
           onCommit(event.currentTarget.value);
         }
       }} onChange={event => {
-      setOpen(false);
+      if (autocomplete && event.target.value.trim()) setOpen(true);
+      else if (!autocomplete) setOpen(false);
       onChange(event.target.value);
     }}/></label>}
     {searchUnavailable && <small role="status">Adressförslagen är tillfälligt otillgängliga. Skriv in adressen eller välj på kartan.</small>}
     {mapsKey ? <button type="button" className="secondary" aria-expanded={open} ref={trigger}
       onClick={() => setOpen(!open)}><MapPin size={14}/> Välj på kartan</button>
       : <a className="secondary" href={fallbackUrl} target="_blank" rel="noreferrer"><MapPin size={14}/> Öppna Google Maps</a>}
-    {open && mapsKey && <MapPicker mapsKey={mapsKey} label={label} value={value} placeId={placeId} onClose={close}
-      onChoose={choice => {onChange(choice.address, choice.placeId);close();}}/>}
+    {open && mapsKey && <MapPicker mapsKey={mapsKey} label={label} value={value} placeId={placeId} point={point}
+      followsInput={autocomplete && !searchUnavailable} onClose={close}
+      onChoose={choice => {
+        onChange(choice.address,choice.placeId,autocomplete ? choice.point : undefined);
+        if (!autocomplete) close();
+      }}/>}
   </div>;
 }
