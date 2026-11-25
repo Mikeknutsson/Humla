@@ -3,6 +3,7 @@ export const emptyReturnLoad: ReturnLoad = {material:'',tonnes:'',share:'100',co
 export type Leg = {miles: string; driveMinutes: string};
 export type Round = {
   id: string; pickup: string; delivery: string; returnTo: string;
+  pickupPoint?: {lat: number; lng: number};
   deliveryPoint?: {lat: number; lng: number};
   returnLoad?: ReturnLoad;
   pickupSiteId?: string; deliverySiteId?: string; pickupPlaceId?: string; deliveryPlaceId?: string; returnPlaceId?: string;

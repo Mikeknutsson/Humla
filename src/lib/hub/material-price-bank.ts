@@ -7,9 +7,12 @@ export type SiteRate = {
   price: number; validFrom: string | null; validTo: string | null; source: string; imported: boolean;
 };
 export type MaterialPriceBank = {sites: MaterialSite[]; rates: SiteRate[]};
+const sortergardenPriceList = 'Prislista Sortergården 2026.pdf';
 
 export function effectiveSiteRates(rates: SiteRate[], date: string) {
   const active = rates.filter(rate => (!rate.validFrom || rate.validFrom <= date) && (!rate.validTo || rate.validTo >= date));
+  const sitesWithSpecifiedSoil = new Set(active.filter(rate => rate.kind === 'tip' &&
+    rate.material === 'Schaktmassor rena (MRR)' && rate.source.startsWith(sortergardenPriceList)).map(rate => rate.siteId));
   const latestList = new Map<string, string>();
   for (const rate of active) {
     if (rate.imported && (rate.validFrom ?? '') > (latestList.get(rate.siteId) ?? '')) {
@@ -19,6 +22,7 @@ export function effectiveSiteRates(rates: SiteRate[], date: string) {
   const entries = new Map<string, SiteRate>();
   for (const rate of active) {
     if (rate.imported && (rate.validFrom ?? '') !== (latestList.get(rate.siteId) ?? '')) continue;
+    if (rate.kind === 'tip' && rate.material === 'Schakt (Pukavik)' && sitesWithSpecifiedSoil.has(rate.siteId)) continue;
     const key = JSON.stringify([rate.siteId, rate.kind, rate.material.toLocaleLowerCase('sv-SE'), rate.unit]);
     const previous = entries.get(key);
     if (!previous || (rate.validFrom ?? '') > (previous.validFrom ?? '') ||
@@ -34,6 +38,9 @@ export function stockholmDate() {
 export const materialGroups = ['Standard','Återvinningsmaterial','Naturgrus','Special','Tippavgifter'] as const;
 const [standard,recycled,naturalGravel,special,tipping] = materialGroups;
 type MaterialGroup = typeof materialGroups[number];
+const sortergardenProducts = new Set([
+  'matjord 0-8','anläggningsjord 0-16','lövflis 20-70','grovfyll 0-90','finfyll 0-30',
+]);
 
 export const standardMaterialNames: readonly string[] = [
   'Stenmjöl 0-2','Stenmjöl 0-4','Slitlager 0-16','Bärlager 0-32','Bärlager 0-45','Bärlager 0-63',
@@ -103,6 +110,7 @@ export function standardMaterial(rate: Pick<SiteRate,'material'|'kind'>): {name:
   const family = families.find(([pattern]) => pattern.test(name));
   if (family) name = name.replace(family[0],family[1]);
   const group = standardMaterialNames.includes(name) ? standard :
+    sortergardenProducts.has(name.toLocaleLowerCase('sv-SE')) ||
     /(?:^|\s)återvunn(?:en|et|a)\b|^återvinningsmaterial\b/i.test(name) ? recycled : family?.[2] ?? special;
   return {name,group};
 }
@@ -123,4 +131,12 @@ export function compareMaterialFractions(a: string,b: string) {
 
 export function comparisonMaterial(rate: SiteRate) {
   return standardMaterial(rate).name;
+}
+
+export function sortergardenSiteIds(sites: MaterialSite[], rates: SiteRate[]) {
+  const ids = new Set(rates.filter(rate => rate.source.startsWith(sortergardenPriceList)).map(rate => rate.siteId));
+  for (const site of sites) {
+    if (site.name === 'Sortergården Pukavik') ids.add(site.id);
+  }
+  return ids;
 }

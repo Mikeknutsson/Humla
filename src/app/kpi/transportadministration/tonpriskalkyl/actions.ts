@@ -10,7 +10,7 @@ import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-deli
 import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
 import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
-import {effectiveSiteRates, stockholmDate, type MaterialSite} from '@/lib/hub/material-price-bank';
+import {effectiveSiteRates, stockholmDate, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
 import {calculateTonPrices, offerTermsMaxLength, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
@@ -93,19 +93,20 @@ async function offerDocuments(access: Access, delivery: string, priceDate: strin
 
 type QuarryMaterial = {name: string; tonnes: string};
 
-async function compareForAccess(access: Access, date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft) {
+async function compareForAccess(access: Access, date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind']) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || materials.length > 100 || rounds.length > 100 ||
-    !['reference','bk1','bk4'].includes(draft.profile) || draft.vehicles.length !== 3) return {error:'Ogiltigt jämförelseunderlag.'};
+    !['reference','bk1','bk4'].includes(draft.profile) || draft.vehicles.length !== 3 ||
+    (kind !== 'tip' && kind !== 'purchase')) return {error:'Ogiltigt jämförelseunderlag.'};
   const bank = await readPriceBank(access);
   if (!bank) return {error:'Prisbanken kunde inte hämtas.'};
-  try {return {comparison:compareQuarries(bank,date,materials,rounds,draft)};}
+  try {return {comparison:compareQuarries(bank,date,materials,rounds,draft,kind)};}
   catch {return {error:'Kontrollera mil, ekipage och returparametrar.'};}
 }
 
-export async function calculateQuarryComparison(date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft) {
+export async function calculateQuarryComparison(date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind'] = 'purchase') {
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.',comparison:undefined};
-  return compareForAccess(access,date,materials,rounds,draft);
+  return compareForAccess(access,date,materials,rounds,draft,kind);
 }
 
 function validOfferDetails(details: OfferDetails) {
@@ -116,7 +117,7 @@ function validOfferDetails(details: OfferDetails) {
 
 export async function downloadQuarryOffer(
   date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft,
-  delivery: string, pricing: QuarryPricing, expectedPrices: number[], details: OfferDetails,
+  delivery: string, pricing: QuarryPricing, expectedPrices: number[], details: OfferDetails, kind: SiteRate['kind'] = 'purchase',
 ) {
   if (!pricing || !['markup','workify'].includes(pricing.mode) || typeof pricing.markup !== 'string' ||
     !pricing.overrides || typeof pricing.overrides !== 'object' || Object.keys(pricing.overrides).length > 100 ||
@@ -130,16 +131,17 @@ export async function downloadQuarryOffer(
   }
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.'};
-  const usesWorkify = pricing.mode === 'workify' || Object.values(pricing.overrides).some(value => value.source.startsWith('workify:'));
+  const usesWorkify = kind === 'purchase' &&
+    (pricing.mode === 'workify' || Object.values(pricing.overrides).some(value => value.source.startsWith('workify:')));
   const [result,workifyPrices] = await Promise.all([
-    compareForAccess(access,date,materials,rounds,draft),
+    compareForAccess(access,date,materials,rounds,draft,kind),
     usesWorkify ? readWorkifyMaterialPrices(access) : [],
   ]);
   if (!result.comparison) return {error:result.error};
   if (!workifyPrices) return {error:'Workifys standardpriser kunde inte hämtas.'};
   const priced = priceQuarryOffer(result.comparison,pricing,workifyPrices);
   const lines = priced.flatMap(row => row.line ? [row.line] : []);
-  if (!lines.length || lines.length !== materials.length || lines.some(line => !Number.isFinite(line.unitPrice) || line.unitPrice < 0)) {
+  if (!lines.length || lines.length !== materials.length || lines.some(line => !Number.isFinite(line.unitPrice) || (!line.isTip && line.unitPrice < 0))) {
     return {error:'Kontrollera att alla valda material har ett giltigt offertpris.'};
   }
   if (!Array.isArray(expectedPrices) || lines.length !== expectedPrices.length ||
@@ -153,7 +155,8 @@ export async function downloadQuarryOffer(
     return {
       ...lines[index], ...deliveryPlanRoute(round,time,vehicle,new Map([[site.id,site]])),
       material:rate.material === row.material ? row.material : row.material + ' · ' + rate.material,
-      tip:false, purchase:rate.price, materialPrice:priced[index].materialPrice!, pricingSource:priced[index].pricingSource, freight,
+      tip:kind === 'tip', tippingDestination:kind === 'tip',
+      purchase:rate.price, materialPrice:priced[index].materialPrice!, pricingSource:priced[index].pricingSource, freight,
     };
   });
   return offerDocuments(access,delivery,date,details,lines,plan);
