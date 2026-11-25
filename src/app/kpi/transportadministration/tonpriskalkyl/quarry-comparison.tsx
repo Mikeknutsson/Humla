@@ -56,7 +56,8 @@ export function ReturnLoadFields({value, rates, onChange}: {
   </div>;
 }
 
-export type QuarryJobState = {selected: boolean; job?: QuarryOfferJob};
+export type RatedMaterial = {material: string; option: Option};
+export type QuarryJobState = {comparison?: RatedMaterial[];selected: boolean; job?: QuarryOfferJob};
 
 export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onUseReference,
   revision, saved, kind, destination, addressConfirmed, onConfirmAddress, refresh, onQuoteChange}: {
@@ -142,6 +143,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
 
   const publishQuote = useEffectEvent(() => onQuoteChange({
     selected:materials.length > 0,
+    comparison:result?.flatMap(row => row.options[0] ? [{material:row.material,option:row.options[0]}] : []),
     job:complete && current?.rounds ? {
       kind,address:destination.address,materials,rounds:current.rounds,pricing:activePricing,
       expectedPrices:lines.map(line => line.unitPrice),withoutReturn,returnLoad,
@@ -376,7 +378,11 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
         <tbody>{result.map((row,index) => {
           const entry = priced[index];
           const override = pricing.overrides[row.material];
-          const preferred = row.options[0]?.preferred;
+          const option = row.options[0];
+          const pricedSites = new Set(matchingRates.filter(rate => rate.name === row.material).map(({rate}) => rate.siteId));
+          const unpriced = eligibleSites.filter(site => !pricedSites.has(site.id)).map(site => site.name);
+          const preferred = option?.preferred;
+          const money = (value: number) => offerMoney.format(value) + ' kr/ton';
           const matches = preferred ? [] : workifyPrices.filter(rate => rate.material === row.material);
           return <tr key={row.material}><td>{row.material}</td>
             <td className={styles.field}>{isTipping ? <span>{preferred ? 'Sortergårdens prislista' : 'Prisbanken'}</span> : <>
@@ -394,7 +400,22 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
                 onChange={event => changeRowPricing(row.material,{markup:event.target.value})}/>}
             </>}</td>
             <td>{entry.line ? <strong>{offerMoney.format(entry.line.unitPrice)}</strong> : entry.error}</td>
-            <td>{row.options[0]?.site.name ?? '–'}{row.options[0]?.preferred && <small className={styles.siteNote}>Förstahandsval</small>}</td>
+            <td>{option?.site.name ?? '–'}
+              {option && <small className={styles.siteNote}>{preferred ? 'Förstahandsval' :
+                row.missing.length ? 'Billigast av beräknade alternativ' : 'Billigast'}</small>}
+              {(option || row.missing.length > 0 || unpriced.length > 0) && <details><summary>Prisunderlag</summary>
+                {option && <dl className={styles.priceBreakdown}>
+                  <dt>{isTipping ? 'Tippavgift / ersättning' : 'Inköpspris material'}</dt><dd>{money(option.rate.price)}</dd>
+                  {entry.materialPrice !== undefined && !isTipping && <><dt>Materialdel i offerten</dt><dd>{money(entry.materialPrice)}</dd></>}
+                  <dt>Frakt totalt</dt><dd>{money(option.freight)}</dd>
+                  <dt>Varav start från Pukavik</dt><dd>{money(option.startFreight)}</dd>
+                  {option.time.returnTonnes > 0 && <><dt>Returlast i snitt per runda</dt>
+                    <dd>{option.time.returnTonnes.toLocaleString('sv-SE')} ton · {offerMoney.format(option.time.returnCredit)} kr netto</dd></>}
+                </dl>}
+                {row.missing.length > 0 && <small>Kör- eller kalkylunderlag saknas för {row.missing.join(', ')}.</small>}
+                {unpriced.length > 0 && <p>Inget registrerat tonpris för fraktionen hos {unpriced.join(', ')}.</p>}
+              </details>}
+            </td>
           </tr>;
         })}</tbody>
       </table></div>

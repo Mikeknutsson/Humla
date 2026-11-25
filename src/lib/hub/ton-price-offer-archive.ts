@@ -16,23 +16,25 @@ type ArchiveEntry = {
   source_offer_id: string | null;
 };
 
+type ListedOffer = ArchiveEntry & {status: 'created' | 'sent' | 'accepted'; deleted_at: string | null; depth: number};
+type ArchiveGroup = {group_id: string; entries: ListedOffer[]};
+
 const fields = 'id,offer_date,customer,project,destinations,materials';
 const table = 'hub_ton_price_offers';
 export const offerPageSize = 25;
 
-export async function readOffers(access: Access, page: number) {
-  const from = page * offerPageSize;
-  const {data,error} = await access.db.from(table).select(fields+',source_offer_id')
-    .eq('tenant_id',access.tenantId).order('created_at',{ascending:false}).order('id',{ascending:false})
-    .range(from,from+offerPageSize).returns<ArchiveEntry[]>();
-  if (error || !data) return null;
-  return {entries:data.slice(0,offerPageSize),hasNext:data.length > offerPageSize};
+export async function readOffers(access: Access, page: number, search = '', trash = false) {
+  const {data,error} = await access.db.rpc('hub_ton_price_archive_groups',{
+    p_tenant:access.tenantId,p_search:search,p_trash:trash,p_offset:page*offerPageSize,
+  });
+  if (error || !Array.isArray(data)) return null;
+  return {groups:(data as ArchiveGroup[]).slice(0,offerPageSize),hasNext:data.length > offerPageSize};
 }
 
 export async function readOfferRevision(access: Access, id: string) {
   if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) return null;
   const {data,error} = await access.db.from(table).select(fields+',calculation_snapshot')
-    .eq('tenant_id',access.tenantId).eq('id',id).maybeSingle().returns<OfferRevision>();
+    .eq('tenant_id',access.tenantId).eq('id',id).is('deleted_at',null).maybeSingle().returns<OfferRevision>();
   if (error) throw error;
   return data;
 }
@@ -54,7 +56,7 @@ export async function openOfferRevision(access: Access, id: string) {
 
 export async function findArchivedOffer(access: Access, fingerprint: string) {
   const {data,error} = await access.db.from(table).select('id')
-    .eq('tenant_id',access.tenantId).eq('fingerprint',fingerprint).maybeSingle();
+    .eq('tenant_id',access.tenantId).eq('fingerprint',fingerprint).is('deleted_at',null).maybeSingle();
   if (error) throw error;
   return data?.id as string | undefined;
 }
@@ -77,7 +79,7 @@ export async function archiveOffer(access: Access, entry: Omit<ArchiveEntry,'id'
 
 export async function readOfferPdf(access: Access, id: string, document: 'offert' | 'leveransplan') {
   const field = document === 'offert' ? 'offer_pdf' : 'delivery_plan_pdf';
-  const {data,error} = await access.db.from(table).select(`pdf:${field}`).eq('tenant_id',access.tenantId).eq('id',id).maybeSingle();
+  const {data,error} = await access.db.from(table).select(`pdf:${field}`).eq('tenant_id',access.tenantId).eq('id',id).is('deleted_at',null).maybeSingle();
   if (error) throw error;
   const pdf = data?.pdf;
   return typeof pdf === 'string' && pdf.startsWith('\\x') ? Buffer.from(pdf.slice(2),'hex') : null;

@@ -75,3 +75,8 @@
 .deleteOffer { margin-top: 8px; }
 .deleteOffer p { margin: 6px 0; }
 .deleteOffer [role="alert"] { color: #a62922; }
+.archiveGroups { display: grid; gap: 12px; margin-top: 16px; }
+.archiveGroups h3 { margin: 0; }
+
+.priceBreakdown { display: grid; gap: 3px; margin: 0; font-size: .85rem; }
+.priceBreakdown dd { margin: 0 0 5px; font-weight: 650; }

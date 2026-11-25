@@ -12,13 +12,15 @@ import {readWorkifyMaterialPrices} from '@/lib/hub/workify-material-prices';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Page({searchParams}: {searchParams: Promise<{offertSida?: string; komplettera?: string}>}) {
+export default async function Page({searchParams}: {searchParams: Promise<{offertSida?: string; offertSok?: string; offertVy?: string; komplettera?: string}>}) {
   const params = await searchParams;
   const archivePage = reviewPage(params.offertSida);
+  const search = typeof params.offertSok === 'string' ? params.offertSok.trim().slice(0,120) : '';
+  const trash = params.offertVy === 'papperskorg';
   const revisionId = typeof params.komplettera === 'string' ? params.komplettera : '';
   const access = await tonPriceAccess();
   const [bank,maps,offers,workifyPrices,revision] = access
-    ? await Promise.all([readPriceBank(access,true),readGoogleMapsConfig(access.db,access.tenantId),readOffers(access,archivePage),readWorkifyMaterialPrices(access),
+    ? await Promise.all([readPriceBank(access,true),readGoogleMapsConfig(access.db,access.tenantId),readOffers(access,archivePage,search,trash),readWorkifyMaterialPrices(access),
       revisionId ? openOfferRevision(access,revisionId).catch(() => null) : null])
     : [null,null,null,null,null];
   return <KpiDetailShell query="" title="Tonpriskalkyl" breadcrumb="Humla Dashboard / Transportadministration" transportAdministration={access?.canManage ? 'ton-price' : false}
@@ -29,7 +31,7 @@ export default async function Page({searchParams}: {searchParams: Promise<{offer
         bank={bank} workifyPrices={revision?.calculation_snapshot?.mode === 'quick'
           ? revision.calculation_snapshot.workifyPrices : workifyPrices ?? []}
         today={stockholmDate()} draftKey={`humla:tonpris:v1:${access.tenantId}:${access.userId}${revision ? ':'+revision.id : ''}`}>
-      <OfferArchive offers={offers} page={archivePage} openedId={revisionId}/>
+      <OfferArchive offers={offers} page={archivePage} openedId={revisionId} search={search} trash={trash}/>
     </TonPriceWorkspace></GoogleMapsProvider>
       : <div className="content"><section className="panel"><p>Behörighet saknas för tonpriskalkylen.</p></section></div>}
   </KpiDetailShell>;

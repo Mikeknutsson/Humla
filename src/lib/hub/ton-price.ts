@@ -75,7 +75,7 @@ export function calculateRound(round: Round) {
   const minutes = drive + loading + unloading + waiting;
   if (minutes <= 0) return null;
   const load = round.returnLoad;
-  if (!load) return {miles, drive, minutes, start, returnCredit:0, returnTonnes:0, returnLoadWeight:0};
+  if (!load) return {miles, drive, minutes, outbound, inbound, start, returnCredit:0, returnTonnes:0, returnLoadWeight:0};
   const tonnes = number(load.tonnes, 100, 0.001);
   const share = number(load.share, 100);
   const contribution = number(load.contribution, 100000, -100000);
@@ -83,7 +83,7 @@ export function calculateRound(round: Round) {
   const extraMinutes = number(load.extraMinutes, 10000);
   if (tonnes === null || share === null || contribution === null || extraMiles === null || extraMinutes === null) return null;
   const fraction = share / 100;
-  return {miles:miles + extraMiles * fraction, drive, minutes:minutes + extraMinutes * fraction, start,
+  return {miles:miles + extraMiles * fraction, drive, minutes:minutes + extraMinutes * fraction, outbound, inbound, start,
     returnCredit:tonnes * contribution * fraction, returnTonnes:tonnes * fraction, returnLoadWeight:fraction > 0 ? tonnes : 0};
 }
 
