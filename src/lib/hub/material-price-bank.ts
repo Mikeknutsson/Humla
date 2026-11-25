@@ -31,14 +31,15 @@ export function stockholmDate() {
   return new Intl.DateTimeFormat('sv-SE', {timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date());
 }
 
-export const materialGroups = [
-  'Stenmjöl och bergkross', 'Makadam', 'Naturgrus och sand', 'Matjord, återvunnet och fyllnadsmaterial',
-  'Tippavgifter', 'Övrigt',
-] as const;
-
-const [crushedRock,makadam,naturalGravel,soilAndFill,tipping,other] = materialGroups;
-
+export const materialGroups = ['Standard','Återvinningsmaterial','Naturgrus','Special','Tippavgifter'] as const;
+const [standard,recycled,naturalGravel,special,tipping] = materialGroups;
 type MaterialGroup = typeof materialGroups[number];
+
+export const standardMaterialNames: readonly string[] = [
+  'Stenmjöl 0-2','Stenmjöl 0-4','Slitlager 0-16','Bärlager 0-32','Bärlager 0-45','Bärlager 0-63',
+  'Förstärkningslager 0-90','0-125/150','Råberg','Makadam 2-5','Makadam 4-8','Makadam 8-11',
+  'Makadam 11-16','Makadam 16-22','Makadam 32-64',
+];
 
 // Bare fractions in the existing purchase lists use the same grades as the named rows.
 const fractionNames = new Map<string,string>([
@@ -50,13 +51,13 @@ const fractionNames = new Map<string,string>([
 ]);
 
 const families: [prefix: RegExp, label: string, group: MaterialGroup][] = [
-  [/^bärlager\b/i, 'Bärlager', crushedRock],
-  [/^förstärkning(?:slager)?\b/i, 'Förstärkningslager', crushedRock],
-  [/^slitlager\b/i, 'Slitlager', crushedRock],
-  [/^bergkross\b/i, 'Bergkross', crushedRock],
-  [/^krossgrus\b/i, 'Krossgrus', crushedRock],
-  [/^makadam\b/i, 'Makadam', makadam],
-  [/^stenmjöl\b/i, 'Stenmjöl', crushedRock],
+  [/^bärlager\b/i, 'Bärlager', special],
+  [/^förstärkning(?:slager)?\b/i, 'Förstärkningslager', special],
+  [/^slitlager\b/i, 'Slitlager', special],
+  [/^bergkross\b/i, 'Bergkross', special],
+  [/^krossgrus\b/i, 'Krossgrus', special],
+  [/^makadam\b/i, 'Makadam', special],
+  [/^stenmjöl\b/i, 'Stenmjöl', special],
   [/^natur\s*singel\b/i, 'Natursingel', naturalGravel],
   [/^bakbar sandlådesand\b/i, 'Bakbar sandlådesand', naturalGravel],
   [/^dränering\b/i, 'Dränering', naturalGravel],
@@ -64,12 +65,13 @@ const families: [prefix: RegExp, label: string, group: MaterialGroup][] = [
   [/^murgrus\b/i, 'Murgrus', naturalGravel],
   [/^rörgrus\s*\/\s*kabelsand\b/i, 'Rörgrus/kabelsand', naturalGravel],
   [/^tvättad\b/i, 'Tvättad', naturalGravel],
-  [/^grov\s*fyllnad\b/i, 'Grovfyllnad', soilAndFill],
-  [/^fyllnadsmaterial\b/i, 'Fyllnadsmaterial', soilAndFill],
-  [/^moränfyllnad\b/i, 'Moränfyllnad', soilAndFill],
-  [/^matjord\b/i, 'Matjord', soilAndFill],
-  [/^asfaltkross\b|^asfaltskross\b/i, 'Asfaltskross', soilAndFill],
-  [/^betongkross\b/i, 'Betongkross', soilAndFill],
+  [/^grov\s*fyllnad\b/i, 'Grovfyllnad', special],
+  [/^fyllnadsmaterial\b/i, 'Fyllnadsmaterial', special],
+  [/^moränfyllnad\b/i, 'Moränfyllnad', special],
+  [/^matjord\b/i, 'Matjord', special],
+  [/^råberg\b/i, 'Råberg', special],
+  [/^asfaltkross\b|^asfaltskross\b/i, 'Asfaltskross', recycled],
+  [/^betongkross\b/i, 'Betongkross', recycled],
   [/^naturgrus\b/i, 'Naturgrus', naturalGravel],
   [/^sand\b/i, 'Sand', naturalGravel],
   [/^kullersten\b/i, 'Kullersten', naturalGravel],
@@ -86,7 +88,7 @@ export function standardMaterial(rate: Pick<SiteRate,'material'|'kind'>): {name:
   }
 
   if (/^(?:(?:förstärkning(?:slager)?|bergkross) )?(?:0-(?:125|150)|0-125-150|0-125 eller 0-150|0-150 eller 0-125)$/i.test(normalized)) {
-    return {name:'0-125/150',group:crushedRock};
+    return {name:'0-125/150',group:standard};
   }
 
   let name = fractionNames.get(normalized) ?? normalized;
@@ -99,7 +101,10 @@ export function standardMaterial(rate: Pick<SiteRate,'material'|'kind'>): {name:
     .replace(/\b(Tvättad|Torr|Klass|Diabas|Terminal|Svart|Special)\b/gi,word => word.toLocaleLowerCase('sv-SE'));
   if (/^(dressand|fallsand)\b/i.test(name)) return {name,group:naturalGravel};
   const family = families.find(([pattern]) => pattern.test(name));
-  return family ? {name:name.replace(family[0],family[1]),group:family[2]} : {name,group:other};
+  if (family) name = name.replace(family[0],family[1]);
+  const group = standardMaterialNames.includes(name) ? standard :
+    /(?:^|\s)återvunn(?:en|et|a)\b|^återvinningsmaterial\b/i.test(name) ? recycled : family?.[2] ?? special;
+  return {name,group};
 }
 
 export function compareMaterialFractions(a: string,b: string) {

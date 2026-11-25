@@ -4,14 +4,14 @@ import {Fragment, useId, useRef, useState} from 'react';
 import {ChevronDown} from 'lucide-react';
 import styles from './workspace.module.css';
 
-type Option = {id: string; label: string; note?: string; group?: string; search?: string};
+type Option = {id: string; label: string; note?: string; group?: string; search?: string; disabled?: boolean};
 
 function searchText(text: string) {
   return text.toLocaleLowerCase('sv-SE').replace(/\s*([–—−/-])\s*/g, '-').trim();
 }
 
-export default function MaterialMultiSelect({label, options, selected, onToggle}: {
-  label: string; options: Option[]; selected: ReadonlySet<string>; onToggle: (id: string) => void;
+export default function MaterialMultiSelect({label, options, groups, selected, onToggle}: {
+  label: string; options: Option[]; groups?: readonly string[]; selected: ReadonlySet<string>; onToggle: (id: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const search = useRef<HTMLInputElement>(null);
@@ -24,6 +24,9 @@ export default function MaterialMultiSelect({label, options, selected, onToggle}
     const value = searchText([option.label,option.note,option.group,option.search].join(' '));
     return words.every(word => value.includes(word));
   });
+  const sections = groups ? groups.map(group => ({group,options:visible.filter(option => option.group === group)}))
+    .filter(section => !words.length || section.options.length > 0 || words.every(word => searchText(section.group).includes(word))) :
+    visible.length ? [{group:'',options:visible}] : [];
 
   return <div className={styles.materialPicker}>
     <span id={nameId}>{label}</span>
@@ -45,15 +48,15 @@ export default function MaterialMultiSelect({label, options, selected, onToggle}
             if (event.key === 'Enter') event.preventDefault();
           }}/></label>
         <div className={styles.materialOptionList}>
-          {visible.map((option,index) => <Fragment key={option.id}>
-            {option.group && option.group !== visible[index-1]?.group &&
-              <span className={styles.materialGroup}>{option.group}</span>}
-            <label>
-              <input type="checkbox" checked={selected.has(option.id)} onChange={() => onToggle(option.id)}/>
+          {sections.map(section => <Fragment key={section.group}>
+            {section.group && <span className={styles.materialGroup}>{section.group}</span>}
+            {section.options.map(option => <label key={option.id}>
+              <input type="checkbox" checked={selected.has(option.id)} disabled={option.disabled} onChange={() => onToggle(option.id)}/>
               <span>{option.label}</span>{option.note && <small>{option.note}</small>}
-            </label>
+            </label>)}
+            {!section.options.length && <small>Inga material med aktivt tonpris.</small>}
           </Fragment>)}
-          {!visible.length && <p>Inga material matchar sökningen.</p>}
+          {!sections.length && <p>Inga material matchar sökningen.</p>}
         </div>
       </div>
     </details>
