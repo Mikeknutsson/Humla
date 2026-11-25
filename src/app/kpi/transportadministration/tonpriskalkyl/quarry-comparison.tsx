@@ -6,6 +6,7 @@ import {offerMoney, priceQuarryOffer, type OfferDetails, type QuarryPricing, typ
 import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {compareMaterialFractions, materialGroups, sortergardenSiteIds, standardMaterial, standardMaterialNames, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {quotedMaterial, type OfferRevision} from '@/lib/hub/ton-price-offer-revision';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
@@ -57,24 +58,28 @@ export function ReturnLoadFields({value, rates, onChange}: {
   </div>;
 }
 
-export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onDetailsChange, onUseReference}: {
+export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onDetailsChange, onUseReference, revision, canSave}: {
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void; onDetailsChange:(patch: Partial<OfferDetails>) => void;
   workifyPrices: WorkifyOfferPrice[];
   onUseReference: () => void;
+  revision?: OfferRevision; canSave: boolean;
 }) {
   const mapsKey = useGoogleMapsKey();
-  const [destination,setDestination] = useState<Destination>({address:''});
-  const [committed,setCommitted] = useState('');
-  const [kind,setKind] = useState<SiteRate['kind']>('purchase');
+  const snapshot = revision?.calculation_snapshot;
+  const saved = snapshot?.mode === 'quick' ? snapshot.quick : undefined;
+  const savedAddress = saved?.destination ?? {address:revision?.legacy?.projectAddress ?? (revision?.destinations.length === 1 && revision.legacy?.kind !== 'tip' ? revision.destinations[0] : '')};
+  const [destination,setDestination] = useState<Destination>(savedAddress);
+  const [committed,setCommitted] = useState(savedAddress.address);
+  const [kind,setKind] = useState<SiteRate['kind']>(saved?.kind ?? revision?.legacy?.kind ?? 'purchase');
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
-  const [withoutReturn,setWithoutReturn] = useState<string[]>([]);
-  const [returnLoad,setReturnLoad] = useState<ReturnLoad>();
-  const [manual,setManual] = useState<Record<string,Partial<Record<Direction,Leg>>>>({});
+  const [withoutReturn,setWithoutReturn] = useState<string[]>(saved?.withoutReturn ?? []);
+  const [returnLoad,setReturnLoad] = useState<ReturnLoad | undefined>(saved?.returnLoad);
+  const [manual,setManual] = useState<Record<string,Partial<Record<Direction,Leg>>>>(saved?.routes ?? {});
   const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
   const [retry,setRetry] = useState(0);
   const [applied,setApplied] = useState('');
-  const [pricing,setPricing] = useState<QuarryPricing>({mode:'markup',markup:'0',overrides:{}});
+  const [pricing,setPricing] = useState<QuarryPricing>(saved?.pricing ?? revision?.legacy?.pricing ?? {mode:'markup',markup:'0',overrides:{}});
   const routes = useRef(new Map<string,Promise<Leg>>());
   const isTipping = kind === 'tip';
   const primaryDirection: Direction = isTipping ? 'inbound' : 'outbound';
@@ -98,7 +103,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
     option.aliases.add(rate.material);
     materialOptions.set(name,option);
   }
-  const options = [...materialOptions.values()].sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
+  const options = [...materialOptions.values()].filter(option => !quotedMaterial(revision?.materials ?? [],option.id)).sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
     (a.group === 'Standard' ? standardMaterialNames.indexOf(a.id)-standardMaterialNames.indexOf(b.id) :
       compareMaterialFractions(a.label,b.label))).map(option => {
     const price = tipPrices.get(option.id);
@@ -359,9 +364,9 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
         </fieldset>
       </details>
       <OfferDownloads key={JSON.stringify([inputKey,activePricing,draft.customer,draft.project,draft.validity,draft.terms])}
-        disabled={!complete || !current?.rounds} onRetry={() => setRetry(value => value+1)}
+        disabled={!complete || !current?.rounds || !canSave} supplement={Boolean(revision)} onRetry={() => setRetry(value => value+1)}
         create={() => downloadQuarryOffer(date,materials,current!.rounds!,draft,destination.address,activePricing,lines.map(line => line.unitPrice),
-          {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms},kind)}/>
+          {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms},kind,revision?.id,{withoutReturn,returnLoad})}/>
       {!complete && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
     </section>}
     {result && <details><summary>{isTipping ? 'Visa jämförelse av mottagningsplatser' : 'Visa täktjämförelse'}</summary>

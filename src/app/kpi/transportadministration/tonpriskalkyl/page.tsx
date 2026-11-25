@@ -6,20 +6,28 @@ import {readPriceBank} from '@/lib/hub/material-price-bank-server';
 import {stockholmDate} from '@/lib/hub/material-price-bank';
 import TonPriceWorkspace from './workspace';
 import OfferArchive from './offer-archive';
-import {readOffers} from '@/lib/hub/ton-price-offer-archive';
+import {readOffers, openOfferRevision} from '@/lib/hub/ton-price-offer-archive';
 import {reviewPage} from '@/lib/hub/review-access';
 import {readWorkifyMaterialPrices} from '@/lib/hub/workify-material-prices';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Page({searchParams}: {searchParams: Promise<{offertSida?: string}>}) {
-  const archivePage = reviewPage((await searchParams).offertSida);
+export default async function Page({searchParams}: {searchParams: Promise<{offertSida?: string; komplettera?: string}>}) {
+  const params = await searchParams;
+  const archivePage = reviewPage(params.offertSida);
+  const revisionId = typeof params.komplettera === 'string' ? params.komplettera : '';
   const access = await tonPriceAccess();
-  const [bank,maps,offers,workifyPrices] = access
-    ? await Promise.all([readPriceBank(access),readGoogleMapsConfig(access.db,access.tenantId),readOffers(access,archivePage),readWorkifyMaterialPrices(access)])
-    : [null,null,null,null];
+  const [bank,maps,offers,workifyPrices,revision] = access
+    ? await Promise.all([readPriceBank(access),readGoogleMapsConfig(access.db,access.tenantId),readOffers(access,archivePage),readWorkifyMaterialPrices(access),
+      revisionId ? openOfferRevision(access,revisionId).catch(() => null) : null])
+    : [null,null,null,null,null];
   return <KpiDetailShell query="" title="Tonpriskalkyl" breadcrumb="Humla Dashboard / Transportadministration" transportAdministration="ton-price">
-    {access ? <GoogleMapsProvider browserKey={maps?.browserKey ?? null}><TonPriceWorkspace bank={bank} workifyPrices={workifyPrices ?? []} today={stockholmDate()} draftKey={`humla:tonpris:v1:${access.tenantId}:${access.userId}`}>
+    {access ? <GoogleMapsProvider browserKey={maps?.browserKey ?? null}>
+      {revisionId && !revision && <div className="content"><p role="alert">Offerten kunde inte öppnas. Välj den igen i offertarkivet.</p></div>}
+      <TonPriceWorkspace key={revision?.id ?? 'new'} revision={revision ?? undefined}
+        bank={bank} workifyPrices={revision?.calculation_snapshot?.mode === 'quick'
+          ? revision.calculation_snapshot.workifyPrices : workifyPrices ?? []}
+        today={stockholmDate()} draftKey={`humla:tonpris:v1:${access.tenantId}:${access.userId}${revision ? ':'+revision.id : ''}`}>
       <OfferArchive offers={offers} page={archivePage}/>
     </TonPriceWorkspace></GoogleMapsProvider>
       : <div className="content"><section className="panel"><p>KPI-administratör krävs för tonpriskalkylen.</p></section></div>}
