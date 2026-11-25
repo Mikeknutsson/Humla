@@ -3,7 +3,7 @@
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
 import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
-import {GoogleAddressField, googleRoadEstimate, googleRouteMatrix} from '@/app/_components/google-address-field';
+import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {comparisonMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
@@ -14,6 +14,9 @@ import OfferDownloads from './offer-downloads';
 import styles from './workspace.module.css';
 
 type Option = QuarryComparison[number]['options'][number];
+type Direction = 'outbound' | 'inbound';
+const emptyLeg: Leg = {miles:'',driveMinutes:''};
+const directions = [['outbound','Till projektet'],['inbound','Tillbaka till täkten']] as const;
 const testAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)';
 
 function directionsUrl(site: MaterialSite, destination: {address: string; id?: string}) {
@@ -59,17 +62,19 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const [quantities,setQuantities] = useState<Record<string,string>>({});
   const [withoutReturn,setWithoutReturn] = useState<string[]>([]);
   const [returnLoad,setReturnLoad] = useState<ReturnLoad>();
-  const [manual,setManual] = useState<Record<string,Leg>>({});
+  const [manual,setManual] = useState<Record<string,Partial<Record<Direction,Leg>>>>({});
   const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
   const [retry,setRetry] = useState(0);
   const [applied,setApplied] = useState('');
   const [markup,setMarkup] = useState('');
   const routes = useRef(new Map<string,Promise<Leg>>());
-  const purchase = rates.filter(rate => rate.kind === 'purchase');
+  const quarrySites = sites.filter(site => site.kind !== 'tip');
+  const quarryIds = new Set(quarrySites.map(site => site.id));
+  const purchase = rates.filter(rate => rate.kind === 'purchase' && rate.unit === 'ton' && quarryIds.has(rate.siteId));
   const names = [...new Set(purchase.map(comparisonMaterial))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
-  const candidates = sites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
+  const candidates = quarrySites.filter(site => purchase.some(rate => rate.siteId === site.id && selected.includes(comparisonMaterial(rate))));
   const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
-  const routesAvailable = candidates.some(site => manual[site.id]?.miles.trim() || (mapsKey && destination.address !== testAddress && (site.address || site.mapPlaceId)));
+  const routesAvailable = candidates.some(site => manual[site.id]?.outbound?.miles.trim() || (mapsKey && destination.address !== testAddress && (site.address || site.mapPlaceId)));
   const hasAddress = Boolean(destination.address.trim());
   const isTestAddress = destination.address === testAddress;
   const addressConfirmed = hasAddress && committed === destination.address;
@@ -80,7 +85,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const result = current?.comparison;
   const busy = ready && !current;
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
-  const missingRoutes = current?.rounds?.some(round => !round.outbound.miles.trim());
+  const missingRoutes = current?.rounds?.some(round => !round.outbound.miles.trim() || (!round.mirror && !round.inbound.miles.trim()));
   const needsManual = isTestAddress || !mapsKey || !routesAvailable || missingRoutes;
   const percent = parseOfferMarkup(markup);
   const lines = result && percent !== null ? offerLines(result,percent) : [];
@@ -98,38 +103,55 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     setSelected(items => items.includes(name) ? items.filter(item => item !== name) : [...items,name]);
   }
 
+  function updateManual(siteId: string, direction: Direction, patch: Partial<Leg>) {
+    setManual(previous => ({...previous,[siteId]:{...previous[siteId],
+      [direction]:{...(previous[siteId]?.[direction] ?? emptyLeg),...patch}}}));
+  }
+
   const compare = useEffectEvent(async (key: string, signal: AbortSignal) => {
     try {
-      const routeKey = (site: MaterialSite) => JSON.stringify([mapsKey,site.address,site.mapPlaceId,destination]);
+      const routeKey = (site: MaterialSite, direction: Direction) => JSON.stringify([mapsKey,direction,site.address,site.mapPlaceId,destination]);
       if (mapsKey && !isTestAddress) {
-        const pending = new Map(candidates.filter(site => !manual[site.id]?.miles.trim() &&
-          (site.address || site.mapPlaceId) && !routes.current.has(routeKey(site)))
-          .map(site => [routeKey(site),{address:site.address,id:site.mapPlaceId}]));
-        const entries = [...pending];
-        // One destination leaves room for 49 address- or Place-based origins.
-        for (let start = 0; start < entries.length; start += 49) {
-          const batch = entries.slice(start,start+49);
-          const matrix = googleRouteMatrix(mapsKey,batch.map(([, origin]) => origin),destination);
-          batch.forEach(([route, origin], index) => {
-            routes.current.set(route,matrix.then(estimates => {
-              const estimate = estimates[index];
-              if (!estimate) throw new Error('Ingen rutt');
-              return estimate;
-            },() => googleRoadEstimate(mapsKey,origin,destination)));
-          });
+        for (const [direction] of directions) {
+          const pending = new Map(candidates.filter(site => !manual[site.id]?.[direction]?.miles.trim() &&
+            (site.address || site.mapPlaceId) && !routes.current.has(routeKey(site,direction)))
+            .map(site => [routeKey(site,direction),{address:site.address,id:site.mapPlaceId}]));
+          const entries = [...pending];
+          // The project waypoint leaves room for 49 address- or Place-based quarry waypoints.
+          for (let start = 0; start < entries.length; start += 49) {
+            const batch = entries.slice(start,start+49);
+            const quarries = batch.map(([, quarry]) => quarry);
+            const matrix = direction === 'outbound' ? googleRouteMatrix(mapsKey,quarries,destination) :
+              googleReturnRouteMatrix(mapsKey,destination,quarries);
+            batch.forEach(([route, quarry], index) => {
+              const fallback = () => direction === 'outbound' ? googleRoadEstimate(mapsKey,quarry,destination) :
+                googleRoadEstimate(mapsKey,destination,quarry);
+              routes.current.set(route,matrix.then(estimates => estimates[index] ?? fallback(),fallback));
+            });
+          }
+        }
+      }
+      async function resolveLeg(site: MaterialSite, direction: Direction): Promise<Leg> {
+        const override = manual[site.id]?.[direction];
+        if (override?.miles.trim()) return override;
+        const route = routeKey(site,direction);
+        const lookup = routes.current.get(route);
+        if (!lookup) return emptyLeg;
+        try {
+          const estimate = await lookup;
+          return {...estimate,driveMinutes:override?.driveMinutes.trim() ? override.driveMinutes : estimate.driveMinutes};
+        } catch {
+          if (routes.current.get(route) === lookup) routes.current.delete(route);
+          return emptyLeg;
         }
       }
       const rounds = await Promise.all(candidates.map(async site => {
-        let leg = manual[site.id];
-        const route = routeKey(site);
-        const lookup = routes.current.get(route);
-        if (!leg?.miles.trim() && lookup) {
-          try {leg = await lookup;} catch {
-            if (routes.current.get(route) === lookup) routes.current.delete(route);
-          }
-        }
+        const [outbound,inbound] = await Promise.all([resolveLeg(site,'outbound'),resolveLeg(site,'inbound')]);
+        const canRoute = mapsKey && !isTestAddress && (site.address || site.mapPlaceId);
+        const mirror = !canRoute && !inbound.miles.trim();
         return {...newRound(crypto.randomUUID()), pickup:site.address,pickupSiteId:site.id,pickupPlaceId:site.mapPlaceId,
-          delivery:destination.address,deliveryPlaceId:destination.id,returnLoad:withoutReturn.includes(site.id) ? undefined : returnLoad,outbound:leg ?? {miles:'',driveMinutes:''}};
+          delivery:destination.address,deliveryPlaceId:destination.id,returnLoad:withoutReturn.includes(site.id) ? undefined : returnLoad,
+          outbound,inbound,mirror};
       }));
       if (signal.aborted) return;
       const response = await calculateQuarryComparison(date,materials,rounds,draft);
@@ -181,21 +203,28 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
         {isTestAddress ? <p>För testadressen kan du ange ett exempelavstånd, till exempel 2,5 mil enkel väg.</p>
           : !mapsKey ? <p>Adress och material är valda. Automatisk körsträcka kräver en Google Maps-nyckel.
           {' '}<Link href="/integrationer/google">Öppna Google-inställningar</Link></p> :
-          missingRoutes ? <p>Google kunde inte hämta alla rutter. Lägg till körsträckan för de täkter som saknas.</p> : null}
-        <p>Google uppskattar mil och körtid enkel väg för bil. Justera vid behov för lastbil. Vid manuell körsträcka utan körtid använder Humla 11 min/mil.</p>
+          missingRoutes ? <p>Google kunde inte hämta alla rutter. Ange körsträckan för den riktning som saknas.</p> : null}
+        <p>Google uppskattar körsträcka och körtid för bil i båda riktningarna. Vid manuell sträcka utan körtid används 11 min/mil. För täkter utan kartuppgifter kan samma manuella sträcka användas åt båda håll.</p>
         {candidates.map(site => {
-          const route = current?.rounds?.find(round => round.pickupSiteId === site.id)?.outbound;
-          return <div className={`${styles.grid} ${styles.routeRow}`} key={site.id}>
+          const round = current?.rounds?.find(round => round.pickupSiteId === site.id);
+          return <div className={styles.routeRow} key={site.id}>
             <div><strong>{site.name}</strong>
               {!isTestAddress && (site.address || site.mapPlaceId ? <a href={directionsUrl(site,destination)} target="_blank" rel="noreferrer">Visa vägen i Google Maps</a> :
                 <small>Infartsadress saknas i Prisbanken.</small>)}
             </div>
-            <label className={styles.field}>Enkel väg (mil)<input aria-label={`${site.name} · Enkel väg (mil)`}
-              value={manual[site.id]?.miles ?? ''} placeholder={route?.miles || 't.ex. 2,5'} inputMode="decimal"
-              onChange={event => setManual({...manual,[site.id]:{miles:event.target.value,driveMinutes:manual[site.id]?.driveMinutes ?? ''}})}/></label>
-            <label className={styles.field}>Körtid (min, valfritt)<input aria-label={`${site.name} · Körtid (min)`}
-              value={manual[site.id]?.driveMinutes ?? ''} placeholder={route?.driveMinutes || '11 min/mil'} inputMode="decimal"
-              onChange={event => setManual({...manual,[site.id]:{miles:manual[site.id]?.miles || route?.miles || '',driveMinutes:event.target.value}})}/></label>
+            {directions.map(([direction,label]) => {
+              const route = direction === 'inbound' && round?.mirror ? round.outbound : round?.[direction];
+              const input = manual[site.id]?.[direction];
+              return <fieldset className={styles.grid} key={direction}>
+                <legend>{label}</legend>
+                <label className={styles.field}>Körsträcka (mil)<input aria-label={`${site.name} · ${label} · Körsträcka (mil)`}
+                  value={input?.miles ?? ''} placeholder={route?.miles || 't.ex. 2,5'} inputMode="decimal"
+                  onChange={event => updateManual(site.id,direction,{miles:event.target.value})}/></label>
+                <label className={styles.field}>Körtid (min, valfritt)<input aria-label={`${site.name} · ${label} · Körtid (min)`}
+                  value={input?.driveMinutes ?? ''} placeholder={route?.driveMinutes || '11 min/mil'} inputMode="decimal"
+                  onChange={event => updateManual(site.id,direction,{driveMinutes:event.target.value})}/></label>
+              </fieldset>;
+            })}
           </div>;
         })}
       </details>}
@@ -250,9 +279,12 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       {row.missing.length > 0 && <p>Körunderlag saknas eller kan inte användas för {row.missing.join(', ')}.</p>}
       {row.options.length > 0 && <details>
         <summary>Visa jämförelse</summary>
-        <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Material kr/ton</th><th>Mil enkel väg</th><th>Min enkel väg</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
+        <div className={styles.table}><table><thead><tr><th>Täkt</th><th>Material i prislistan</th><th>Material kr/ton</th><th>Mil till projekt</th><th>Mil tillbaka</th><th>Min per runda</th><th>Frakt kr/ton</th><th>Summa kr/ton</th><th>Priskälla</th></tr></thead>
           <tbody>{row.options.map(option => <tr key={option.rate.id}><td>{option.site.name}</td><td>{option.rate.material}</td>
-            <td>{offerMoney.format(option.rate.price)}</td><td>{option.round.outbound.miles}</td><td>{option.round.outbound.driveMinutes || 'Schablon'}</td><td>{offerMoney.format(option.freight)}</td><td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
+            <td>{offerMoney.format(option.rate.price)}</td><td>{option.round.outbound.miles}</td>
+            <td>{option.round.mirror ? option.round.outbound.miles : option.round.inbound.miles}</td>
+            <td>{offerMoney.format(option.time.minutes)}</td><td>{offerMoney.format(option.freight)}</td>
+            <td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}
     </section>)}
     {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied === inputKey}
