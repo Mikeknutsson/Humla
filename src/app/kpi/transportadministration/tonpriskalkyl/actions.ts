@@ -37,7 +37,7 @@ async function prepareTonPrices(access: Access | null, draft: TonPriceDraft, inc
     const usesBankSites = includeSites && draft.rounds.some(round => round.pickupSiteId || round.deliverySiteId);
     let sites: MaterialSite[] = [];
     if (usesBankRates || usesBankSites) {
-      const bank = await readPriceBank(access);
+      const bank = await readPriceBank(access,true);
       if (!bank) return {error: 'Prisbanken kunde inte hämtas.'};
       sites = bank.sites;
       const date = draft.priceDate || stockholmDate();
@@ -93,7 +93,7 @@ async function offerDocuments(access: Access, priceDate: string, details: OfferD
   const allMaterials = [...new Set([...(source?.materials ?? []),...lines.map(line => line.material)])];
   if (allMaterials.length > 100) return {error:'En offert kan innehålla högst 100 olika material inklusive kompletteringar.'};
   const reference = source ? {date:source.offer_date,id:source.id} : undefined;
-  const fingerprint = offerFingerprint([date,priceDate,customer,project,validity,terms,sections,plan,snapshot,reference]);
+  const fingerprint = offerFingerprint([date,priceDate,customer,project,validity,terms,sections,plan,snapshot,reference,...(access.canManage ? [] : [access.userId])]);
   try {
     let id = await findArchivedOffer(access,fingerprint);
     if (!id) {
@@ -140,7 +140,7 @@ function compareBank(bank: MaterialPriceBank, date: string, materials: QuarryMat
 export async function calculateQuarryComparison(date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind'] = 'purchase') {
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.',comparison:undefined};
-  const bank = await readPriceBank(access);
+  const bank = await readPriceBank(access,true);
   return bank ? compareBank(bank,date,materials,rounds,draft,kind) : {error:'Prisbanken kunde inte hämtas.'};
 }
 
@@ -226,7 +226,7 @@ export async function downloadQuarryOffer(date: string, jobs: QuarryOfferJob[], 
   const previous = source?.calculation_snapshot;
   const previousJobs = previous?.mode === 'quick' ? [previous.quick,...(previous.additionalJobs ?? [])] : [];
   const [bank,workifyPrices] = await Promise.all([
-    readPriceBank(access),previous?.mode === 'quick' ? previous.workifyPrices : readWorkifyMaterialPrices(access),
+    readPriceBank(access,true),previous?.mode === 'quick' ? previous.workifyPrices : readWorkifyMaterialPrices(access),
   ]);
   if (!bank) return {error:'Prisbanken kunde inte hämtas.'};
   const sections: OfferSection[] = [];

@@ -18,10 +18,11 @@ export default async function Page({searchParams}: {searchParams: Promise<{offer
   const revisionId = typeof params.komplettera === 'string' ? params.komplettera : '';
   const access = await tonPriceAccess();
   const [bank,maps,offers,workifyPrices,revision] = access
-    ? await Promise.all([readPriceBank(access),readGoogleMapsConfig(access.db,access.tenantId),readOffers(access,archivePage),readWorkifyMaterialPrices(access),
+    ? await Promise.all([readPriceBank(access,true),readGoogleMapsConfig(access.db,access.tenantId),readOffers(access,archivePage),readWorkifyMaterialPrices(access),
       revisionId ? openOfferRevision(access,revisionId).catch(() => null) : null])
     : [null,null,null,null,null];
-  return <KpiDetailShell query="" title="Tonpriskalkyl" breadcrumb="Humla Dashboard / Transportadministration" transportAdministration="ton-price">
+  return <KpiDetailShell query="" title="Tonpriskalkyl" breadcrumb="Humla Dashboard / Transportadministration" transportAdministration={access?.canManage ? 'ton-price' : false}
+    personal={!access?.canManage} personalLink={access && !access.canManage ? {href:'/kpi/mina-enheter',label:'Mina enheter'} : undefined}>
     {access ? <GoogleMapsProvider browserKey={maps?.browserKey ?? null}>
       {revisionId && !revision && <div className="content"><p role="alert">Offerten kunde inte öppnas. Välj den igen i offertarkivet.</p></div>}
       <TonPriceWorkspace key={revision?.id ?? 'new'} revision={revision ?? undefined}
@@ -30,6 +31,6 @@ export default async function Page({searchParams}: {searchParams: Promise<{offer
         today={stockholmDate()} draftKey={`humla:tonpris:v1:${access.tenantId}:${access.userId}${revision ? ':'+revision.id : ''}`}>
       <OfferArchive offers={offers} page={archivePage}/>
     </TonPriceWorkspace></GoogleMapsProvider>
-      : <div className="content"><section className="panel"><p>KPI-administratör krävs för tonpriskalkylen.</p></section></div>}
+      : <div className="content"><section className="panel"><p>Behörighet saknas för tonpriskalkylen.</p></section></div>}
   </KpiDetailShell>;
 }
