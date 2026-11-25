@@ -1,5 +1,6 @@
 import type {QuarryComparison} from './quarry-comparison';
 import type {calculateTonPrices, TonPriceDraft} from './ton-price';
+import {standardMaterial} from './material-price-bank';
 
 export type OfferDetails = {customer: string; project: string; validity: string; terms: string};
 export const offerMoney = new Intl.NumberFormat('sv-SE', {maximumFractionDigits:0,signDisplay:'negative'});
@@ -62,7 +63,8 @@ export function advancedOfferLines(draft: TonPriceDraft, result: ReturnType<type
     const truck = row.options.find(option => option.id === 'truck')?.prices[draft.profile];
     const trailer = row.options.find(option => option.id === 'trailer')?.prices[draft.profile];
     return [{
-      material:input.transportOnly ? input.name.trim() || 'Enbart transport' : input.name,
+      material:input.transportOnly ? input.name.trim() || 'Enbart transport' :
+        input.bankRateId ? standardMaterial({material:input.name,kind:input.bankKind ?? 'purchase'}).name : input.name,
       unitPrice:roundOfferMoney(row.selected.delivered),
       pickupKey,
       quotedVehicle:input.vehicleId === 'trailer' ? undefined : draft.vehicles.find(vehicle => vehicle.id === input.vehicleId)?.name,
