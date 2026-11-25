@@ -18,6 +18,7 @@ export function roundOfferMoney(value: number) {
 
 export type OfferLine = {
   material: string;
+  isTip?: boolean;
   unitPrice: number;
   pickupKey: string;
   truckSupplement: number | null;
@@ -52,14 +53,18 @@ export type QuarryPricing = {
 export function priceQuarryOffer(comparison: QuarryComparison, pricing: QuarryPricing, workifyPrices: WorkifyOfferPrice[]) {
   return comparison.map(row => {
     const winner = row.options[0];
-    if (!winner) return {error:'Körunderlag saknas'};
+    if (!winner) return {error:row.problem};
     const override = Object.hasOwn(pricing.overrides,row.material) ? pricing.overrides[row.material] : undefined;
     const source = override?.source || '';
     const useWorkify = source.startsWith('workify:') || (!source && pricing.mode === 'workify');
     let materialPrice: number;
     let deliveredPrice: number;
     let pricingSource: string;
-    if (useWorkify) {
+    if (winner.rate.kind === 'tip' || (winner.preferred && useWorkify)) {
+      materialPrice = winner.rate.price;
+      deliveredPrice = winner.total;
+      pricingSource = winner.preferred ? 'Sortergårdens prislista' : 'Prisbanken';
+    } else if (useWorkify) {
       const matches = workifyPrices.filter(price => price.material === row.material);
       const price = source ? matches.find(price => source === 'workify:' + price.article) :
         matches.find(price => !price.includesFreight) ?? matches[0];
@@ -72,10 +77,11 @@ export function priceQuarryOffer(comparison: QuarryComparison, pricing: QuarryPr
       if (markup === null) return {error:'Ange ett påslag mellan 0 och 1 000 %'};
       materialPrice = winner.rate.price * (1 + markup / 100);
       deliveredPrice = materialPrice + winner.freight;
-      pricingSource = `Materialpåslag ${markup.toLocaleString('sv-SE')} %`;
+      pricingSource = (winner.preferred ? 'Sortergårdens prislista · ' : '') + `Materialpåslag ${markup.toLocaleString('sv-SE')} %`;
     }
     const unitPrice = roundOfferMoney(deliveredPrice);
-    const line: OfferLine = {material:row.material,unitPrice,pickupKey:`site:${winner.site.id}`,truckSupplement:winner.truckSupplement};
+    const line: OfferLine = {material:row.material,isTip:winner.rate.kind === 'tip' || undefined,unitPrice,
+      pickupKey:`site:${winner.site.id}`,truckSupplement:winner.truckSupplement};
     return {line,materialPrice,pricingSource};
   });
 }
@@ -94,6 +100,7 @@ export function advancedOfferLines(draft: TonPriceDraft, result: ReturnType<type
     return [{
       material:input.transportOnly ? input.name.trim() || 'Enbart transport' :
         input.bankRateId ? standardMaterial({material:input.name,kind:input.bankKind ?? 'purchase'}).name : input.name,
+      isTip:input.bankKind === 'tip' || undefined,
       unitPrice:roundOfferMoney(row.selected.delivered),
       pickupKey,
       quotedVehicle:input.vehicleId === 'trailer' ? undefined : draft.vehicles.find(vehicle => vehicle.id === input.vehicleId)?.name,
