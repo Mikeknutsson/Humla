@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
-import {materialGroups, standardMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {compareMaterialFractions, materialGroups, standardMaterial, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
@@ -32,7 +32,7 @@ function directionsUrl(site: MaterialSite, destination: Destination) {
 export function ReturnLoadFields({value, rates, onChange}: {
   value?: ReturnLoad; rates: SiteRate[]; onChange:(value?: ReturnLoad) => void;
 }) {
-  const names = [...new Set(rates.map(rate => standardMaterial(rate).name))].sort((a,b) => a.localeCompare(b,'sv',{numeric:true}));
+  const names = [...new Set(rates.map(rate => standardMaterial(rate).name))].sort(compareMaterialFractions);
   return <div className={styles.card}>
     <label><input type="checkbox" checked={!!value} onChange={event => onChange(event.target.checked ? emptyReturnLoad : undefined)}/> Räkna med returlast</label>
     {value && <>
@@ -82,7 +82,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
     materialOptions.set(name,option);
   }
   const options = [...materialOptions.values()].sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
-    a.label.localeCompare(b.label,'sv',{numeric:true})).map(option => ({
+    compareMaterialFractions(a.label,b.label)).map(option => ({
     id:option.id,label:option.label,group:option.group,search:[...option.aliases].join(' '),
   }));
   const candidates = quarrySites.filter(site => purchase.some(({rate,name}) => rate.siteId === site.id && selected.includes(name)));
