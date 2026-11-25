@@ -1,19 +1,19 @@
 'use server';
 
 import {revalidatePath} from 'next/cache';
-import {archiveOffer, findArchivedOffer, offerFingerprint, readOfferRevision} from '@/lib/hub/ton-price-offer-archive';
+import {archiveOffer, findArchivedOffer, offerFingerprint, openOfferRevision} from '@/lib/hub/ton-price-offer-archive';
 import {tonPricePath} from '@/app/_components/kpi-transport-administration-nav';
 
-import {advancedOfferLines, priceQuarryOffer, type QuarryPricing, type OfferDetails, type OfferLine} from '@/lib/hub/ton-price-offer';
-import {quotedMaterial, type OfferRevision, type OfferSnapshot, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
+import {advancedOfferLines, priceQuarryOffer, type QuarryPricing, type OfferDetails, type OfferSection} from '@/lib/hub/ton-price-offer';
+import {maxQuarryOfferJobs, priorJobMaterials, quotedMaterial, sameOfferJob, type OfferRevision, type OfferSnapshot, type QuarryOfferJob, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
 import {readWorkifyMaterialPrices} from '@/lib/hub/workify-material-prices';
 import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-delivery-plan';
 import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
 import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
-import {effectiveSiteRates, stockholmDate, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {effectiveSiteRates, stockholmDate, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
-import {calculateTonPrices, offerTermsMaxLength, type ReturnLoad, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
+import {calculateTonPrices, offerTermsMaxLength, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
 type Access = NonNullable<Awaited<ReturnType<typeof tonPriceAccess>>>;
 
@@ -67,26 +67,39 @@ export async function recalculateTonPrices(draft: TonPriceDraft) {
   return {result,error};
 }
 
-async function offerDocuments(access: Access, delivery: string, priceDate: string, details: OfferDetails, lines: OfferLine[], plan: DeliveryPlanLine[], snapshot: OfferSnapshot, source: OfferRevision | null) {
+async function offerDocuments(access: Access, priceDate: string, details: OfferDetails, sections: OfferSection[], plan: DeliveryPlanLine[], snapshot: OfferSnapshot, source: OfferRevision | null) {
   const date = stockholmDate();
   const {customer,project,validity,terms} = details;
-  if (source && lines.some(line => quotedMaterial(source.materials,line.material))) {
-    return {error:'En vald fraktion finns redan i offerten. Välj endast nya material för kompletteringen.'};
+  for (const section of sections) {
+    const prior = priorJobMaterials(source,section);
+    if (section.lines.some(line => quotedMaterial(prior,line.material))) {
+      return {error:'En vald fraktion finns redan för samma uppdrag och adress.'};
+    }
   }
+  const former = source?.calculation_snapshot?.quotedJobs;
+  const old = source?.calculation_snapshot;
+  const legacyKind = source?.legacy?.kind;
+  const legacyAddress = source?.legacy?.projectAddress;
+  const previousJobs = former ?? (source && old?.mode === 'quick'
+    ? [{kind:old.quick.kind,address:old.quick.destination.address,materials:source.materials}]
+    : source && legacyKind && legacyAddress ? [{kind:legacyKind,address:legacyAddress,materials:source.materials}] : []);
+  const lines = sections.flatMap(section => section.lines);
+  snapshot.quotedJobs = [...previousJobs,...sections.map(({kind,address,lines}) => ({kind,address,materials:lines.map(line => line.material)}))];
+  snapshot.unscopedMaterials = old?.unscopedMaterials ?? (source && !previousJobs.length ? source.materials : undefined);
   const allMaterials = [...new Set([...(source?.materials ?? []),...lines.map(line => line.material)])];
   if (allMaterials.length > 100) return {error:'En offert kan innehålla högst 100 olika material inklusive kompletteringar.'};
   const reference = source ? {date:source.offer_date,id:source.id} : undefined;
-  const fingerprint = offerFingerprint([date,delivery,priceDate,customer,project,validity,terms,lines,plan,snapshot,reference]);
+  const fingerprint = offerFingerprint([date,priceDate,customer,project,validity,terms,sections,plan,snapshot,reference]);
   try {
     let id = await findArchivedOffer(access,fingerprint);
     if (!id) {
       const [pdf, deliveryPlan] = await Promise.all([
-        tonPriceOfferPdf(delivery,date,details,lines,undefined,undefined,reference),
-        tonPriceOfferPdf(delivery,date,details,[],plan,priceDate,reference),
+        tonPriceOfferPdf('',date,details,lines,undefined,undefined,reference,sections),
+        tonPriceOfferPdf('',date,details,[],plan,priceDate,reference),
       ]);
       id = await archiveOffer(access,{
         offer_date:date, customer, project,
-        destinations:[...new Set(plan.map(row => row.delivery).filter(Boolean))],
+        destinations:[...new Set(sections.map(section => section.address).filter(Boolean))],
         materials:allMaterials,
         source_offer_id:source?.id ?? null,
       },fingerprint,pdf,deliveryPlan,snapshot);
@@ -102,7 +115,7 @@ async function offerDocuments(access: Access, delivery: string, priceDate: strin
 async function revisionSource(access: Access, id?: string) {
   if (!id) return {source:null};
   try {
-    const source = await readOfferRevision(access,id);
+    const source = await openOfferRevision(access,id);
     if (source) return {source};
   } catch {
     // Do not create an unlinked offer when the archive cannot be read.
@@ -112,12 +125,10 @@ async function revisionSource(access: Access, id?: string) {
 
 type QuarryMaterial = {name: string; tonnes: string};
 
-async function compareForAccess(access: Access, date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind']) {
+function compareBank(bank: MaterialPriceBank, date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind']) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || materials.length > 100 || rounds.length > 100 ||
     !['reference','bk1','bk4'].includes(draft.profile) || draft.vehicles.length !== 3 ||
     (kind !== 'tip' && kind !== 'purchase')) return {error:'Ogiltigt jämförelseunderlag.'};
-  const bank = await readPriceBank(access);
-  if (!bank) return {error:'Prisbanken kunde inte hämtas.'};
   try {return {comparison:compareQuarries(bank,date,materials,rounds,draft,kind)};}
   catch {return {error:'Kontrollera mil, ekipage och returparametrar.'};}
 }
@@ -125,7 +136,8 @@ async function compareForAccess(access: Access, date: string, materials: QuarryM
 export async function calculateQuarryComparison(date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft, kind: SiteRate['kind'] = 'purchase') {
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.',comparison:undefined};
-  return compareForAccess(access,date,materials,rounds,draft,kind);
+  const bank = await readPriceBank(access);
+  return bank ? compareBank(bank,date,materials,rounds,draft,kind) : {error:'Prisbanken kunde inte hämtas.'};
 }
 
 function validOfferDetails(details: OfferDetails) {
@@ -134,32 +146,25 @@ function validOfferDetails(details: OfferDetails) {
     typeof details.terms === 'string' && details.terms.length <= offerTermsMaxLength;
 }
 
-export async function downloadQuarryOffer(
-  date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft,
-  delivery: string, pricing: QuarryPricing, expectedPrices: number[], details: OfferDetails, kind: SiteRate['kind'] = 'purchase',
-  sourceId?: string, returnSettings?: {withoutReturn: string[]; returnLoad?: ReturnLoad},
+function prepareQuarryJob(
+  bank: MaterialPriceBank, date: string, job: QuarryOfferJob, draft: TonPriceDraft,
+  workifyPrices: Awaited<ReturnType<typeof readWorkifyMaterialPrices>>,
+  previousJobs: QuarryOfferSettings[],
 ) {
+  const {kind, address, pricing, materials, rounds, expectedPrices} = job;
   if (!pricing || !['markup','workify'].includes(pricing.mode) || typeof pricing.markup !== 'string' ||
     !pricing.overrides || typeof pricing.overrides !== 'object' || Object.keys(pricing.overrides).length > 100 ||
     Object.values(pricing.overrides).some(value => !value || typeof value.markup !== 'string' || typeof value.source !== 'string' ||
       (value.source !== '' && value.source !== 'markup' && !/^workify:[\w-]{1,80}$/.test(value.source)))) {
-    return {error:'Kontrollera offertens prisval.'};
+    return {error:'Kontrollera uppdragets prisval.'};
   }
-  if (typeof delivery !== 'string' || !delivery.trim() || delivery.length > 240 ||
-    !validOfferDetails(details)) {
-    return {error:'Kontrollera offertuppgifterna.'};
+  if (typeof address !== 'string' || !address.trim() || address.length > 240 || !Array.isArray(rounds) ||
+    rounds.some(round => (kind === 'tip' ? round?.pickup : round?.delivery) !== address)) {
+    return {error:'Kontrollera adressen för uppdraget och räkna om rutten.'};
   }
-  const access = await tonPriceAccess();
-  if (!access) return {error:'Behörighet saknas.'};
-  const {source,error} = await revisionSource(access,sourceId);
-  if (error) return {error};
-  const previous = source?.calculation_snapshot;
   const usesWorkify = kind === 'purchase' &&
     (pricing.mode === 'workify' || Object.values(pricing.overrides).some(value => value.source.startsWith('workify:')));
-  const [result,workifyPrices] = await Promise.all([
-    compareForAccess(access,date,materials,rounds,draft,kind),
-    previous?.mode === 'quick' ? previous.workifyPrices : readWorkifyMaterialPrices(access),
-  ]);
+  const result = compareBank(bank,date,materials,rounds,draft,kind);
   if (!result.comparison) return {error:result.error};
   if (usesWorkify && !workifyPrices) return {error:'Workifys standardpriser kunde inte hämtas.'};
   const priced = priceQuarryOffer(result.comparison,pricing,workifyPrices ?? []);
@@ -185,28 +190,61 @@ export async function downloadQuarryOffer(
   const tip = kind === 'tip';
   const first = result.comparison[0].options[0].round;
   const routes: QuarryOfferSettings['routes'] = {};
-  const destination = {address:delivery,id:tip ? first.pickupPlaceId : first.deliveryPlaceId,
+  const destination = {address,id:tip ? first.pickupPlaceId : first.deliveryPlaceId,
     point:tip ? first.pickupPoint : first.deliveryPoint};
-  const sameProjectRoutes = previous?.mode === 'quick' && previous.quick.kind === kind &&
-    previous.quick.destination.address === destination.address && previous.quick.destination.id === destination.id &&
-    previous.quick.destination.point?.lat === destination.point?.lat && previous.quick.destination.point?.lng === destination.point?.lng;
-  if (sameProjectRoutes) Object.assign(routes,previous.quick.routes);
+  const matching = previousJobs.find(previous => sameOfferJob({kind:previous.kind,address:previous.destination.address},{kind,address}) &&
+    previous.destination.id === destination.id && previous.destination.point?.lat === destination.point?.lat &&
+    previous.destination.point?.lng === destination.point?.lng);
+  if (matching) Object.assign(routes,matching.routes);
   for (const round of rounds) {
     const siteId = tip ? round.deliverySiteId : round.pickupSiteId;
     if (!siteId || !round.outbound.miles.trim()) continue;
     const returnLeg = round.mirror ? round.outbound : round.inbound;
     routes[siteId] = tip ? {outbound:returnLeg,inbound:round.outbound} : {outbound:round.outbound,inbound:returnLeg};
   }
-  const snapshot: OfferSnapshot = {
-    mode:'quick',workifyPrices:workifyPrices ?? [],
-    draft:{...draft,...details,priceDate:date,materials:[],rounds:[]},
-    quick:{
-      destination,
-      kind,pricing:{mode:pricing.mode,markup:pricing.markup,overrides:{}},routes,
-      withoutReturn:returnSettings?.withoutReturn ?? [],returnLoad:returnSettings?.returnLoad,
-    },
+  const settings: QuarryOfferSettings = {
+    destination,kind,pricing:{mode:pricing.mode,markup:pricing.markup,overrides:{}},routes,
+    withoutReturn:job.withoutReturn ?? [],returnLoad:job.returnLoad,
   };
-  return offerDocuments(access,delivery,date,details,lines,plan,snapshot,source);
+  return {section:{kind,address,lines},plan,settings};
+}
+
+export async function downloadQuarryOffer(date: string, jobs: QuarryOfferJob[], draft: TonPriceDraft, details: OfferDetails, sourceId?: string) {
+  if (!validOfferDetails(details) || !Array.isArray(jobs) || !jobs.length || jobs.length > maxQuarryOfferJobs ||
+    jobs.some(job => !job || !Array.isArray(job.materials)) ||
+    jobs.reduce((sum,job) => sum+job.materials.length,0) > 100) {
+    return {error:'Kontrollera offertuppgifterna. Högst 100 materialrader kan ingå.'};
+  }
+  const access = await tonPriceAccess();
+  if (!access) return {error:'Behörighet saknas.'};
+  const {source,error} = await revisionSource(access,sourceId);
+  if (error) return {error};
+  const previous = source?.calculation_snapshot;
+  const previousJobs = previous?.mode === 'quick' ? [previous.quick,...(previous.additionalJobs ?? [])] : [];
+  const [bank,workifyPrices] = await Promise.all([
+    readPriceBank(access),previous?.mode === 'quick' ? previous.workifyPrices : readWorkifyMaterialPrices(access),
+  ]);
+  if (!bank) return {error:'Prisbanken kunde inte hämtas.'};
+  const sections: OfferSection[] = [];
+  const plan: DeliveryPlanLine[] = [];
+  const settings = [...previousJobs];
+  for (const [index,job] of jobs.entries()) {
+    const result = prepareQuarryJob(bank,date,job,draft,workifyPrices,previousJobs);
+    if (!result.section) return {error:`Uppdrag ${index+1}. ${result.error}`};
+    if (sections.some(section => sameOfferJob(section,result.section))) {
+      return {error:'Samla material för samma uppdragstyp och adress på ett uppdrag.'};
+    }
+    sections.push(result.section);
+    plan.push(...result.plan);
+    const matching = settings.findIndex(saved => sameOfferJob({kind:saved.kind,address:saved.destination.address},result.section));
+    if (matching === -1) settings.push(result.settings);
+    else settings[matching] = result.settings;
+  }
+  const [quick,...additionalJobs] = settings;
+  return offerDocuments(access,date,details,sections,plan,{
+    mode:'quick',quick,additionalJobs,workifyPrices:workifyPrices ?? [],
+    draft:{...draft,...details,priceDate:date,materials:[],rounds:[]},
+  },source);
 }
 
 export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices: number[], sourceId?: string) {
@@ -238,8 +276,18 @@ export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices
       purchase:row.price!.purchase, materialPrice:row.price!.sale, freight:row.selected!.freight,
     };
   });
-  const destinations = new Set(draft.materials.map(input => rounds.get(input.roundId)!.delivery.trim()));
+  const groups = new Map<string,OfferSection>();
+  for (const [index,line] of lines.entries()) {
+    const input = draft.materials[index];
+    const round = rounds.get(input.roundId)!;
+    const kind = line.isTip ? 'tip' : 'purchase';
+    const address = (line.isTip ? round.pickup : round.delivery).trim();
+    const key = JSON.stringify([kind,address]);
+    const section = groups.get(key) ?? {kind,address,lines:[]};
+    section.lines.push(line);
+    groups.set(key,section);
+  }
   const priceDate = draft.priceDate || stockholmDate();
-  return offerDocuments(access,destinations.size === 1 ? [...destinations][0] : '',priceDate,draft,lines,plan,
+  return offerDocuments(access,priceDate,draft,[...groups.values()],plan,
     {mode:'advanced',draft:{...draft,priceDate}},revision.source);
 }

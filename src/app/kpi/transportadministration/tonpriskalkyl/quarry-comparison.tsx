@@ -2,17 +2,15 @@
 
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
-import {offerMoney, priceQuarryOffer, type OfferDetails, type QuarryPricing, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
+import {offerMoney, priceQuarryOffer, type QuarryPricing, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {compareMaterialFractions, materialGroups, sortergardenSiteIds, standardMaterial, standardMaterialNames, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
-import {quotedMaterial, type OfferRevision} from '@/lib/hub/ton-price-offer-revision';
+import {priorJobMaterials, quotedMaterial, type OfferRevision, type QuarryOfferJob, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft} from '@/lib/hub/ton-price';
 import MaterialMultiSelect from './material-multi-select';
-import {calculateQuarryComparison, downloadQuarryOffer} from './actions';
-import OfferDownloads from './offer-downloads';
-import {CustomerField, OfferTermsField} from './offer-fields';
+import {calculateQuarryComparison} from './actions';
 import styles from './workspace.module.css';
 
 type Option = QuarryComparison[number]['options'][number];
@@ -58,19 +56,24 @@ export function ReturnLoadFields({value, rates, onChange}: {
   </div>;
 }
 
-export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onDetailsChange, onUseReference, revision, canSave}: {
-  sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void; onDetailsChange:(patch: Partial<OfferDetails>) => void;
+export type QuarryJobState = {selected: boolean; job?: QuarryOfferJob};
+
+export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onUseReference,
+  revision, saved, defaultKind, useLegacy, refresh, onQuoteChange, heading, onRemove}: {
+  sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
   workifyPrices: WorkifyOfferPrice[];
   onUseReference: () => void;
-  revision?: OfferRevision; canSave: boolean;
+  revision?: OfferRevision; saved?: QuarryOfferSettings; defaultKind: SiteRate['kind']; useLegacy: boolean; refresh: number;
+  onQuoteChange:(state: QuarryJobState) => void;
+  heading: string; onRemove?: () => void;
 }) {
   const mapsKey = useGoogleMapsKey();
-  const snapshot = revision?.calculation_snapshot;
-  const saved = snapshot?.mode === 'quick' ? snapshot.quick : undefined;
-  const savedAddress = saved?.destination ?? {address:revision?.legacy?.projectAddress ?? (revision?.destinations.length === 1 && revision.legacy?.kind !== 'tip' ? revision.destinations[0] : '')};
+  const legacy = useLegacy ? revision?.legacy : undefined;
+  const savedAddress = saved?.destination ?? {address:legacy?.projectAddress ??
+    (useLegacy && revision?.destinations.length === 1 && legacy?.kind !== 'tip' ? revision.destinations[0] : '')};
   const [destination,setDestination] = useState<Destination>(savedAddress);
   const [committed,setCommitted] = useState(savedAddress.address);
-  const [kind,setKind] = useState<SiteRate['kind']>(saved?.kind ?? revision?.legacy?.kind ?? 'purchase');
+  const [kind,setKind] = useState<SiteRate['kind']>(saved?.kind ?? legacy?.kind ?? defaultKind);
   const [selected,setSelected] = useState<string[]>([]);
   const [quantities,setQuantities] = useState<Record<string,string>>({});
   const [withoutReturn,setWithoutReturn] = useState<string[]>(saved?.withoutReturn ?? []);
@@ -79,7 +82,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
   const [retry,setRetry] = useState(0);
   const [applied,setApplied] = useState('');
-  const [pricing,setPricing] = useState<QuarryPricing>(saved?.pricing ?? revision?.legacy?.pricing ?? {mode:'markup',markup:'0',overrides:{}});
+  const [pricing,setPricing] = useState<QuarryPricing>(saved?.pricing ?? legacy?.pricing ?? {mode:'markup',markup:'0',overrides:{}});
   const routes = useRef(new Map<string,Promise<Leg>>());
   const isTipping = kind === 'tip';
   const primaryDirection: Direction = isTipping ? 'inbound' : 'outbound';
@@ -103,7 +106,8 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
     option.aliases.add(rate.material);
     materialOptions.set(name,option);
   }
-  const options = [...materialOptions.values()].filter(option => !quotedMaterial(revision?.materials ?? [],option.id)).sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
+  const priorMaterials = priorJobMaterials(revision,{kind,address:destination.address});
+  const options = [...materialOptions.values()].filter(option => !quotedMaterial(priorMaterials,option.id)).sort((a,b) => materialGroups.indexOf(a.group)-materialGroups.indexOf(b.group) ||
     (a.group === 'Standard' ? standardMaterialNames.indexOf(a.id)-standardMaterialNames.indexOf(b.id) :
       compareMaterialFractions(a.label,b.label))).map(option => {
     const price = tipPrices.get(option.id);
@@ -114,15 +118,15 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
       disabled:!option.aliases.size && !selected.includes(option.id),
     };
   });
-  const candidates = eligibleSites.filter(site => matchingRates.some(({rate,name}) => rate.siteId === site.id && selected.includes(name)));
-  const materials = selected.map(name => ({name,tonnes:quantities[name] ?? ''}));
+  const materials = selected.filter(name => !quotedMaterial(priorMaterials,name)).map(name => ({name,tonnes:quantities[name] ?? ''}));
+  const candidates = eligibleSites.filter(site => matchingRates.some(({rate,name}) => rate.siteId === site.id && materials.some(item => item.name === name)));
   const routesAvailable = candidates.some(site => manual[site.id]?.[primaryDirection]?.miles.trim() || (mapsKey && destination.address !== testAddress && (site.address || site.mapPlaceId)));
   const hasAddress = Boolean(destination.address.trim());
   const isTestAddress = destination.address === testAddress;
   const addressConfirmed = hasAddress && committed === destination.address;
   const ready = Boolean(addressConfirmed && materials.length && routesAvailable);
   const inputKey = JSON.stringify([date,kind,destination,materials,manual,returnLoad,withoutReturn,draft.profile,draft.vehicles,
-    candidates.map(site => [site.id,site.address,site.mapPlaceId]),retry,Boolean(mapsKey)]);
+    candidates.map(site => [site.id,site.address,site.mapPlaceId]),retry,refresh,Boolean(mapsKey)]);
   const current = request?.key === inputKey && ready ? request : undefined;
   const result = current?.comparison;
   const busy = ready && !current;
@@ -135,6 +139,16 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   const lines = priced.flatMap(row => row.line ? [row.line] : []);
   const complete = lines.length === materials.length && lines.length > 0 &&
     lines.every(line => Number.isFinite(line.unitPrice) && (line.isTip || line.unitPrice >= 0));
+
+  const publishQuote = useEffectEvent(() => onQuoteChange({
+    selected:materials.length > 0,
+    job:complete && current?.rounds ? {
+      kind,address:destination.address,materials,rounds:current.rounds,pricing:activePricing,
+      expectedPrices:lines.map(line => line.unitPrice),withoutReturn,returnLoad,
+    } : undefined,
+  }));
+  const pricingKey = JSON.stringify([activePricing,lines.map(line => line.unitPrice)]);
+  useEffect(() => {publishQuote();},[current,inputKey,pricingKey,complete]);
 
   function changeRowPricing(material: string, patch: Partial<QuarryPricing['overrides'][string]>) {
     setPricing(previous => ({
@@ -223,7 +237,10 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
   },[ready,inputKey]);
 
   return <section className={`panel ${styles.quickFlow}`}>
-    <h2>Leverans och material</h2>
+    <div className={styles.actions}>
+      <h2>{heading}</h2>
+      {onRemove && <button type="button" className="secondary" onClick={onRemove}>Ta bort uppdrag</button>}
+    </div>
     <fieldset className={styles.form}>
       <label className={styles.field}>Transportuppdrag
         <select value={kind} onChange={event => {
@@ -246,7 +263,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
       </div>}
       <MaterialMultiSelect label={isTipping ? 'Tippmaterial' : 'Material att jämföra'} options={options}
         groups={isTipping ? ['Återvinningsmaterial',...(options.some(option => option.group === 'Tippavgifter') ? ['Tippavgifter'] : [])] : materialGroups.slice(0,-1)}
-        selected={new Set(selected)} onToggle={toggle}/>
+        selected={new Set(materials.map(item => item.name))} onToggle={toggle}/>
       <details><summary>Mängder och returlast</summary>
       {selected.length > 0 && <details><summary>Ange mängder för projektet</summary>
         <p>Med mängd räknas hela rundor, även om sista lasset blir ett dellass.</p>
@@ -310,7 +327,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
     {result && <section className={styles.quickOffer} aria-label="Offertpris">
       <h3>Offertpris</h3>
       {!isTipping && <><div className={styles.grid}>
-        <label className={styles.field}>Prisgrund för offerten
+        <label className={styles.field}>Prisgrund för uppdraget
           <select value={pricing.mode} onChange={event => setPricing({...pricing,mode:event.target.value as QuarryPricing['mode']})}>
             <option value="markup">Generellt materialpåslag</option>
             <option value="workify">Workify standardpris</option>
@@ -323,7 +340,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
       <small>Påslag gäller materialet. Workify-priser inklusive transport används som levererat pris.</small></>}
       {isTipping && <small>Priset inkluderar transport och tippavgift. Ersättning för material dras av.</small>}
       <div className={styles.table}><table>
-        <thead><tr><th>Fraktion</th><th>Prisgrund per fraktion</th><th>Levererat pris (kr/ton)</th></tr></thead>
+        <thead><tr><th>Fraktion</th><th>Prisgrund per fraktion</th><th>{isTipping ? 'Pris för bortkörning (kr/ton)' : 'Levererat pris (kr/ton)'}</th></tr></thead>
         <tbody>{result.map((row,index) => {
           const entry = priced[index];
           const override = pricing.overrides[row.material];
@@ -353,20 +370,6 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
       {returnLoad && result.some(row => !row.options.length && row.problem.startsWith('Kontrollera returlastens')) &&
         <button type="button" className="secondary" onClick={() => setReturnLoad(undefined)}>Beräkna utan returlast</button>}
       {result.some(row => row.missing.length > 0) && <p role="status">Visa jämförelsen nedan för att se vilka platser som inte kunde beräknas.</p>}
-      <details>
-        <summary>Kund, projekt och offertvillkor</summary>
-        <fieldset className={styles.grid}>
-          <CustomerField value={draft.customer} onChange={customer => onDetailsChange({customer})}/>
-          {([['project','Projekt'],['validity','Giltig till']] as const).map(([key,label]) =>
-            <label key={key} className={styles.field}>{label}<input type={key === 'validity' ? 'date' : 'text'} maxLength={240}
-              value={draft[key]} onChange={event => onDetailsChange({[key]:event.target.value})}/></label>)}
-          <OfferTermsField value={draft.terms} onChange={terms => onDetailsChange({terms})}/>
-        </fieldset>
-      </details>
-      <OfferDownloads key={JSON.stringify([inputKey,activePricing,draft.customer,draft.project,draft.validity,draft.terms])}
-        disabled={!complete || !current?.rounds || !canSave} supplement={Boolean(revision)} onRetry={() => setRetry(value => value+1)}
-        create={() => downloadQuarryOffer(date,materials,current!.rounds!,draft,destination.address,activePricing,lines.map(line => line.unitPrice),
-          {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms},kind,revision?.id,{withoutReturn,returnLoad})}/>
       {!complete && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
     </section>}
     {result && <details><summary>{isTipping ? 'Visa jämförelse av mottagningsplatser' : 'Visa täktjämförelse'}</summary>

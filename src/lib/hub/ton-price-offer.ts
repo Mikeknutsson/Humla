@@ -25,6 +25,8 @@ export type OfferLine = {
   quotedVehicle?: string;
 };
 
+export type OfferSection = {address: string; kind: 'purchase' | 'tip'; lines: OfferLine[]};
+
 export function truckSupplementArticles(lines: OfferLine[]) {
   const groups = new Map<string, {price: number | null; materials: Set<string>}>();
   for (const line of lines) {

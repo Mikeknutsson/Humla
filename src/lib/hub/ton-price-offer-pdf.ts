@@ -1,6 +1,6 @@
 import {PDFDocument, StandardFonts, rgb, type PDFPage} from 'pdf-lib';
 import {elleholmsLogoJpeg} from '@/lib/kpi/internal-economy-logo';
-import {offerMoney, truckSupplementArticles, type OfferDetails, type OfferLine} from './ton-price-offer';
+import {offerMoney, truckSupplementArticles, type OfferDetails, type OfferLine, type OfferSection} from './ton-price-offer';
 import type {DeliveryPlanLine} from './ton-price-delivery-plan';
 
 const ink = rgb(.08,.11,.10);
@@ -12,7 +12,7 @@ const clean = (text: string) => text.replace(/[\u2010-\u2015\u2212]/g,'-').repla
 const left = 44;
 const right = 551;
 
-export async function tonPriceOfferPdf(delivery: string, date: string, details: OfferDetails, lines: OfferLine[], plan?: DeliveryPlanLine[], priceDate?: string, source?: {date: string; id: string}) {
+export async function tonPriceOfferPdf(delivery: string, date: string, details: OfferDetails, lines: OfferLine[], plan?: DeliveryPlanLine[], priceDate?: string, source?: {date: string; id: string}, sections?: OfferSection[]) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -62,10 +62,10 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
   }
 
   const priceEdge = right-9;
-  function heading() {
+  function heading(tip = false) {
     page.drawRectangle({x:left,y:y-7,width:right-left,height:24,color:green});
     text('Fraktion',left+8,y,10,true,white);
-    number('Levererat pris (kr/ton)',priceEdge,y,true,white);
+    number(tip ? 'Pris för bortkörning (kr/ton)' : 'Levererat pris (kr/ton)',priceEdge,y,true,white);
     y -= 24;
   }
 
@@ -111,53 +111,70 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
       for (const [label,value] of fields) field(label,value,8);
     }
   } else {
-    const onlyTipping = lines.length > 0 && lines.every(item => item.isTip);
-    for (const [label,value] of [['Kund',details.customer],['Projekt',details.project],
-      [onlyTipping ? 'Hämtningsplats' : 'Leveransplats',delivery],['Giltig till',details.validity]]) {
-      if (!value.trim()) continue;
-      text(label,left,y,9,true,muted);
-      const rows = wrapped(value,right-left-100);
-      rows.forEach((row,index) => text(row,left+100,y-index*14));
-      y -= Math.max(1,rows.length)*14+5;
-    }
+    field('Kund',details.customer);
+    field('Projekt',details.project);
+    field('Giltig till',details.validity);
 
-    y -= 14;
-    text(onlyTipping ? 'Tippning inklusive transport' : 'Material inklusive transport',left,y,13,true,green);
-    y -= 27;
-    heading();
-    for (const item of lines) {
-      const rows = wrapped(item.quotedVehicle ? item.material+' · '+item.quotedVehicle : item.material,priceEdge-left-150);
-      const height = Math.max(24,rows.length*14+10);
-      if (y-height < 64) {newPage();heading();}
-      rows.forEach((row,index) => text(row,left+8,y-index*14));
-      number(offerMoney.format(item.unitPrice),priceEdge,y,true);
-      page!.drawLine({start:{x:left,y:y-height+14},end:{x:right,y:y-height+14},color:line,thickness:.6});
-      y -= height;
-    }
+    const jobs = sections?.length ? sections : [{
+      kind:lines.length > 0 && lines.every(item => item.isTip) ? 'tip' as const : 'purchase' as const,
+      address:delivery,lines,
+    }];
+    for (const job of jobs) {
+      const tip = job.kind === 'tip';
+      const title = tip ? 'Bortkörning och tippning' : 'Leverans av material';
+      function sectionHeading() {
+        y -= 14;
+        text(title,left,y,13,true,green);
+        y -= 20;
+        field(tip ? 'Hämtningsplats' : 'Leveransplats',job.address);
+        y -= 7;
+        heading(tip);
+      }
+      const addressHeight = wrapped(job.address,right-left-126).length*14;
+      if (y < 165+addressHeight) newPage();
+      sectionHeading();
+      for (const item of job.lines) {
+        const rows = wrapped(item.quotedVehicle ? item.material+' · '+item.quotedVehicle : item.material,priceEdge-left-150);
+        const height = Math.max(24,rows.length*14+10);
+        if (y-height < 64) {newPage();sectionHeading();}
+        rows.forEach((row,index) => text(row,left+8,y-index*14));
+        number(offerMoney.format(item.unitPrice),priceEdge,y,true);
+        page!.drawLine({start:{x:left,y:y-height+14},end:{x:right,y:y-height+14},color:line,thickness:.6});
+        y -= height;
+      }
 
-    const supplements = truckSupplementArticles(lines);
-    const supplementPrice = (price: number | null) => price === null ? 'Beräknas separat' : offerMoney.format(price)+' kr/ton';
-    if (y < 134) newPage();
-    y -= 9;
-    text('Tillägg enkelbil',left,y,13,true,green);
-    if (supplements.length === 1) number(supplementPrice(supplements[0].price),priceEdge,y,true);
-    y -= 18;
-    text('Gäller när bil + släp ersätts med enkelbil.',left,y,9,false,muted);
-    y -= 23;
-    if (supplements.length > 1) {
-      for (const item of supplements) {
-        const rows = wrapped(item.label,priceEdge-left-150);
-        for (const [index,value] of rows.entries()) {
-          if (y < 64) {
-            newPage();
-            text('Tillägg enkelbil',left,y,13,true,green);
-            y -= 24;
+      const supplements = truckSupplementArticles(job.lines);
+      const supplementPrice = (price: number | null) => price === null ? 'Beräknas separat' : offerMoney.format(price)+' kr/ton';
+      if (y < 134) {
+        newPage();
+        text(title,left,y,13,true,green);
+        y -= 20;
+        field(tip ? 'Hämtningsplats' : 'Leveransplats',job.address);
+      }
+      y -= 9;
+      text('Tillägg enkelbil',left,y,13,true,green);
+      if (supplements.length === 1) number(supplementPrice(supplements[0].price),priceEdge,y,true);
+      y -= 18;
+      text('Gäller när bil + släp ersätts med enkelbil.',left,y,9,false,muted);
+      y -= 23;
+      if (supplements.length > 1) {
+        for (const item of supplements) {
+          const rows = wrapped(item.label,priceEdge-left-150);
+          for (const [index,value] of rows.entries()) {
+            if (y < 64) {
+              newPage();
+              text(title,left,y,13,true,green);
+              y -= 20;
+              field(tip ? 'Hämtningsplats' : 'Leveransplats',job.address);
+              text('Tillägg enkelbil',left,y,13,true,green);
+              y -= 24;
+            }
+            text(value,left+8,y);
+            if (index === 0) number(supplementPrice(item.price),priceEdge,y,true);
+            y -= 14;
           }
-          text(value,left+8,y);
-          if (index === 0) number(supplementPrice(item.price),priceEdge,y,true);
-          y -= 14;
+          y -= 10;
         }
-        y -= 10;
       }
     }
 
