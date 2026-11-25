@@ -14,4 +14,13 @@ export async function owner(){const db=await createClient();const {data:{user}}=
 export function basic(){return "Basic "+Buffer.from(process.env.FORTNOX_CLIENT_ID+":"+process.env.FORTNOX_CLIENT_SECRET).toString("base64");}
 export async function exchange(body:URLSearchParams){const response=await fetch("https://apps.fortnox.se/oauth-v1/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded",Authorization:basic()},body,cache:"no-store"});if(!response.ok)throw Error("Fortnox token exchange failed: "+response.status);return await response.json() as {access_token:string;refresh_token:string;expires_in:number;scope?:string};}
 export async function token(tenantId:string){const db=admin();const {data,error}=await db.from("hub_fortnox_connections").select("*").eq("tenant_id",tenantId).single();if(error||!data)throw Error("Fortnox not connected");if(new Date(data.expires_at).getTime()>Date.now()+120000)return decrypt(data.access_token_ciphertext);const fresh=await exchange(new URLSearchParams({grant_type:"refresh_token",refresh_token:decrypt(data.refresh_token_ciphertext)}));const {error:saveError}=await db.from("hub_fortnox_connections").update({access_token_ciphertext:encrypt(fresh.access_token),refresh_token_ciphertext:encrypt(fresh.refresh_token),expires_at:new Date(Date.now()+fresh.expires_in*1000).toISOString(),updated_at:new Date().toISOString()}).eq("tenant_id",tenantId);if(saveError)throw Error("Unable to persist rotated Fortnox refresh token");return fresh.access_token;}
-export async function fortnoxGet(tenantId:string,path:string){const response=await fetch("https://api.fortnox.se/3/"+path,{headers:{Authorization:"Bearer "+await token(tenantId),Accept:"application/json"},cache:"no-store"});if(!response.ok)throw Error("Fortnox API "+response.status);return response.json();}
+export async function fortnoxGet(tenantId:string,path:string) {
+  return fortnoxRequest(await token(tenantId),path);
+}
+export async function fortnoxRequest(accessToken:string,path:string,signal?:AbortSignal) {
+  const response=await fetch("https://api.fortnox.se/3/"+path,{
+    headers:{Authorization:"Bearer "+accessToken,Accept:"application/json"},cache:"no-store",signal,
+  });
+  if(!response.ok)throw Error("Fortnox API "+response.status);
+  return response.json();
+}
