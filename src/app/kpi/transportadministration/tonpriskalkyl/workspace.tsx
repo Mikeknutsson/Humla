@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Calculator, ExternalLink, Plus, Trash2} from 'lucide-react';
-import {initialTonPriceDraft, newMaterial, newRound, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
+import {defaultOfferTerms, initialTonPriceDraft, newMaterial, newRound, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
@@ -14,6 +14,7 @@ import MaterialMultiSelect from './material-multi-select';
 import {advancedOfferLines, offerMoney, truckSupplementArticles} from '@/lib/hub/ton-price-offer';
 import {downloadAdvancedOffer, recalculateTonPrices} from './actions';
 import OfferDownloads from './offer-downloads';
+import {CustomerField, OfferTermsField} from './offer-fields';
 import styles from './workspace.module.css';
 
 const decimals = new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 2});
@@ -188,7 +189,10 @@ export default function TonPriceWorkspace({draftKey, bank, today, children}: {dr
       try {
         const saved = window.localStorage.getItem(draftKey);
         if (saved) {
-          latestDraft.current = JSON.parse(saved);
+          const stored: TonPriceDraft = JSON.parse(saved);
+          latestDraft.current = stored.offerTermsInitialized ? stored : {
+            ...stored, terms:stored.terms || defaultOfferTerms, offerTermsInitialized:true,
+          };
           setDraft(latestDraft.current);
         }
       } catch {
@@ -265,7 +269,7 @@ export default function TonPriceWorkspace({draftKey, bank, today, children}: {dr
         <section className="panel">
           <h2>Kalkyl</h2>
           <div className={styles.grid}>
-            <Field label="Kund" value={draft.customer} onChange={customer => change({customer})}/>
+            <CustomerField value={draft.customer} onChange={customer => change({customer})}/>
             <Field label="Projekt" value={draft.project} onChange={project => change({project})}/>
             <Field label="Prisdatum" type="date" value={draft.priceDate || today} onChange={priceDate => change({priceDate})}/>
           </div>
@@ -273,7 +277,7 @@ export default function TonPriceWorkspace({draftKey, bank, today, children}: {dr
             <summary>Offertvillkor</summary>
             <div className={styles.grid}>
               <Field label="Giltig till" type="date" value={draft.validity} onChange={validity => change({validity})}/>
-              <Field label="Villkor" value={draft.terms} onChange={terms => change({terms})}/>
+              <OfferTermsField value={draft.terms} onChange={terms => change({terms})}/>
             </div>
           </details>
         </section>
@@ -378,7 +382,7 @@ export default function TonPriceWorkspace({draftKey, bank, today, children}: {dr
           <td>{article.price === null ? 'Beräknas separat' : offerMoney.format(article.price)}</td>
         </tr>)}</tbody>
       </table></div>
-      {draft.terms && <p>{draft.terms}</p>}
+      {draft.terms && <p className={styles.termsPreview}>{draft.terms}</p>}
     </section>}
     {children}
   </div>;

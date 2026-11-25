@@ -157,9 +157,19 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
       }
     }
 
-    const terms = wrapped(details.terms,right-left);
-    if (terms.length && y - terms.length*14 < 64) newPage();
-    terms.forEach((row,index) => text(row,left,y-index*14));
+    const paragraphs = details.terms.trim().split(/\r?\n/);
+    if (details.terms.trim() && y < 100) newPage();
+    for (const paragraph of paragraphs) {
+      if (!paragraph.trim()) {
+        y -= 7;
+        continue;
+      }
+      for (const row of wrapped(paragraph,right-left)) {
+        if (y < 64) newPage();
+        text(row,left,y,10,row === 'Förutsättningar:');
+        y -= 14;
+      }
+    }
   }
 
   const pages = pdf.getPages();

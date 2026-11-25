@@ -11,6 +11,7 @@ import {emptyReturnLoad, newRound, type Leg, type ReturnLoad, type TonPriceDraft
 import MaterialMultiSelect from './material-multi-select';
 import {calculateQuarryComparison, downloadQuarryOffer} from './actions';
 import OfferDownloads from './offer-downloads';
+import {CustomerField, OfferTermsField} from './offer-fields';
 import styles from './workspace.module.css';
 
 type Option = QuarryComparison[number]['options'][number];
@@ -260,9 +261,11 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       <details>
         <summary>Kund, projekt och offertvillkor</summary>
         <fieldset className={styles.grid}>
-          {([['customer','Kund'],['project','Projekt'],['validity','Giltig till'],['terms','Offertvillkor']] as const).map(([key,label]) =>
+          <CustomerField value={draft.customer} onChange={customer => onDetailsChange({customer})}/>
+          {([['project','Projekt'],['validity','Giltig till']] as const).map(([key,label]) =>
             <label key={key} className={styles.field}>{label}<input type={key === 'validity' ? 'date' : 'text'} maxLength={240}
               value={draft[key]} onChange={event => onDetailsChange({[key]:event.target.value})}/></label>)}
+          <OfferTermsField value={draft.terms} onChange={terms => onDetailsChange({terms})}/>
         </fieldset>
       </details>
       <OfferDownloads key={JSON.stringify([inputKey,markup,draft.customer,draft.project,draft.validity,draft.terms])}
@@ -272,6 +275,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       {!complete && percent !== null && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
     </section>}
     {result && <details><summary>Visa täktjämförelse</summary>
+    <p>Tiden per runda inkluderar körning i båda riktningarna och 30 minuter för lastning och lossning.</p>
     {result.map(row => <section className={styles.card} key={row.material}>
       <h3>{row.material}</h3>
       {row.options[0] ? <strong>{row.missing.length ? 'Billigast av beräknade täkter' : 'Billigast'} · {row.options[0].site.name} · {offerMoney.format(row.options[0].total)} kr/ton</strong>
