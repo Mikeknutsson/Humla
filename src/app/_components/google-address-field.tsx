@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useId, useRef, useState} from 'react';
+import {useEffect, useEffectEvent, useId, useRef, useState} from 'react';
 import {MapPin} from 'lucide-react';
 import styles from './google-address-field.module.css';
 import {useGoogleMapsKey} from './google-maps-provider';
@@ -24,7 +24,8 @@ const regionalCenter = {lat:56.174, lng:14.77};
 
 type Place = {id?: string; formattedAddress?: string; location?: LatLng | null; fetchFields: (options: {fields: string[]}) => Promise<unknown>};
 type SelectEvent = Event & {placePrediction: {toPlace: () => Place}};
-type Places = {Place: new (options: {id: string}) => Place; PlaceAutocompleteElement: new (options: {includedRegionCodes: string[]}) => HTMLElement};
+type PlaceAutocomplete = HTMLElement & {value: string; placeholder: string; maxlength: number};
+type Places = {Place: new (options: {id: string}) => Place; PlaceAutocompleteElement: new (options: {includedRegionCodes: string[]}) => PlaceAutocomplete};
 type GoogleLocation = {address: string; id?: string};
 type GoogleWaypoint = string | Place | Point;
 type RoadMetrics = {distanceMeters?: number; durationMillis?: number};
@@ -267,11 +268,85 @@ function MapPicker({mapsKey, value, placeId, label, onChoose, onClose}: {
   </section>;
 }
 
-export function GoogleAddressField({label, value, placeId, onChange, onCommit, placeholder, className}: {
-  label: string; value: string; placeId?: string; onChange: (value: string, placeId?: string) => void; onCommit?: (value: string) => void; placeholder?: string; className?: string;
+function InlinePlaceSearch({mapsKey, label, value, placeholder, onChange, onUnavailable}: {
+  mapsKey: string; label: string; value: string; placeholder?: string;
+  onChange: (value: string, placeId?: string) => void; onUnavailable: () => void;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const element = useRef<PlaceAutocomplete>(null);
+  const [status, setStatus] = useState('Laddar adressförslag…');
+  const currentValue = useEffectEvent(() => value);
+  const change = useEffectEvent(onChange);
+  const unavailable = useEffectEvent(onUnavailable);
+
+  useEffect(() => {
+    const container = host.current;
+    if (!container) return;
+    let active = true;
+    let selection = 0;
+    async function initialize() {
+      const {PlaceAutocompleteElement} = await loadPlaces(mapsKey);
+      if (!active || !container) return;
+      const search = new PlaceAutocompleteElement({includedRegionCodes:['se']});
+      search.value = currentValue();
+      search.placeholder = placeholder ?? 'Sök adress eller plats';
+      search.maxlength = 240;
+      search.setAttribute('aria-label',label);
+      search.addEventListener('input', () => {
+        selection += 1;
+        setStatus('');
+        change(search.value);
+      });
+      search.addEventListener('gmp-error', () => {
+        if (active) unavailable();
+      });
+      search.addEventListener('gmp-select', async event => {
+        const request = ++selection;
+        setStatus('');
+        try {
+          const place = (event as SelectEvent).placePrediction.toPlace();
+          await place.fetchFields({fields:['id','formattedAddress']});
+          if (!active || request !== selection) return;
+          if (!place.id || !place.formattedAddress) {
+            setStatus('Välj en adress i listan eller använd kartnålen.');
+            return;
+          }
+          search.value = place.formattedAddress;
+          change(place.formattedAddress,place.id);
+        } catch {
+          if (active && request === selection) setStatus('Förslaget kunde inte hämtas. Välj en adress igen eller använd kartnålen.');
+        }
+      });
+      element.current = search;
+      container.replaceChildren(search);
+      setStatus('');
+    }
+    void initialize().catch(() => {if (active) unavailable();});
+    return () => {
+      active = false;
+      element.current = null;
+      container.replaceChildren();
+    };
+  },[label,mapsKey,placeholder]);
+
+  useEffect(() => {
+    const search = element.current;
+    if (search && search.value !== value) search.value = value;
+  },[value]);
+
+  return <div>
+    <div>{label}</div>
+    <div ref={host}/>
+    {status && <small role="status">{status}</small>}
+  </div>;
+}
+
+export function GoogleAddressField({label, value, placeId, onChange, onCommit, placeholder, className, autocomplete}: {
+  label: string; value: string; placeId?: string; onChange: (value: string, placeId?: string) => void; onCommit?: (value: string) => void; placeholder?: string; className?: string; autocomplete?: boolean;
 }) {
   const mapsKey = useGoogleMapsKey();
   const [open, setOpen] = useState(false);
+  const [searchUnavailable, setSearchUnavailable] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const fallbackUrl = `https://www.google.com/maps/search/?${new URLSearchParams({api: '1', query: value || 'Sverige'})}`;
   function close() {
@@ -279,6 +354,8 @@ export function GoogleAddressField({label, value, placeId, onChange, onCommit, p
     trigger.current?.focus();
   }
   return <div className={className}>
+    {autocomplete && mapsKey && !searchUnavailable ? <InlinePlaceSearch mapsKey={mapsKey} label={label} value={value} placeholder={placeholder}
+      onChange={(address,id) => {setOpen(false);onChange(address,id);}} onUnavailable={() => setSearchUnavailable(true)}/> :
     <label>{label}<input value={value} placeholder={placeholder} maxLength={240} onBlur={event => onCommit?.(event.currentTarget.value)}
       onKeyDown={event => {
         if (event.key === 'Enter' && onCommit) {
@@ -288,7 +365,8 @@ export function GoogleAddressField({label, value, placeId, onChange, onCommit, p
       }} onChange={event => {
       setOpen(false);
       onChange(event.target.value);
-    }}/></label>
+    }}/></label>}
+    {searchUnavailable && <small role="status">Adressförslagen är tillfälligt otillgängliga. Skriv in adressen eller välj på kartan.</small>}
     {mapsKey ? <button type="button" className="secondary" aria-expanded={open} ref={trigger}
       onClick={() => setOpen(!open)}><MapPin size={14}/> Välj på kartan</button>
       : <a className="secondary" href={fallbackUrl} target="_blank" rel="noreferrer"><MapPin size={14}/> Öppna Google Maps</a>}
