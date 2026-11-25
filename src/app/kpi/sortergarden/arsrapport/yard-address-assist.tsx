@@ -10,8 +10,13 @@ import type {Candidate} from '@/lib/hub/sortergard-report';
 const nearby = {south:55.83,west:13.73,north:56.56,east:16.08};
 type Match = {address:string; note:string; hint:YardAddressQuery; score:number};
 
-async function findAddresses(key:string,hint:YardAddressQuery):Promise<Match[]> {
-  const results=await geocodeSwedishAddress(key,hint.query,nearby);
+export function searchYardAddress(key:string,query:string) {
+  return geocodeSwedishAddress(key,query,nearby);
+}
+type AddressSearch = (query:string)=>ReturnType<typeof searchYardAddress>;
+
+async function findAddresses(search:AddressSearch,hint:YardAddressQuery):Promise<Match[]> {
+  const results=await search(hint.query);
   const matches:Match[]=[];
   for(const result of results) {
     const component=(type:string)=>result.address_components.find(item=>item.types.includes(type))?.long_name;
@@ -45,9 +50,24 @@ export async function assessYardAddress(year:number,event:string,kind:string,map
   const result=await loadYardAddressClues(year,event);
   if(result.error||!result.clues) throw new Error(result.error??'Adressunderlaget kunde inte hämtas.');
   const clues=result.clues;
+  const checks=await inspectYardAddresses(clues,kind,mapsKey ? query=>searchYardAddress(mapsKey,query) : undefined);
+  const {hints,matches,preferred,googleFailed}=checks;
+  const applied=preferred&&(kind==='Inleverans'||kind==='Utleverans')
+    ? await saveLikelyYardAddress(year,event,preferred):undefined;
+  if(applied?.error) throw new Error(applied.error);
+  const message=applied?.saved? `Adressen används i årsrapporten som sannolik (${preferred?.score} av 100).`
+    : !hints.length?'Ingen gata eller arbetsplatsadress kunde tolkas från underlaget.'
+    : !mapsKey?'Google Maps är inte tillgängligt i den här vyn.'
+    : googleFailed?(matches.length?'En del Google-sökningar kunde inte slutföras.':'Google kunde inte slutföra adressökningen.')
+    : !matches.length?'Google hittade ingen matchande plats för sökunderlaget.'
+    : !preferred?'Flera möjliga adresser eller för svagt underlag. Granska träffarna nedan.':'';
+  return {clues,hints,matches,message,saved:applied?.saved&&preferred};
+}
+
+export async function inspectYardAddresses(clues:YardAddressClue[],kind:string,search?:AddressSearch) {
   const hints=yardAddressQueries(clues).filter(hint=>
     !(kind==='Inleverans'&&hint.side==='destination')&&!(kind==='Utleverans'&&hint.side==='origin'));
-  const responses=mapsKey?await Promise.allSettled(hints.map(hint=>findAddresses(mapsKey,hint))):[];
+  const responses=search ? await Promise.allSettled(hints.map(hint=>findAddresses(search,hint))) : [];
   const unique=new Map<string,Match>();
   for(const response of responses) if(response.status==='fulfilled') {
     for(const match of response.value) {
@@ -69,17 +89,8 @@ export async function assessYardAddress(year:number,event:string,kind:string,map
   const ambiguous=top&&top.source!=='AAK'&&matches
     .filter(match=>match.score>=top.score-8&&yardAddressKey(match.hint.query)===yardAddressKey(top.address)).length>1;
   const preferred=top&&top.score>50&&!ambiguous&&(!rival||top.score-rival.score>=9||(top.source==='AAK'&&rival.score<78))?top:undefined;
-  const applied=preferred&&(kind==='Inleverans'||kind==='Utleverans')
-    ? await saveLikelyYardAddress(year,event,preferred):undefined;
-  if(applied?.error) throw new Error(applied.error);
-  const googleFailed=responses.some(response=>response.status==='rejected');
-  const message=applied?.saved? `Adressen används i årsrapporten som sannolik (${preferred?.score} av 100).`
-    : !hints.length?'Ingen gata eller arbetsplatsadress kunde tolkas från underlaget.'
-    : !mapsKey?'Google Maps är inte tillgängligt i den här vyn.'
-    : googleFailed?(matches.length?'En del Google-sökningar kunde inte slutföras.':'Google kunde inte slutföra adressökningen.')
-    : !matches.length?'Google hittade ingen matchande plats för sökunderlaget.'
-    : !preferred?'Flera möjliga adresser eller för svagt underlag. Granska träffarna nedan.':'';
-  return {clues,hints,matches,message,saved:applied?.saved&&preferred};
+  return {hints,matches,preferred,googleFailed:responses.some(response=>response.status==='rejected')};
+
 }
 
 export default function YardAddressAssist({year,event,kind,apply,onSaved}:{

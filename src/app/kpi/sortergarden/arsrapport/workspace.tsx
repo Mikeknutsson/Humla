@@ -5,9 +5,9 @@ import {GoogleAddressField} from '@/app/_components/google-address-field';
 import {useMemo,useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {reportAddress,statusLabels,yardMaterials,yardNumber,yardTotals,type Weighing,type ReportVersion} from '@/lib/hub/sortergard-report';
-import {reviewYard,saveYardFacility} from './actions';
+import {loadYardAddressBatch,reviewYard,saveYardAddressBatch,saveYardFacility} from './actions';
 import styles from './workspace.module.css';
-import YardAddressAssist,{assessYardAddress} from './yard-address-assist';
+import YardAddressAssist,{assessYardAddress,inspectYardAddresses,searchYardAddress} from './yard-address-assist';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 
 const pageSize=35;
@@ -83,6 +83,62 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
     } finally {setBusy(false);}
   }
 
+  async function assessReport() {
+    if (!mapsKey) return;
+    const eligible=rows.filter(row=>row.status!=='verified');
+    setBusy(true);setFeedback(`Kontrollerar adresser för ${eligible.length} vägningar …`);
+    const responses=new Map<string,ReturnType<typeof searchYardAddress>>();
+    let tail=Promise.resolve();
+    let requests=0,successfulRequests=0,processed=0,saved=0,googleIssues=0;
+    function search(query:string) {
+      const existing=responses.get(query.toLocaleLowerCase('sv-SE'));
+      if (existing) return existing;
+      const result=tail.then(async()=>{
+        requests++;
+        let timeout: ReturnType<typeof setTimeout>|undefined;
+        try {
+          const available=await Promise.race([
+            searchYardAddress(mapsKey!,query),
+            new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Google tog för lång tid.')),10000);}),
+          ]);
+          successfulRequests++;
+          return available;
+        } finally {clearTimeout(timeout);}
+      });
+      tail=result.then(()=>undefined,()=>undefined);
+      responses.set(query.toLocaleLowerCase('sv-SE'),result);
+      return result;
+    }
+    try {
+      for(let start=0;start<eligible.length;start+=150) {
+        const batch=eligible.slice(start,start+150);
+        const result=await loadYardAddressBatch(year,batch.map(row=>row.id));
+        if(result.error||!result.clues) throw new Error(result.error??'Adressunderlaget kunde inte hämtas.');
+        const clues=result.clues;
+        const entries=[];
+        for (const row of batch) {
+          const check=await inspectYardAddresses(clues[row.id]??[],row.kind,search);
+          if (check.googleFailed) googleIssues++;
+          if (check.preferred && (row.kind==='Inleverans'||row.kind==='Utleverans')) {
+            entries.push({id:row.id,candidate:check.preferred});
+          }
+          if(requests>=4&&!successfulRequests) break;
+        }
+        if(entries.length) {
+          const savedResult=await saveYardAddressBatch(year,entries);
+          if(savedResult.error) throw new Error(savedResult.error);
+          saved+=savedResult.saved??0;
+        }
+        if(requests>=4&&!successfulRequests) throw new Error('Google Maps svarade inte på de första sökningarna.');
+        processed+=batch.length;
+        setFeedback(`${processed} av ${eligible.length} vägningar kontrollerade · ${saved} adresser sparade …`);
+      }
+      setFeedback(`Google-bedömningen är klar. ${processed} vägningar kontrollerade · ${saved} adresser sparade · ${requests} unika Google-sökningar.${googleIssues?` Google kunde inte slutföra alla sökningar för ${googleIssues} vägningar.`:''}`);
+    } catch(error) {
+      setFeedback(`${processed} vägningar kontrollerade · ${saved} adresser sparade. ${error instanceof Error?error.message:'Körningen avbröts.'}`);
+    } finally {setBusy(false);router.refresh();}
+  }
+
   function approve(entries:{id:string;candidate:number;expectedAddress:string}[]) {
     void run('review',{mode:'approve',items:entries},'Adresserna är verifierade och låsta.');
   }
@@ -108,6 +164,7 @@ export default function YardWorkspace({rows,year,latest,version,archive}:{
       <div className="metric-card"><span>Färdigbehandlade</span><strong>{new Intl.NumberFormat('sv-SE',{style:'percent',maximumFractionDigits:1}).format(ready)}</strong></div></div>
       {!version&&<div className={styles.actions}>
         <button disabled={busy||!rows.length} onClick={()=>void run('match')}>Matcha adresser</button>
+        <button disabled={busy||!mapsKey||rows.length===totals.verified} onClick={()=>void assessReport()}>Bedöm hela årsrapporten med Google</button>
         <button disabled={busy||!totals.pending} onClick={()=>void run('match',{pending:true})}>Matcha endast obehandlade</button>
         <button onClick={()=>change('status','unverified')}>Granska avvikelser</button>
         <button disabled={busy||!rows.length} onClick={()=>void run('finalize',{},'En låst version sparades i rapportarkivet.')}>
