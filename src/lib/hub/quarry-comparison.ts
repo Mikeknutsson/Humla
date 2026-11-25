@@ -38,7 +38,7 @@ export function compareQuarries(bank: MaterialPriceBank, date: string, materials
       const freight = quotedFreight(result.selected);
       const truck = result.options.find(option => option.id === 'truck')?.prices[draft.profile];
       const truckSupplement = truck ? roundOfferMoney(quotedFreight(truck) - freight) : null;
-      return [{site, rate, round, time, tonnes, freight, startFreight:result.selected.startFreight, truckSupplement, preferred:sortergardenIds.has(site.id), total:rate.price + freight}];
+      return [{site, rate, round, time, tonnes, trips:result.selected.trips, freight, startFreight:result.selected.startFreight, truckSupplement, preferred:sortergardenIds.has(site.id), total:rate.price + freight}];
     }).sort((a,b) => Number(b.preferred)-Number(a.preferred) || a.total-b.total || a.site.name.localeCompare(b.site.name,'sv'));
     const availableSites = new Set<string>();
     const bestPerSite = options.filter(option => {
@@ -56,3 +56,5 @@ export function compareQuarries(bank: MaterialPriceBank, date: string, materials
 }
 
 export type QuarryComparison = ReturnType<typeof compareQuarries>;
+
+export type QuarryQuoteOption = QuarryComparison[number]['options'][number];

@@ -16,6 +16,7 @@ import MaterialMultiSelect from './material-multi-select';
 import {advancedOfferLines, offerMoney, truckSupplementArticles, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
 import {downloadAdvancedOffer, downloadQuarryOffer, recalculateTonPrices} from './actions';
 import OfferDownloads from './offer-downloads';
+import CombinedTrip from './combined-trip';
 import {CustomerField, OfferTermsField} from './offer-fields';
 import styles from './workspace.module.css';
 
@@ -372,6 +373,14 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
         workifyPrices={workifyPrices} draft={draft} date={draft.priceDate || today} revision={revision} refresh={refresh}
         onQuoteChange={(kind,state) => setJobStates(previous => ({...previous,[index+'-'+kind]:state}))}
         onApply={useCheapest} onUseReference={() => change({profile:'reference'})}/>)}
+      {groups.map((_,index) => {
+        const delivery = jobStates[index+'-purchase']?.comparison;
+        const tipping = jobStates[index+'-tip']?.comparison;
+        const vehicle = draft.vehicles.find(vehicle => vehicle.id === 'trailer');
+        if (!delivery?.length || !tipping?.length || !vehicle) return null;
+        return <CombinedTrip key={JSON.stringify([index,delivery,tipping])} delivery={delivery} tipping={tipping}
+          hourly={Number(vehicle.hourly.replace(',', '.'))}/>;
+      })}
       {included.length > 0 && <section className="panel">
           <h2>{revision ? 'Offertkomplettering' : 'Gemensam offert'}</h2>
           <p>{included.length} uppdrag med valda material.</p>

@@ -296,17 +296,18 @@ export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices
     {mode:'advanced',draft:{...draft,priceDate}},revision.source);
 }
 
-export async function deleteArchivedOffer(id: string) {
+export async function changeArchivedOffer(id: string, action: 'trash' | 'restore' | 'created' | 'sent' | 'accepted') {
   if (typeof id !== 'string' || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) {
     return {error:'Offerten kunde inte hittas.'};
   }
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.'};
-  const {data,error} = await access.db.from('hub_ton_price_offers').delete()
-    .eq('tenant_id',access.tenantId).eq('id',id).select('id').maybeSingle();
-  if (error?.code === '23503') return {error:'Offerten har sparade kompletteringar. Radera dem först, med den senaste först.'};
-  if (error) return {error:'Offerten kunde inte raderas. Försök igen.'};
-  if (!data) return {error:'Offerten finns inte kvar eller så saknas behörighet.'};
+  if (!['trash','restore','created','sent','accepted'].includes(action)) return {error:'Ogiltig offertåtgärd.'};
+  const {data,error} = await access.db.rpc('hub_ton_price_archive_change',{
+    p_tenant:access.tenantId,p_id:id,p_action:action,
+  });
+  if (error?.code === '23505') return {error:'En identisk offert finns redan i arkivet. Offerten ligger kvar i papperskorgen.'};
+  if (error || data !== true) return {error:'Offerten kunde inte uppdateras. Kontrollera behörighet och försök igen.'};
   revalidatePath(tonPricePath);
   return {ok:true};
 }
