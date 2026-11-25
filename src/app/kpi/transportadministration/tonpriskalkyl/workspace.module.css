@@ -45,6 +45,7 @@
 .materialPicker details[open] > summary svg { transform: rotate(180deg); }
 .materialOptions { display: grid; gap: 8px; padding: 10px; border: 1px solid #87909a65; border-radius: 6px; margin-top: 4px; }
 .materialOptionList { display: grid; max-height: 235px; overflow-y: auto; }
+.materialGroup { font-size: .8rem; font-weight: 700; padding: 9px 7px 3px; }
 .materialOptionList label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; cursor: pointer; padding: 7px; border-radius: 5px; }
 .materialOptionList label:has(input:checked) { background: #18855724; }
 
