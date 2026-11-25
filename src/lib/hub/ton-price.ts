@@ -19,10 +19,22 @@ export type Material = {
 };
 export type TonPriceDraft = {
   customer: string; project: string; validity: string; terms: string;
+  offerTermsInitialized?: true;
   priceDate?: string; specialCassette?: boolean; showBk4?: boolean;
   profile: 'reference' | 'bk1' | 'bk4';
   rounds: Round[]; vehicles: Vehicle[]; materials: Material[];
 };
+
+export const offerTermsMaxLength = 4000;
+export const defaultOfferTerms = [
+  'Förutsättningar:',
+  'I priset ingår 10 min lastning med bil + släp.',
+  'Tippning i hög. Vid spridning, tippning på olika ställen eller lång backning tillkommer mer kostnad.',
+  'Priserna förutsätter normal arbetstid vardagar. I händelse av kostnadsökningar utanför vår kontroll förbehåller vi oss rätten till motsvarande prisjusteringar.',
+  'Lagstadgad mervärdesskatt tillkommer.',
+  'Övriga villkor enligt Alltrans 2007. Faktura förfaller till betalning på i densamma angiven förfallodag, såvida annat ej överenskommits.',
+  'Efter förfallodagen debiteras dröjsmålsränta med diskontot + 8 %. Lagstadgad mervärdesskatt tillkommer.',
+].join('\n\n');
 
 function number(value: string, max: number, min = 0) {
   if (typeof value !== 'string' || !/^-?\d{1,9}(?:[,.]\d{1,6})?$/.test(value.trim())) return null;
@@ -149,7 +161,7 @@ export const newMaterial = (id: string, roundId: string, vehicleId: string): Mat
   listPrice: '', discount: '10', purchase: '', markup: '10', sale: '', tonnes: '',
 });
 export const initialTonPriceDraft: TonPriceDraft = {
-  customer: '', project: '', validity: '', terms: '',
+  customer: '', project: '', validity: '', terms: defaultOfferTerms, offerTermsInitialized: true,
   profile: 'reference',
   rounds: [newRound('round')],
   materials: [newMaterial('material', 'round', 'trailer')],
