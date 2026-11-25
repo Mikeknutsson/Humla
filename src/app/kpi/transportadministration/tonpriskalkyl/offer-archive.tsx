@@ -1,9 +1,10 @@
 import Link from 'next/link';
+import DeleteOfferButton from './delete-offer-button';
 import {offerPdfUrl} from './offer-pdf-url';
 import type {readOffers} from '@/lib/hub/ton-price-offer-archive';
 import styles from './workspace.module.css';
 
-export default function OfferArchive({offers,page}: {offers: Awaited<ReturnType<typeof readOffers>>; page: number}) {
+export default function OfferArchive({offers,page,openedId}: {offers: Awaited<ReturnType<typeof readOffers>>; page: number; openedId?: string}) {
   return <section className="panel" id="offertarkiv">
     <h2>Offertarkiv</h2>
     {!offers ? <p role="status">Offertarkivet kunde inte hämtas. Ladda om sidan och försök igen.</p> :
@@ -19,7 +20,10 @@ export default function OfferArchive({offers,page}: {offers: Awaited<ReturnType<
             <a href={offerPdfUrl(offer.id,'leveransplan')} download>Intern leveransplan</a>
             <Link href={`?offertSida=${page}&komplettera=${offer.id}#komplettering`}>Lägg till material</Link>
             {offer.source_offer_id && <a href={offerPdfUrl(offer.source_offer_id,'offert')} download>Föregående offert</a>}
-          </div></td>
+          </div>
+          <DeleteOfferButton id={offer.id} opened={offer.id === openedId} page={page}
+            label={['offerten',offer.customer || offer.project || offer.destinations[0],offer.offer_date].filter(Boolean).join(' · ')}/>
+          </td>
         </tr>)}</tbody>
       </table></div> : <p>{page ? 'Inga offerter på den här sidan.' : 'Färdiga offerter och leveransplaner visas här när du skapar dem.'}</p>}
     {offers && (page > 0 || offers.hasNext) && <nav aria-label="Sidor i offertarkivet" className={styles.actions}>

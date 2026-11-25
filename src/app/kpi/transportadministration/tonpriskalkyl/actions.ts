@@ -295,3 +295,18 @@ export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices
   return offerDocuments(access,priceDate,draft,[...groups.values()],plan,
     {mode:'advanced',draft:{...draft,priceDate}},revision.source);
 }
+
+export async function deleteArchivedOffer(id: string) {
+  if (typeof id !== 'string' || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) {
+    return {error:'Offerten kunde inte hittas.'};
+  }
+  const access = await tonPriceAccess();
+  if (!access) return {error:'Behörighet saknas.'};
+  const {data,error} = await access.db.from('hub_ton_price_offers').delete()
+    .eq('tenant_id',access.tenantId).eq('id',id).select('id').maybeSingle();
+  if (error?.code === '23503') return {error:'Offerten har sparade kompletteringar. Radera dem först, med den senaste först.'};
+  if (error) return {error:'Offerten kunde inte raderas. Försök igen.'};
+  if (!data) return {error:'Offerten finns inte kvar eller så saknas behörighet.'};
+  revalidatePath(tonPricePath);
+  return {ok:true};
+}

@@ -29,7 +29,7 @@ export default async function Page({searchParams}: {searchParams: Promise<{offer
         bank={bank} workifyPrices={revision?.calculation_snapshot?.mode === 'quick'
           ? revision.calculation_snapshot.workifyPrices : workifyPrices ?? []}
         today={stockholmDate()} draftKey={`humla:tonpris:v1:${access.tenantId}:${access.userId}${revision ? ':'+revision.id : ''}`}>
-      <OfferArchive offers={offers} page={archivePage}/>
+      <OfferArchive offers={offers} page={archivePage} openedId={revisionId}/>
     </TonPriceWorkspace></GoogleMapsProvider>
       : <div className="content"><section className="panel"><p>Behörighet saknas för tonpriskalkylen.</p></section></div>}
   </KpiDetailShell>;
