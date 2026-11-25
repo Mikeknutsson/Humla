@@ -7,7 +7,7 @@ import {defaultOfferTerms, initialTonPriceDraft, newMaterial, newRound, type cal
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
-import {effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {comparisonMaterial, effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
 import MaterialMultiSelect from './material-multi-select';
@@ -46,6 +46,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     <Field key={key} label={label} value={round[key]} onChange={value => change({[key]: value})} numeric/>;
   const mapsKey = useGoogleMapsKey();
   const returnTo = round.returnTo.trim() || round.pickup.trim();
+  const deliveryTarget = round.deliveryPoint ? `${round.deliveryPoint.lat},${round.deliveryPoint.lng}` : round.delivery;
   const [fetching, setFetching] = useState(false);
   const [routeStatus, setRouteStatus] = useState('');
   async function estimateRoute() {
@@ -53,7 +54,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     setFetching(true);
     setRouteStatus('');
     const pickup = {address:round.pickup,id:round.pickupPlaceId};
-    const delivery = {address:round.delivery,id:round.deliveryPlaceId};
+    const delivery = {address:round.delivery,id:round.deliveryPlaceId,point:round.deliveryPoint};
     try {
       const [outbound, inbound] = await Promise.all([googleRoadEstimate(mapsKey,pickup,delivery),
         round.mirror ? null : googleRoadEstimate(mapsKey,delivery,{address:returnTo,id:round.returnTo ? round.returnPlaceId : round.pickupPlaceId})]);
@@ -68,7 +69,7 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
     const site = sites.find(item => item.id === id);
     const address = site?.address || '';
     if (role === 'pickup') change({pickupSiteId:id,pickup:address,pickupPlaceId:site?.mapPlaceId,...resetDistance});
-    else change({deliverySiteId:id,delivery:address,deliveryPlaceId:site?.mapPlaceId,...resetDistance});
+    else change({deliverySiteId:id,delivery:address,deliveryPlaceId:site?.mapPlaceId,deliveryPoint:undefined,...resetDistance});
   };
   return <fieldset className={styles.card} disabled={fetching}>
     <legend>Runda {index + 1}</legend>
@@ -87,27 +88,29 @@ function RoundEditor({round, index, sites, rates, checked, toggleRate, change, r
         <GoogleAddressField label="Hämtningsadress" value={round.pickup} placeId={round.pickupPlaceId} className={styles.field}
           onChange={(pickup, pickupPlaceId) => change({pickup,pickupPlaceId,...resetDistance})}/>}
       {round.delivery && round.deliverySiteId ? <p>{round.delivery}</p> :
-        <GoogleAddressField label="Leveransadress" value={round.delivery} placeId={round.deliveryPlaceId} className={styles.field}
-          onChange={(delivery, deliveryPlaceId) => change({delivery,deliveryPlaceId,...resetDistance})}/>}
+        <GoogleAddressField label="Leveransadress" value={round.delivery} placeId={round.deliveryPlaceId} point={round.deliveryPoint} className={styles.field}
+          onChange={(delivery, deliveryPlaceId, deliveryPoint) => change({delivery,deliveryPlaceId,deliveryPoint,...resetDistance})}/>}
       <Field label="Körsträcka dit (mil)" value={round.outbound.miles} numeric
         onChange={miles => change({outbound:{...round.outbound,miles}})}/>
     </div>
     <div className={styles.actions}>
       {mapsKey && round.pickup.trim() && round.delivery.trim() && <button type="button" className="secondary"
         onClick={() => void estimateRoute()}>{fetching ? 'Hämtar rutt…' : 'Hämta mil och körtid från Google Maps'}</button>}
-      {round.pickup.trim() && round.delivery.trim() && <a href={mapLink(round.pickup, round.delivery, round.pickupPlaceId, round.deliveryPlaceId)}
+      {round.pickup.trim() && round.delivery.trim() && <a href={mapLink(round.pickup, deliveryTarget, round.pickupPlaceId, round.deliveryPlaceId)}
         target="_blank" rel="noreferrer"><ExternalLink size={14}/> Visa rutt i Google Maps</a>}
     </div>
     {routeStatus && <small role="status">{routeStatus}</small>}
     {(round.pickupSiteId || round.deliverySiteId) && (rates.length === 0 ? <p>Inga tonpriser för vald plats och datum.</p> :
       <MaterialMultiSelect label="Material och tippavgifter" selected={checked} options={rates.map(rate => ({
-        id:rate.id, label:rate.material, note:`${rate.kind === 'tip' ? 'Tippavgift · ' : ''}${formatPrice(rate.price)} kr/ton`,
+        id:rate.id, label:comparisonMaterial(rate), search:rate.material,
+        note:[rate.kind === 'tip' ? 'Tippavgift' : '', comparisonMaterial(rate) === rate.material ? '' : rate.material,
+          `${formatPrice(rate.price)} kr/ton`].filter(Boolean).join(' · '),
       }))} onToggle={id => {const rate = rates.find(item => item.id === id); if (rate) toggleRate(rate);}}/>)}
     <details>
       <summary>Ställ in körtid, retur och tid på plats</summary>
       <div className={styles.actions}>
         <label><input type="checkbox" checked={round.mirror} onChange={event => change({mirror:event.target.checked})}/> Samma sträcka och körtid på returen</label>
-        {!round.mirror && round.delivery.trim() && returnTo && <a href={mapLink(round.delivery, returnTo, round.deliveryPlaceId, round.returnPlaceId || round.pickupPlaceId)}
+        {!round.mirror && round.delivery.trim() && returnTo && <a href={mapLink(deliveryTarget, returnTo, round.deliveryPlaceId, round.returnPlaceId || round.pickupPlaceId)}
           target="_blank" rel="noreferrer"><ExternalLink size={14}/> Karta retur</a>}
       </div>
       <div className={styles.grid}>
