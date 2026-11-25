@@ -71,3 +71,7 @@
 @media (max-width: 760px) { .projectMaterials { grid-template-columns: minmax(0, 1fr); } }
 
 .siteNote { display: block; font-size: .75rem; }
+
+.deleteOffer { margin-top: 8px; }
+.deleteOffer p { margin: 6px 0; }
+.deleteOffer [role="alert"] { color: #a62922; }
