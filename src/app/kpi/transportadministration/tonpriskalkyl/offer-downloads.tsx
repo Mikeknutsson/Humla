@@ -5,8 +5,9 @@ import {Download} from 'lucide-react';
 import {offerPdfUrl} from './offer-pdf-url';
 import styles from './workspace.module.css';
 
-export default function OfferDownloads({disabled, create, onRetry}: {
+export default function OfferDownloads({disabled, create, onRetry, supplement = false}: {
   disabled: boolean;
+  supplement?: boolean;
   create: () => Promise<{id?: string; error?: string}>;
   onRetry?: () => void;
 }) {
@@ -43,7 +44,7 @@ export default function OfferDownloads({disabled, create, onRetry}: {
         <a href={offerPdfUrl(id,'offert')} download><Download size={16}/> Ladda ner offert som PDF</a>
         <a href={offerPdfUrl(id,'leveransplan')} download><Download size={16}/> Ladda ner intern leveransplan</a>
       </> : <button type="button" className={styles.primary} disabled={disabled || busy} onClick={() => void saveOffer()}>
-        <Download size={16}/>{busy ? 'Sparar offert och leveransplan…' : 'Skapa och spara offert'}
+        <Download size={16}/>{busy ? 'Sparar offert och leveransplan…' : supplement ? 'Skapa och spara komplettering' : 'Skapa och spara offert'}
       </button>}
     </div>
     {id && <p role="status">Offerten och leveransplanen är sparade i <a href="#offertarkiv">offertarkivet</a>.</p>}

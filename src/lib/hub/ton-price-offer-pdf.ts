@@ -12,7 +12,7 @@ const clean = (text: string) => text.replace(/[\u2010-\u2015\u2212]/g,'-').repla
 const left = 44;
 const right = 551;
 
-export async function tonPriceOfferPdf(delivery: string, date: string, details: OfferDetails, lines: OfferLine[], plan?: DeliveryPlanLine[], priceDate?: string) {
+export async function tonPriceOfferPdf(delivery: string, date: string, details: OfferDetails, lines: OfferLine[], plan?: DeliveryPlanLine[], priceDate?: string, source?: {date: string; id: string}) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -54,7 +54,7 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
     page = pdf.addPage([595,842]);
     const logoSize = logo.scaleToFit(158,42);
     page.drawImage(logo,{x:left,y:755,width:logoSize.width,height:logoSize.height});
-    const title = plan ? 'Leveransplan' : 'Offert';
+    const title = source ? (plan ? 'Leveransplan - tillägg' : 'Offertkomplettering') : plan ? 'Leveransplan' : 'Offert';
     text(title,right-bold.widthOfTextAtSize(title,22),778,22,true,green);
     number(date,right,758,false,muted);
     page.drawRectangle({x:left,y:736,width:right-left,height:3,color:rgb(1,.82,.05)});
@@ -79,6 +79,7 @@ export async function tonPriceOfferPdf(delivery: string, date: string, details: 
   }
 
   newPage();
+  if (source) field(plan ? 'Till leveransplan' : 'Till offert', source.date + ' / ' + source.id.slice(0,8));
   if (plan) {
     field('Dokument', 'Internt underlag för transportledning');
     field('Prisdatum', priceDate ?? date);

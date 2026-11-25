@@ -1,10 +1,11 @@
 'use server';
 
 import {revalidatePath} from 'next/cache';
-import {archiveOffer, findArchivedOffer, offerFingerprint} from '@/lib/hub/ton-price-offer-archive';
+import {archiveOffer, findArchivedOffer, offerFingerprint, readOfferRevision} from '@/lib/hub/ton-price-offer-archive';
 import {tonPricePath} from '@/app/_components/kpi-transport-administration-nav';
 
 import {advancedOfferLines, priceQuarryOffer, type QuarryPricing, type OfferDetails, type OfferLine} from '@/lib/hub/ton-price-offer';
+import {quotedMaterial, type OfferRevision, type OfferSnapshot, type QuarryOfferSettings} from '@/lib/hub/ton-price-offer-revision';
 import {readWorkifyMaterialPrices} from '@/lib/hub/workify-material-prices';
 import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-delivery-plan';
 import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
@@ -12,7 +13,7 @@ import {tonPriceAccess} from './access';
 import {readPriceBank} from '@/lib/hub/material-price-bank-server';
 import {effectiveSiteRates, stockholmDate, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
 import {compareQuarries} from '@/lib/hub/quarry-comparison';
-import {calculateTonPrices, offerTermsMaxLength, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
+import {calculateTonPrices, offerTermsMaxLength, type ReturnLoad, type Round, type TonPriceDraft} from '@/lib/hub/ton-price';
 
 type Access = NonNullable<Awaited<ReturnType<typeof tonPriceAccess>>>;
 
@@ -66,22 +67,29 @@ export async function recalculateTonPrices(draft: TonPriceDraft) {
   return {result,error};
 }
 
-async function offerDocuments(access: Access, delivery: string, priceDate: string, details: OfferDetails, lines: OfferLine[], plan: DeliveryPlanLine[]) {
+async function offerDocuments(access: Access, delivery: string, priceDate: string, details: OfferDetails, lines: OfferLine[], plan: DeliveryPlanLine[], snapshot: OfferSnapshot, source: OfferRevision | null) {
   const date = stockholmDate();
   const {customer,project,validity,terms} = details;
-  const fingerprint = offerFingerprint([date,delivery,priceDate,customer,project,validity,terms,lines,plan]);
+  if (source && lines.some(line => quotedMaterial(source.materials,line.material))) {
+    return {error:'En vald fraktion finns redan i offerten. Välj endast nya material för kompletteringen.'};
+  }
+  const allMaterials = [...new Set([...(source?.materials ?? []),...lines.map(line => line.material)])];
+  if (allMaterials.length > 100) return {error:'En offert kan innehålla högst 100 olika material inklusive kompletteringar.'};
+  const reference = source ? {date:source.offer_date,id:source.id} : undefined;
+  const fingerprint = offerFingerprint([date,delivery,priceDate,customer,project,validity,terms,lines,plan,snapshot,reference]);
   try {
     let id = await findArchivedOffer(access,fingerprint);
     if (!id) {
       const [pdf, deliveryPlan] = await Promise.all([
-        tonPriceOfferPdf(delivery,date,details,lines),
-        tonPriceOfferPdf(delivery,date,details,[],plan,priceDate),
+        tonPriceOfferPdf(delivery,date,details,lines,undefined,undefined,reference),
+        tonPriceOfferPdf(delivery,date,details,[],plan,priceDate,reference),
       ]);
       id = await archiveOffer(access,{
         offer_date:date, customer, project,
         destinations:[...new Set(plan.map(row => row.delivery).filter(Boolean))],
-        materials:[...new Set(lines.map(line => line.material))],
-      },fingerprint,pdf,deliveryPlan);
+        materials:allMaterials,
+        source_offer_id:source?.id ?? null,
+      },fingerprint,pdf,deliveryPlan,snapshot);
     }
     revalidatePath(tonPricePath);
     return {id};
@@ -89,6 +97,17 @@ async function offerDocuments(access: Access, delivery: string, priceDate: strin
     console.error('Could not archive ton-price offer',error instanceof Error ? error.message : 'database error');
     return {error:'Offerten kunde inte sparas i arkivet. Försök igen.'};
   }
+}
+
+async function revisionSource(access: Access, id?: string) {
+  if (!id) return {source:null};
+  try {
+    const source = await readOfferRevision(access,id);
+    if (source) return {source};
+  } catch {
+    // Do not create an unlinked offer when the archive cannot be read.
+  }
+  return {source:null,error:'Offerten som ska kompletteras kunde inte hämtas. Öppna den igen från offertarkivet.'};
 }
 
 type QuarryMaterial = {name: string; tonnes: string};
@@ -118,6 +137,7 @@ function validOfferDetails(details: OfferDetails) {
 export async function downloadQuarryOffer(
   date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft,
   delivery: string, pricing: QuarryPricing, expectedPrices: number[], details: OfferDetails, kind: SiteRate['kind'] = 'purchase',
+  sourceId?: string, returnSettings?: {withoutReturn: string[]; returnLoad?: ReturnLoad},
 ) {
   if (!pricing || !['markup','workify'].includes(pricing.mode) || typeof pricing.markup !== 'string' ||
     !pricing.overrides || typeof pricing.overrides !== 'object' || Object.keys(pricing.overrides).length > 100 ||
@@ -131,15 +151,18 @@ export async function downloadQuarryOffer(
   }
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.'};
+  const {source,error} = await revisionSource(access,sourceId);
+  if (error) return {error};
+  const previous = source?.calculation_snapshot;
   const usesWorkify = kind === 'purchase' &&
     (pricing.mode === 'workify' || Object.values(pricing.overrides).some(value => value.source.startsWith('workify:')));
   const [result,workifyPrices] = await Promise.all([
     compareForAccess(access,date,materials,rounds,draft,kind),
-    usesWorkify ? readWorkifyMaterialPrices(access) : [],
+    previous?.mode === 'quick' ? previous.workifyPrices : readWorkifyMaterialPrices(access),
   ]);
   if (!result.comparison) return {error:result.error};
-  if (!workifyPrices) return {error:'Workifys standardpriser kunde inte hämtas.'};
-  const priced = priceQuarryOffer(result.comparison,pricing,workifyPrices);
+  if (usesWorkify && !workifyPrices) return {error:'Workifys standardpriser kunde inte hämtas.'};
+  const priced = priceQuarryOffer(result.comparison,pricing,workifyPrices ?? []);
   const lines = priced.flatMap(row => row.line ? [row.line] : []);
   if (!lines.length || lines.length !== materials.length || lines.some(line => !Number.isFinite(line.unitPrice) || (!line.isTip && line.unitPrice < 0))) {
     return {error:'Kontrollera att alla valda material har ett giltigt offertpris.'};
@@ -159,13 +182,39 @@ export async function downloadQuarryOffer(
       purchase:rate.price, materialPrice:priced[index].materialPrice!, pricingSource:priced[index].pricingSource, freight,
     };
   });
-  return offerDocuments(access,delivery,date,details,lines,plan);
+  const tip = kind === 'tip';
+  const first = result.comparison[0].options[0].round;
+  const routes: QuarryOfferSettings['routes'] = {};
+  const destination = {address:delivery,id:tip ? first.pickupPlaceId : first.deliveryPlaceId,
+    point:tip ? first.pickupPoint : first.deliveryPoint};
+  const sameProjectRoutes = previous?.mode === 'quick' && previous.quick.kind === kind &&
+    previous.quick.destination.address === destination.address && previous.quick.destination.id === destination.id &&
+    previous.quick.destination.point?.lat === destination.point?.lat && previous.quick.destination.point?.lng === destination.point?.lng;
+  if (sameProjectRoutes) Object.assign(routes,previous.quick.routes);
+  for (const round of rounds) {
+    const siteId = tip ? round.deliverySiteId : round.pickupSiteId;
+    if (!siteId || !round.outbound.miles.trim()) continue;
+    const returnLeg = round.mirror ? round.outbound : round.inbound;
+    routes[siteId] = tip ? {outbound:returnLeg,inbound:round.outbound} : {outbound:round.outbound,inbound:returnLeg};
+  }
+  const snapshot: OfferSnapshot = {
+    mode:'quick',workifyPrices:workifyPrices ?? [],
+    draft:{...draft,...details,priceDate:date,materials:[],rounds:[]},
+    quick:{
+      destination,
+      kind,pricing:{mode:pricing.mode,markup:pricing.markup,overrides:{}},routes,
+      withoutReturn:returnSettings?.withoutReturn ?? [],returnLoad:returnSettings?.returnLoad,
+    },
+  };
+  return offerDocuments(access,delivery,date,details,lines,plan,snapshot,source);
 }
 
-export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices: number[]) {
+export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices: number[], sourceId?: string) {
   if (!validOfferDetails(draft)) return {error:'Kontrollera offertuppgifterna.'};
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.'};
+  const revision = await revisionSource(access,sourceId);
+  if (revision.error) return {error:revision.error};
   const {result,sites,error} = await prepareTonPrices(access,draft,true);
   if (!result) return {error};
   const lines = advancedOfferLines(draft,result);
@@ -190,5 +239,7 @@ export async function downloadAdvancedOffer(draft: TonPriceDraft, expectedPrices
     };
   });
   const destinations = new Set(draft.materials.map(input => rounds.get(input.roundId)!.delivery.trim()));
-  return offerDocuments(access,destinations.size === 1 ? [...destinations][0] : '',draft.priceDate || stockholmDate(),draft,lines,plan);
+  const priceDate = draft.priceDate || stockholmDate();
+  return offerDocuments(access,destinations.size === 1 ? [...destinations][0] : '',priceDate,draft,lines,plan,
+    {mode:'advanced',draft:{...draft,priceDate}},revision.source);
 }

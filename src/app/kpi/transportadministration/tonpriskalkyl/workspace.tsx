@@ -8,6 +8,8 @@ import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-a
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
 import {comparisonMaterial, effectiveSiteRates, type MaterialPriceBank, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
+import {quotedMaterial, type OfferRevision} from '@/lib/hub/ton-price-offer-revision';
+import {offerPdfUrl} from './offer-pdf-url';
 import type {QuarryComparison} from '@/lib/hub/quarry-comparison';
 import QuarryComparisonWorkspace, {ReturnLoadFields} from './quarry-comparison';
 import MaterialMultiSelect from './material-multi-select';
@@ -170,10 +172,20 @@ function replace<T extends {id: string}>(items: T[], id: string, patch: Partial<
   return items.map(item => item.id === id ? {...item, ...patch} : item);
 }
 
-export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today, children}: {
-  draftKey: string; bank: MaterialPriceBank | null; workifyPrices: WorkifyOfferPrice[]; today: string; children: ReactNode;
+export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today, revision, children}: {
+  draftKey: string; bank: MaterialPriceBank | null; workifyPrices: WorkifyOfferPrice[]; today: string; revision?: OfferRevision; children: ReactNode;
 }) {
-  const [draft, setDraft] = useState<TonPriceDraft>(() => ({...initialTonPriceDraft, priceDate:today, materials:[]}));
+  const snapshot = revision?.calculation_snapshot;
+  const [reviewed,setReviewed] = useState(false);
+  const [draft, setDraft] = useState<TonPriceDraft>(() => {
+    if (snapshot) return {...snapshot.draft,materials:[],
+      rounds:snapshot.mode === 'advanced' ? snapshot.draft.rounds : initialTonPriceDraft.rounds};
+    return {...initialTonPriceDraft,priceDate:revision?.legacy?.date ?? revision?.offer_date ?? today,materials:[],
+      validity:revision?.legacy?.validity ?? '',terms:revision?.legacy?.terms ?? defaultOfferTerms,
+      customer:revision?.customer ?? '',project:revision?.project ?? ''};
+  });
+  const canSave = !revision || Boolean(snapshot) || reviewed;
+  const quoted = revision?.materials ?? [];
   const latestDraft = useRef(draft);
   const activeRates = effectiveSiteRates(bank?.rates ?? [], draft.priceDate || today).filter(rate => rate.unit === 'ton');
   const specialCassette = Boolean(draft.specialCassette || draft.materials.some(item => item.vehicleId === 'cassette'));
@@ -232,7 +244,8 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
       : [...draft.materials.filter(row => row.bankRateId || row.transportOnly || row.name || row.tonnes || row.purchase || row.listPrice || row.sale), {
         ...newMaterial(crypto.randomUUID(), round.id, 'trailer'),
         bankRateId:rate.id, bankSiteId:rate.siteId, bankKind:rate.kind, name:rate.material,
-        purchase:String(rate.price), markup:rate.kind === 'tip' ? '0' : '10',
+        purchase:String(rate.price),
+        markup:rate.kind === 'tip' ? '0' : snapshot?.draft.materials.find(row => row.roundId === round.id && row.bankKind !== 'tip')?.markup ?? '10',
       }]});
   }
 
@@ -264,11 +277,27 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
 
   const complete = result && result.materials.length > 0 && result.materials.every(row => !row.status);
   const offer = complete ? advancedOfferLines(draft,result) : [];
+  const duplicate = offer.some(line => quotedMaterial(quoted,line.material));
   return <div className={`content ${styles.workspace}`}>
     <div className={styles.actions}><a href="#offertarkiv">Öppna offertarkivet</a></div>
-    {bank && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} workifyPrices={workifyPrices} draft={draft}
-      date={draft.priceDate || today} onApply={useCheapest} onDetailsChange={change} onUseReference={() => change({profile:'reference'})}/>}
-    <details className={styles.advanced}>
+    {revision && <section className="panel" id="komplettering">
+      <h2>Komplettera offert</h2>
+      <p>{[revision.customer,revision.project,revision.offer_date].filter(Boolean).join(' · ')}</p>
+      <p>Redan offererat material · {quoted.join(', ')}</p>
+      <p>Kompletteringen sparas med en offert och en intern leveransplan för de nya materialen.</p>
+      <div className={styles.actions}>
+        <a href={offerPdfUrl(revision.id,'offert')} download>Öppna sparad offert</a>
+        <a href={offerPdfUrl(revision.id,'leveransplan')} download>Öppna sparad leveransplan</a>
+        <Link href="?offertSida=0#offertarkiv">Tillbaka till offertarkivet</Link>
+      </div>
+      {!snapshot && <>
+        <p>Humla förifyller det som går att läsa ur de äldre PDF:erna. Kontrollera uppgifterna mot originalen, särskilt transportinställningarna.</p>
+        <label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)}/> Jag har kontrollerat underlaget för kompletteringen.</label>
+      </>}
+    </section>}
+    {bank && snapshot?.mode !== 'advanced' && <QuarryComparisonWorkspace sites={bank.sites} rates={activeRates} workifyPrices={workifyPrices} draft={draft}
+      date={draft.priceDate || today} revision={revision} canSave={canSave} onApply={useCheapest} onDetailsChange={change} onUseReference={() => change({profile:'reference'})}/>}
+    <details className={styles.advanced} open={snapshot?.mode === 'advanced' ? true : undefined}>
       <summary>Avancerad kalkyl och inställningar</summary>
     <form className={styles.controls} onSubmit={event => {event.preventDefault(); void calculate();}}>
       <fieldset disabled={busy} className={styles.form}>
@@ -292,8 +321,9 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
           {!bank && <p role="status">Prisbanken kunde inte hämtas. Manuell kalkyl är tillgänglig.</p>}
           {draft.rounds.map((round, index) => <RoundEditor key={round.id} round={round} index={index}
             sites={bank?.sites ?? []}
-            rates={activeRates.filter(rate => rate.kind === 'purchase' && rate.siteId === round.pickupSiteId ||
-              rate.kind === 'tip' && rate.siteId === round.deliverySiteId)}
+            rates={activeRates.filter(rate => !quotedMaterial(quoted,comparisonMaterial(rate)) &&
+              (rate.kind === 'purchase' && rate.siteId === round.pickupSiteId ||
+              rate.kind === 'tip' && rate.siteId === round.deliverySiteId))}
             checked={new Set(draft.materials.filter(row => row.roundId === round.id).map(row => row.bankRateId ?? ''))}
             toggleRate={rate => toggleRate(round, rate)}
             change={patch => change({rounds: replace(latestDraft.current.rounds, round.id, patch)})}
@@ -341,8 +371,9 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
           <button type="submit" className={styles.primary} disabled={!draft.materials.length || draft.materials.some(staleRate)}><Calculator size={17}/>{busy ? 'Beräknar…' : 'Beräkna tonpris'}</button>
 
         </div>
-        {complete && <OfferDownloads disabled={busy}
-          create={() => downloadAdvancedOffer(draft,offer.map(line => line.unitPrice))} onRetry={() => void calculate()}/>}
+        {duplicate && <p role="status">En vald fraktion finns redan i offerten.</p>}
+        {complete && <OfferDownloads disabled={busy || duplicate || !canSave} supplement={Boolean(revision)}
+          create={() => downloadAdvancedOffer(draft,offer.map(line => line.unitPrice),revision?.id)} onRetry={() => void calculate()}/>}
         {error && <p role="alert">{error}</p>}
       </fieldset>
     </form>
