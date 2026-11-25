@@ -4,7 +4,8 @@ import {revalidatePath} from 'next/cache';
 import {archiveOffer, findArchivedOffer, offerFingerprint} from '@/lib/hub/ton-price-offer-archive';
 import {tonPricePath} from '@/app/_components/kpi-transport-administration-nav';
 
-import {advancedOfferLines, offerLines, parseOfferMarkup, type OfferDetails, type OfferLine} from '@/lib/hub/ton-price-offer';
+import {advancedOfferLines, priceQuarryOffer, type QuarryPricing, type OfferDetails, type OfferLine} from '@/lib/hub/ton-price-offer';
+import {readWorkifyMaterialPrices} from '@/lib/hub/workify-material-prices';
 import {deliveryPlanRoute, type DeliveryPlanLine} from '@/lib/hub/ton-price-delivery-plan';
 import {tonPriceOfferPdf} from '@/lib/hub/ton-price-offer-pdf';
 import {tonPriceAccess} from './access';
@@ -115,19 +116,29 @@ function validOfferDetails(details: OfferDetails) {
 
 export async function downloadQuarryOffer(
   date: string, materials: QuarryMaterial[], rounds: Round[], draft: TonPriceDraft,
-  delivery: string, markupText: string, expectedPrices: number[], details: OfferDetails,
+  delivery: string, pricing: QuarryPricing, expectedPrices: number[], details: OfferDetails,
 ) {
-  const markup = parseOfferMarkup(markupText);
-  if (markup === null) return {error:'Ange ett påslag mellan 0 och 1 000 %.'};
+  if (!pricing || !['markup','workify'].includes(pricing.mode) || typeof pricing.markup !== 'string' ||
+    !pricing.overrides || typeof pricing.overrides !== 'object' || Object.keys(pricing.overrides).length > 100 ||
+    Object.values(pricing.overrides).some(value => !value || typeof value.markup !== 'string' || typeof value.source !== 'string' ||
+      (value.source !== '' && value.source !== 'markup' && !/^workify:[\w-]{1,80}$/.test(value.source)))) {
+    return {error:'Kontrollera offertens prisval.'};
+  }
   if (typeof delivery !== 'string' || !delivery.trim() || delivery.length > 240 ||
     !validOfferDetails(details)) {
     return {error:'Kontrollera offertuppgifterna.'};
   }
   const access = await tonPriceAccess();
   if (!access) return {error:'Behörighet saknas.'};
-  const result = await compareForAccess(access,date,materials,rounds,draft);
+  const usesWorkify = pricing.mode === 'workify' || Object.values(pricing.overrides).some(value => value.source.startsWith('workify:'));
+  const [result,workifyPrices] = await Promise.all([
+    compareForAccess(access,date,materials,rounds,draft),
+    usesWorkify ? readWorkifyMaterialPrices(access) : [],
+  ]);
   if (!result.comparison) return {error:result.error};
-  const lines = offerLines(result.comparison,markup);
+  if (!workifyPrices) return {error:'Workifys standardpriser kunde inte hämtas.'};
+  const priced = priceQuarryOffer(result.comparison,pricing,workifyPrices);
+  const lines = priced.flatMap(row => row.line ? [row.line] : []);
   if (!lines.length || lines.length !== materials.length || lines.some(line => !Number.isFinite(line.unitPrice) || line.unitPrice < 0)) {
     return {error:'Kontrollera att alla valda material har ett giltigt offertpris.'};
   }
@@ -142,7 +153,7 @@ export async function downloadQuarryOffer(
     return {
       ...lines[index], ...deliveryPlanRoute(round,time,vehicle,new Map([[site.id,site]])),
       material:rate.material === row.material ? row.material : row.material + ' · ' + rate.material,
-      tip:false, purchase:rate.price, materialPrice:rate.price * (1 + markup / 100), freight,
+      tip:false, purchase:rate.price, materialPrice:priced[index].materialPrice!, pricingSource:priced[index].pricingSource, freight,
     };
   });
   return offerDocuments(access,delivery,date,details,lines,plan);

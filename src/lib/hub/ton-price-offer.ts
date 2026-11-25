@@ -42,12 +42,41 @@ export function truckSupplementArticles(lines: OfferLine[]) {
   }));
 }
 
-export function offerLines(comparison: QuarryComparison, markup: number): OfferLine[] {
-  return comparison.flatMap(row => {
+export type WorkifyOfferPrice = {article: string; label: string; material: string; price: number; includesFreight: boolean};
+export type QuarryPricing = {
+  mode: 'markup' | 'workify';
+  markup: string;
+  overrides: Record<string,{source: string; markup: string}>;
+};
+
+export function priceQuarryOffer(comparison: QuarryComparison, pricing: QuarryPricing, workifyPrices: WorkifyOfferPrice[]) {
+  return comparison.map(row => {
     const winner = row.options[0];
-    if (!winner) return [];
-    const unitPrice = roundOfferMoney(winner.total + winner.rate.price * markup / 100);
-    return [{material:row.material, unitPrice, pickupKey:`site:${winner.site.id}`, truckSupplement:winner.truckSupplement}];
+    if (!winner) return {error:'Körunderlag saknas'};
+    const override = Object.hasOwn(pricing.overrides,row.material) ? pricing.overrides[row.material] : undefined;
+    const source = override?.source || '';
+    const useWorkify = source.startsWith('workify:') || (!source && pricing.mode === 'workify');
+    let materialPrice: number;
+    let deliveredPrice: number;
+    let pricingSource: string;
+    if (useWorkify) {
+      const matches = workifyPrices.filter(price => price.material === row.material);
+      const price = source ? matches.find(price => source === 'workify:' + price.article) :
+        matches.find(price => !price.includesFreight) ?? matches[0];
+      if (!price) return {error:'Workify-pris saknas för fraktionen'};
+      materialPrice = price.price - (price.includesFreight ? winner.freight : 0);
+      deliveredPrice = price.price + (price.includesFreight ? 0 : winner.freight);
+      pricingSource = `Workify STD · ${price.article} · ${price.includesFreight ? 'inkl. transport' : 'materialpris'}`;
+    } else {
+      const markup = parseOfferMarkup(source === 'markup' && override?.markup.trim() ? override.markup : pricing.markup);
+      if (markup === null) return {error:'Ange ett påslag mellan 0 och 1 000 %'};
+      materialPrice = winner.rate.price * (1 + markup / 100);
+      deliveredPrice = materialPrice + winner.freight;
+      pricingSource = `Materialpåslag ${markup.toLocaleString('sv-SE')} %`;
+    }
+    const unitPrice = roundOfferMoney(deliveredPrice);
+    const line: OfferLine = {material:row.material,unitPrice,pickupKey:`site:${winner.site.id}`,truckSupplement:winner.truckSupplement};
+    return {line,materialPrice,pricingSource};
   });
 }
 

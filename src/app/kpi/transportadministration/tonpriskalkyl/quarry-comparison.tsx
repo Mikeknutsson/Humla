@@ -2,7 +2,7 @@
 
 import {useEffect, useEffectEvent, useRef, useState} from 'react';
 import Link from 'next/link';
-import {offerLines, offerMoney, parseOfferMarkup, type OfferDetails} from '@/lib/hub/ton-price-offer';
+import {offerMoney, priceQuarryOffer, type OfferDetails, type QuarryPricing, type WorkifyOfferPrice} from '@/lib/hub/ton-price-offer';
 import {GoogleAddressField, googleReturnRouteMatrix, googleRoadEstimate, googleRouteMatrix, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {compareMaterialFractions, materialGroups, standardMaterial, standardMaterialNames, type MaterialSite, type SiteRate} from '@/lib/hub/material-price-bank';
@@ -55,8 +55,9 @@ export function ReturnLoadFields({value, rates, onChange}: {
   </div>;
 }
 
-export default function QuarryComparisonWorkspace({sites, rates, draft, date, onApply, onDetailsChange}: {
+export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onDetailsChange}: {
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void; onDetailsChange:(patch: Partial<OfferDetails>) => void;
+  workifyPrices: WorkifyOfferPrice[];
 }) {
   const mapsKey = useGoogleMapsKey();
   const [destination,setDestination] = useState<Destination>({address:''});
@@ -69,7 +70,7 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const [request,setRequest] = useState<{key: string; comparison?: QuarryComparison; rounds?: ReturnType<typeof newRound>[]; error?: string}>();
   const [retry,setRetry] = useState(0);
   const [applied,setApplied] = useState('');
-  const [markup,setMarkup] = useState('');
+  const [pricing,setPricing] = useState<QuarryPricing>({mode:'markup',markup:'0',overrides:{}});
   const routes = useRef(new Map<string,Promise<Leg>>());
   const quarrySites = sites.filter(site => site.kind !== 'tip');
   const quarryIds = new Set(quarrySites.map(site => site.id));
@@ -107,10 +108,19 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
   const winners = result?.flatMap(row => row.options[0] ? [row.options[0]] : []) ?? [];
   const missingRoutes = current?.rounds?.some(round => !round.outbound.miles.trim() || (!round.mirror && !round.inbound.miles.trim()));
   const needsManual = isTestAddress || !mapsKey || !routesAvailable || missingRoutes;
-  const percent = parseOfferMarkup(markup);
-  const lines = result && percent !== null ? offerLines(result,percent) : [];
+  const activePricing = {...pricing,overrides:Object.fromEntries(Object.entries(pricing.overrides)
+    .filter(([name]) => selected.includes(name)))};
+  const priced = result ? priceQuarryOffer(result,activePricing,workifyPrices) : [];
+  const lines = priced.flatMap(row => row.line ? [row.line] : []);
   const complete = lines.length === materials.length && lines.length > 0 &&
     lines.every(line => Number.isFinite(line.unitPrice) && line.unitPrice >= 0);
+
+  function changeRowPricing(material: string, patch: Partial<QuarryPricing['overrides'][string]>) {
+    setPricing(previous => ({
+      ...previous,
+      overrides:{...previous.overrides,[material]:{...(previous.overrides[material] ?? {source:'',markup:''}),...patch}},
+    }));
+  }
 
   function changeDestination(address: string, id?: string, point?: Point) {
     setDestination({address,id,point});
@@ -264,17 +274,40 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
       <button type="button" className="secondary" onClick={() => setRetry(value => value+1)}>Försök igen</button></div>}
     {result && <section className={styles.quickOffer} aria-label="Offertpris">
       <h3>Offertpris</h3>
-      <label className={styles.field}>Påslag på material (%)
-        <input inputMode="decimal" placeholder="Ange påslag" value={markup} onChange={event => setMarkup(event.target.value)}/>
-      </label>
-      {markup.trim() && percent === null && <p role="status">Ange ett påslag mellan 0 och 1 000 %.</p>}
+      <div className={styles.grid}>
+        <label className={styles.field}>Prisgrund för offerten
+          <select value={pricing.mode} onChange={event => setPricing({...pricing,mode:event.target.value as QuarryPricing['mode']})}>
+            <option value="markup">Generellt materialpåslag</option>
+            <option value="workify">Workify standardpris</option>
+          </select>
+        </label>
+        <label className={styles.field}>Generellt påslag på material (%)
+          <input inputMode="decimal" value={pricing.markup} onChange={event => setPricing({...pricing,markup:event.target.value})}/>
+        </label>
+      </div>
+      <small>Påslag gäller materialet. Workify-priser inklusive transport används som levererat pris.</small>
       <div className={styles.table}><table>
-        <thead><tr><th>Fraktion</th><th>Levererat pris (kr/ton)</th></tr></thead>
-        <tbody>{result.map(row => {
-          const line = lines.find(item => item.material === row.material);
+        <thead><tr><th>Fraktion</th><th>Prisgrund per fraktion</th><th>Levererat pris (kr/ton)</th></tr></thead>
+        <tbody>{result.map((row,index) => {
+          const entry = priced[index];
+          const override = pricing.overrides[row.material];
+          const matches = workifyPrices.filter(rate => rate.material === row.material);
           return <tr key={row.material}><td>{row.material}</td>
-            <td>{line ? <strong>{offerMoney.format(line.unitPrice)}</strong> : row.options[0]
-              ? <>{offerMoney.format(row.options[0].total)} <small>före påslag</small></> : 'Körunderlag saknas'}</td></tr>;
+            <td className={styles.field}>
+              <select aria-label={`Prisgrund för ${row.material}`} value={override?.source ?? ''}
+                onChange={event => changeRowPricing(row.material,{source:event.target.value})}>
+                <option value="">{pricing.mode === 'workify' ? 'Workify standardpris' : 'Generellt påslag'}</option>
+                <option value="markup">Eget påslag (%)</option>
+                {matches.map(rate => <option key={rate.article} value={`workify:${rate.article}`}>
+                  {rate.article} · {offerMoney.format(rate.price)} kr/ton · {rate.includesFreight ? 'inkl. transport' : 'material'}
+                </option>)}
+              </select>
+              {override?.source === 'markup' && <input aria-label={`Påslag för ${row.material}`} inputMode="decimal"
+                value={override.markup} placeholder={pricing.markup || 'Generellt påslag'}
+                onChange={event => changeRowPricing(row.material,{markup:event.target.value})}/>}
+            </td>
+            <td>{entry.line ? <strong>{offerMoney.format(entry.line.unitPrice)}</strong> : entry.error}</td>
+          </tr>;
         })}</tbody>
       </table></div>
       {result.some(row => row.missing.length > 0) && <p role="status">Jämförelsen omfattar täkter med tillgängligt körunderlag. Se vilka som saknas nedan.</p>}
@@ -288,11 +321,11 @@ export default function QuarryComparisonWorkspace({sites, rates, draft, date, on
           <OfferTermsField value={draft.terms} onChange={terms => onDetailsChange({terms})}/>
         </fieldset>
       </details>
-      <OfferDownloads key={JSON.stringify([inputKey,markup,draft.customer,draft.project,draft.validity,draft.terms])}
+      <OfferDownloads key={JSON.stringify([inputKey,activePricing,draft.customer,draft.project,draft.validity,draft.terms])}
         disabled={!complete || !current?.rounds} onRetry={() => setRetry(value => value+1)}
-        create={() => downloadQuarryOffer(date,materials,current!.rounds!,draft,destination.address,markup,lines.map(line => line.unitPrice),
+        create={() => downloadQuarryOffer(date,materials,current!.rounds!,draft,destination.address,activePricing,lines.map(line => line.unitPrice),
           {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms})}/>
-      {!complete && percent !== null && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
+      {!complete && <p>Samtliga valda material behöver ett giltigt pris för att skapa offerten.</p>}
     </section>}
     {result && <details><summary>Visa täktjämförelse</summary>
     <p>Tiden per runda inkluderar körning i båda riktningarna och 30 minuter för lastning och lossning.</p>
