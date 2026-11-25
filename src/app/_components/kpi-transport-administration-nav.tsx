@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {Calculator, ChevronRight, ClipboardCheck, Database, PackageCheck, Truck} from 'lucide-react';
+import {Calculator, ChevronRight, ClipboardCheck, Database, PackageCheck, Scale, Truck} from 'lucide-react';
 import styles from './kpi-followup-nav.module.css';
 
 export const settlementPath = '/kpi/transportadministration/avrakningskontroll';
@@ -10,7 +10,9 @@ export const tonPricePath = '/kpi/transportadministration/tonpriskalkyl';
 
 export const materialPriceBankPath = '/kpi/transportadministration/prisbank';
 
-export type TransportAdministrationPage = boolean | 'material' | 'ton-price' | 'price-bank';
+export const deliveryCheckPath = '/kpi/transportadministration/leveranskontroll';
+
+export type TransportAdministrationPage = boolean | 'material' | 'ton-price' | 'price-bank' | 'delivery-check';
 
 export function KpiTransportAdministrationNav({active = false, onNavigate}: {
   active?: TransportAdministrationPage;
@@ -26,6 +28,10 @@ export function KpiTransportAdministrationNav({active = false, onNavigate}: {
       <Link href={materialPath} prefetch={false} className={active === 'material' ? 'active' : undefined}
         aria-current={active === 'material' ? 'page' : undefined} onClick={onNavigate}>
         <PackageCheck size={16}/>Materialkontroll Johanssons
+      </Link>
+      <Link href={deliveryCheckPath} prefetch={false} className={active === 'delivery-check' ? 'active' : undefined}
+        aria-current={active === 'delivery-check' ? 'page' : undefined} onClick={onNavigate}>
+        <Scale size={16}/>Leveranskontroll Sortergården
       </Link>
       <Link href={tonPricePath} prefetch={false} className={active === 'ton-price' ? 'active' : undefined}
         aria-current={active === 'ton-price' ? 'page' : undefined} onClick={onNavigate}>
