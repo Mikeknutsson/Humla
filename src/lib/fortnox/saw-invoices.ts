@@ -2,7 +2,7 @@ export const sawArticles = ['12-04','12-041'] as const;
 export type SawArticle = typeof sawArticles[number];
 export type SawInvoiceRow = {
   invoice: string; row: string; date: string; article: SawArticle; amount: number;
-  credit: boolean; customer: string; reference: string;
+  credit: boolean; customer: string; customerNumber?: string; reference: string;
 };
 type RecordValue = Record<string,unknown>;
 export type SawInvoiceCoverage = {from: string; to: string; rows: SawInvoiceRow[]};
@@ -70,7 +70,7 @@ export async function fetchSawInvoices(get: (path: string) => Promise<unknown>, 
       if (!Number.isFinite(amount)) throw Error('En artikelrad saknar belopp exklusive moms.');
       rows.push({invoice:id,row:asText(row.RowId) || String(index+1),date,article,
         amount:Math.round(amount*creditSign*100)/100,credit,
-        customer:asText(invoice.CustomerName),
+        customer:asText(invoice.CustomerName), customerNumber:asText(invoice.CustomerNumber),
         reference:asText(invoice.YourOrderNumber) || asText(invoice.OrderReference)});
     }
   }
