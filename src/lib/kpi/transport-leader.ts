@@ -1,3 +1,12 @@
+export const transportReviewBuckets = [
+ {unitId:'00000000-0000-0000-0000-000000000033',label:'Ej klassificerat – Workify'},
+ {unitId:'00000000-0000-0000-0000-000000000034',label:'Övriga kostnader och intäkter'},
+] as const;
+
+export function isTransportReviewBucket(unitId:string|null) {
+ return transportReviewBuckets.some(bucket=>bucket.unitId===unitId);
+}
+
 export type TransportMetrics = {
  revenue:number; cost:number; result:number; margin_percent:number|null;
  target_margin_percent:number|null; deviation_amount:number|null; deviation_pp:number|null;
