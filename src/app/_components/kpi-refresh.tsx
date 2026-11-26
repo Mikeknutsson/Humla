@@ -93,6 +93,11 @@ function KpiRefreshBar() {
     }}><RefreshCw size={16} className={requesting||queued?'refresh-spinning':''}/>{requesting||queued?'Synkar…':'Synka'}</button>}
     <button type="button" title="Ladda om vyn från det förberedda underlaget, utan att starta en Hub-synkning." disabled={refreshing} onClick={async () => {
       setRefreshing(true);
+      // The dynamic foreman page reads the published Hub report on each request.
+      if(pathname==='/kpi/mina-enheter'){
+        window.location.reload();
+        return;
+      }
       // Reload client-side queues as well as server data, preserving the current URL.
       try { await Promise.race([refreshKpiReport(),new Promise(resolve=>setTimeout(resolve,15000))]); } finally { window.location.reload(); }
     }}><RefreshCw size={16} className={refreshing ? "refresh-spinning" : ""}/>{refreshing ? "Uppdaterar…" : "Uppdatera"}</button>
