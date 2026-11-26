@@ -5,7 +5,7 @@ import {unitDailyRevenueTargets,productiveDayBasis} from '@/lib/hub/daily-revenu
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
 import {stockholmToday,previousYearDate} from '@/lib/kpi/period';
-import {validTransportDate,type TransportScorecard} from '@/lib/kpi/transport-leader';
+import {isTransportReviewBucket,transportReviewBuckets,validTransportDate,type TransportScorecard} from '@/lib/kpi/transport-leader';
 import {TransportBalanceCards} from '@/app/_components/kpi-transport-balance';
 import {buildTransportCardAnalyses} from '@/lib/hub/transport-card-analysis';
 import {ForemanSawBreakdown,type SawBreakdown} from '@/app/_components/foreman-saw-breakdown';
@@ -87,6 +87,7 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
 
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
+ {combinedTransport&&<TransportReview report={report} args={args} fiscalYear={chosen.fiscalYear}/>}
  {!combinedTransport&&<ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>}
  <Suspense key={base+report.generation} fallback={<section className="panel" role="status"><h2>Enheternas balans</h2><p>Hämtar enheter och nyckeltal …</p></section>}>
   <ForemanDetails db={db} args={args} overview={report} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} hideSoldVehicle={olaView}/>
@@ -99,6 +100,38 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
 
 type ForemanClient=Awaited<ReturnType<typeof createClient>>;
 type ForemanArgs={p_tenant:string;p_from:string;p_to:string;p_user:string;p_months?:number[]};
+
+function TransportReview({report,args,fiscalYear}:{
+ report:TransportScorecard;args:ForemanArgs;fiscalYear:number;
+}) {
+ const rows=transportReviewBuckets.flatMap(bucket=>{
+  const unit=report.units.find(unit=>unit.unit_id===bucket.unitId);
+  return unit?[{...bucket,unit}]:[];
+ });
+ if(!rows.length)return null;
+ const params=new URLSearchParams({from:args.p_from,to:args.p_to,user_id:args.p_user});
+ if(args.p_months){
+  params.set('fiscal_year',String(fiscalYear));
+  params.set('months',args.p_months.join(','));
+ }
+ return <section className="panel">
+  <details>
+   <summary><strong>Poster att följa upp</strong></summary>
+   <p>Beloppen ingår i Transports resultat för vald period.</p>
+   <div className="monthly-scroll"><table>
+    <thead><tr><th>Underlag</th><th>Intäkter</th><th>Kostnader</th><th>Rader</th></tr></thead>
+    <tbody>{rows.map(({unitId,label,unit})=>{
+     const detail=new URLSearchParams(params);
+     detail.set('unit',unitId);
+     return <tr key={unitId}>
+      <td><Link prefetch={false} href={'/kpi/transportledare?'+detail}>{label} →</Link></td>
+      <td>{money.format(unit.revenue)}</td><td>{money.format(unit.cost)}</td><td>{unit.rows}</td>
+     </tr>;
+    })}</tbody>
+   </table></div>
+  </details>
+ </section>;
+}
 
 async function ResultTrend({db,args,generation}:{db:ForemanClient;args:ForemanArgs;generation:TransportScorecard['generation']}) {
  const {p_tenant,p_from,p_to,p_user}=args;
@@ -154,6 +187,8 @@ async function UnitCards({db,args,report,base,continuous,historyTo,groupUnits,hi
   history?(history.error||history.data?.generation!==report.generation?null:history.data as TransportScorecard):report;
  const dailyTargets=dailyReport?unitDailyRevenueTargets(dailyReport):undefined;
  const dailyPeriod=dailyReport?{from:dailyReport.from,to:dailyReport.to,...productiveDayBasis(dailyReport.from,dailyReport.to)}:undefined;
- const displayedReport=hideSoldVehicle?{...report,units:report.units.filter(unit=>unit.unit_name!=='RKO309')}:report;
+ const displayedReport={...report,units:report.units.filter(unit=>
+  !isTransportReviewBucket(unit.unit_id)&&(!hideSoldVehicle||unit.unit_name!=='RKO309')
+ )};
  return <TransportBalanceCards report={displayedReport} prior={prior} base={base} selectedUnit={null} selectedGroup={null} analyses={buildTransportCardAnalyses(displayedReport,prior)} hideGroups foremanMode groupUnits={groupUnits} dailyTargets={dailyTargets} dailyPeriod={dailyPeriod}/>;
 }
