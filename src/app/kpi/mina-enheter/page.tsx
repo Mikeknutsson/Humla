@@ -81,11 +81,13 @@ export default async function MyUnits({searchParams}:{searchParams:Promise<Recor
  const view=<div className="content">{profiles}
  <header className="panel"><h2>{owner?name??'Arbetsledarvy':'Mitt område'}</h2><p>{name??'Arbetsledare'} · Läsåtkomst · {from}–{to}</p>
  {owner&&<p role="status"><strong>Förhandsvisning som ägare.</strong> {combinedTransport?'Du ser Marcus, Olas och Pierres tilldelade underlag.':'Du ser profilens avgränsade underlag.'} <Link href="/transport-styrning/admin">Hantera ansvar →</Link></p>}
- {controls}</header>
+ {controls}
+ {combinedTransport&&<nav aria-label="Detaljuppföljning"><Link prefetch={false} href={'/kpi/transportledare?'+new URLSearchParams({activity:'saw',from,to,...(chosen.mode==='months'?{fiscal_year:String(chosen.fiscalYear),months:chosen.months.join(',')}:{})})}>Sågningen – intäkter och kostnader →</Link></nav>}
+ </header>
  {current.error||!report?<section className="panel" role="alert"><h2>Underlaget kunde inte hämtas</h2><p>{current.error?.code==='57014'?'Hämtningen tog för lång tid. Uppdatera vyn med samma period.':'Underlaget kunde inte hämtas. Uppdatera vyn med samma period.'} Saknade belopp visas inte som noll.</p></section>:!report.units.length?<section className="panel"><h2>Inga tilldelade enheter i perioden</h2><p>Ansvar behöver mappas innan siffror kan visas. Kontakta Mike.</p></section>:<>
 
  <section className="metrics-grid">{(['revenue','cost','result']as const).map((key,i)=><article className="metric-card" key={key}><span>{['Intäkter','Kostnader','Resultat'][i]}</span><strong>{report.summary[key]==null?'Underlag saknas':money.format(report.summary[key]!)}</strong></article>)}<article className="metric-card"><span>Resultat %</span><strong>{report.summary.margin_percent==null?'–':new Intl.NumberFormat('sv-SE',{maximumFractionDigits:1}).format(report.summary.margin_percent)+' %'}</strong></article></section>
- <ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>
+ {!combinedTransport&&<ForemanSawBreakdown value={(report as TransportScorecard &{saw_breakdown?:SawBreakdown|null}).saw_breakdown}/>}
  <Suspense key={base+report.generation} fallback={<section className="panel" role="status"><h2>Enheternas balans</h2><p>Hämtar enheter och nyckeltal …</p></section>}>
   <ForemanDetails db={db} args={args} overview={report} base={base} continuous={continuous} historyTo={historyTo} groupUnits={groupUnits} hideSoldVehicle={olaView}/>
  </Suspense>
