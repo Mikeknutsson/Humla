@@ -1,84 +1,71 @@
-import {customReceiver, isMunicipality, receiverOptions, wasteOptions, type DocumentFields, type Party, type Signoff, type StrokePoint, type Waste} from './fields';
+import {isMunicipality, type DocumentFields, type Location, type Party, type Waste} from './fields';
+import {wasteCodeAt} from './waste-codes';
 
 function record(value: unknown) {
-  if (typeof value !== 'object' || !value || Array.isArray(value)) throw new Error('Dokumentet innehåller ofullständiga uppgifter.');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Dokumentet innehåller ofullständiga uppgifter.');
   return value as Record<string,unknown>;
 }
 
 function text(value: unknown, max: number, label: string, required = false) {
   if (typeof value !== 'string' || value.trim().length > max || (required && !value.trim())) {
-    throw new Error(`Kontrollera fältet ${label}.`);
+    throw new Error(`Kontrollera ${label}.`);
   }
-  return value.normalize('NFC').trim().replace(/\s+/g,' ');
+  return value.normalize('NFC').trim().replace(/\s+/g,' ').replace(/[\u00ad\u200b]/g,'');
 }
 
-function party(value: unknown, label: string): Party {
+function party(value: unknown, role: string): Party {
   const data = record(value);
-  const organisation = text(data.organisation,18,`organisationsnummer för ${label}`,true);
-  if (!/^\d{6}-?\d{4}$/.test(organisation)) throw new Error(`Ange ett organisationsnummer med tio siffror för ${label}.`);
-  const municipality = text(data.municipality,4,`kommunkod för ${label}`,true);
-  if (!isMunicipality(municipality)) throw new Error(`Välj en kommunkod för ${label}.`);
-  return {name:text(data.name,80,label,true),address:text(data.address,160,`postadress för ${label}`,true),
-    organisation:organisation.replace(/^(\d{6})-?(\d{4})$/,'$1-$2'),municipality};
+  const organisation = text(data.organisation,30,`identifieringsnumret för ${role}`,true);
+  const compact = organisation.replace(/[\s+-]/g,'').toUpperCase();
+  const swedish = /^(\d{6}|\d{8})(\d{4})$/.exec(compact);
+  const taxNumber = /^(?=.*\d)[A-Z0-9 .-]{3,30}$/i.test(organisation);
+  if (!swedish && !taxNumber) {
+    throw new Error(`Ange ett person-, organisations- eller skatteregistreringsnummer för ${role}.`);
+  }
+  const formatted = swedish ? swedish[1] + (organisation.includes('+') ? '+' : '-') + swedish[2] : organisation.toUpperCase();
+  return {name:text(data.name,110,`namnet på ${role}`,true),
+    address:text(data.address,220,`postadressen för ${role}`,true),organisation:formatted};
 }
 
-function signoff(value: unknown): Signoff {
+function location(value: unknown, label: string): Location {
   const data = record(value);
-  const date = text(data.date,10,'datum');
-  if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
-    new Date(date).toISOString().slice(0,10) !== date)) throw new Error('Kontrollera datumet i underskriftsrutan.');
-  const name = text(data.name,90,'namnförtydligande');
-  if (!Array.isArray(data.strokes) || data.strokes.length > 80) throw new Error('Underskriften är för stor.');
-  let count = 0;
-  const strokes = data.strokes.map((stroke: unknown) => {
-    if (!Array.isArray(stroke) || (count += stroke.length) > 3500) throw new Error('Underskriften är för stor.');
-    return stroke.map((point: unknown): StrokePoint => {
-      if (!Array.isArray(point) || point.length !== 2 ||
-        !point.every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1)) {
-        throw new Error('Underskriften kunde inte läsas.');
-      }
-      return [point[0],point[1]];
-    });
-  });
-  if (count && (!date || !name)) throw new Error('Ange datum och namnförtydligande för varje inskriven underskrift.');
-  return {date,name,strokes};
+  const address = text(data.value,240,label,true);
+  const coordinate = address.match(/^(-?\d{1,3}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (coordinate && (Math.abs(Number(coordinate[1])) > 90 || Math.abs(Number(coordinate[2])) > 180)) {
+    throw new Error(`Kontrollera koordinaterna för ${label}.`);
+  }
+  const municipality = text(data.municipality,4,`kommunkoden för ${label}`);
+  if (municipality && !isMunicipality(municipality)) throw new Error(`Välj en giltig kommunkod för ${label}.`);
+  return {value:address,municipality};
 }
 
-function quantity(value: unknown, label: string, whole = false) {
-  const raw = text(value,18,label).replace(/ /g,'');
-  const format = whole ? /^\d+$/ : /^\d+(?:[.,]\d{1,3})?$/;
-  if (raw && !format.test(raw)) throw new Error(`Ange ${label} som ett tal.`);
-  return raw.replace('.',',');
+function wasteItem(value: unknown, date: string, index: number): Waste {
+  const row = record(value);
+  const label = `avfallsrad ${index+1}`;
+  const code = wasteCodeAt(text(row.code,15,`avfallskoden på ${label}`,true),date);
+  if (!code) throw new Error(`Avfallskoden på ${label} saknas i avfallsförteckningen för transportdatumet.`);
+  const kg = text(row.kg,18,`vikten på ${label}`,true).replace(/ /g,'').replace(',','.');
+  if (!/^\d{1,10}(?:\.\d{1,3})?$/.test(kg) || Number(kg) <= 0) {
+    throw new Error(`Ange vikten i kg på ${label}.`);
+  }
+  const packages = text(row.packages,10,`antal kollin på ${label}`);
+  if (packages && (!/^\d+$/.test(packages) || Number(packages) <= 0)) throw new Error(`Kontrollera antal kollin på ${label}.`);
+  return {code,kg,packages,name:text(row.name,180,`benämningen på ${label}`,true),packaging:text(row.packaging,45,`emballaget på ${label}`)};
 }
 
 export function parseTransportDocument(value: unknown): DocumentFields {
   const data = record(value);
-  const receiverRow = data.receiverRow;
-  if (typeof receiverRow !== 'number' || !Number.isInteger(receiverRow) || receiverRow < 0 || receiverRow > customReceiver) {
-    throw new Error('Välj mottagare.');
-  }
-  if (!Array.isArray(data.waste) || data.waste.length === 0 || data.waste.length > wasteOptions.length) {
-    throw new Error('Välj minst ett avfallsslag.');
-  }
-  const seen = new Set<number>();
-  const waste = data.waste.map((item: unknown): Waste => {
-    const entry = record(item);
-    const row = entry.row;
-    if (typeof row !== 'number' || !Number.isInteger(row) || !wasteOptions[row] || seen.has(row)) {
-      throw new Error('Kontrollera valda avfallsslag.');
-    }
-    seen.add(row);
-    const {adr} = entry;
-    if (adr !== '' && adr !== 'label' && adr !== 'none') throw new Error('Kontrollera ADR-valet.');
-    return {row,packages:quantity(entry.packages,'antal kollin',true),packaging:text(entry.packaging,28,'emballage'),
-      estimatedKg:quantity(entry.estimatedKg,'uppskattad vikt'),weighedKg:quantity(entry.weighedKg,'invägd vikt'),
-      adr,adrLabel:adr === 'label' ? text(entry.adrLabel,24,'ADR-etikett',true) : ''};
-  });
+  const date = text(data.date,10,'transportdatumet',true);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
+      new Date(date).toISOString().slice(0,10) !== date) throw new Error('Kontrollera transportdatumet.');
+  if (!Array.isArray(data.waste) || !data.waste.length || data.waste.length > 100) throw new Error('Ange mellan 1 och 100 avfallsrader.');
+  const consignor = data.consignor === null ? null : party(data.consignor,'lämnaren');
   return {
-    createdBy:text(data.createdBy,90,'dokument skapat av',true),
-    project:text(data.project,28,'projekt',true),registration:text(data.registration,24,'registreringsnummer',true).toUpperCase(),
-    sender:party(data.sender,'avsändaren'), receiver:receiverRow === customReceiver ? party(data.receiver,'mottagaren') : receiverOptions[receiverRow],
-    receiverRow, deliveryNumber:text(data.deliveryNumber,30,'inleveransnummer'), waste,
-    senderSignoff:signoff(data.senderSignoff), receiverSignoff:signoff(data.receiverSignoff),
+    date,consignor,carrier:party(data.carrier,'transportören'),receiver:party(data.receiver,'mottagaren'),
+    project:text(data.project,95,'projektet'),registration:text(data.registration,24,'registreringsnumret').toUpperCase(),
+    origin:location(data.origin,'hämtplatsen'),destination:location(data.destination,'den slutliga mottagningsplatsen'),
+    deliveryNumber:text(data.deliveryNumber,50,'inleveransnumret'),adrReference:text(data.adrReference,70,'ADR-referensen'),
+    waste:data.waste.map((row,index) => wasteItem(row,date,index)),carrierSigner:text(data.carrierSigner,100,'transportörens namnförtydligande'),
+    consignorSigner:consignor ? text(data.consignorSigner,100,'lämnarens namnförtydligande') : '',
   };
 }

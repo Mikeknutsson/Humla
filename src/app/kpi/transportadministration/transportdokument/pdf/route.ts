@@ -1,6 +1,6 @@
 import {transportDocumentAccess} from '@/lib/hub/transport-document/access';
 import {parseTransportDocument} from '@/lib/hub/transport-document/input';
-import {renderTransportDocument} from '@/lib/hub/transport-document/pdf';
+import {DocumentTextError, renderTransportDocument} from '@/lib/hub/transport-document/pdf';
 
 export const runtime = 'nodejs';
 
@@ -30,8 +30,7 @@ export async function POST(request: Request) {
       'Cache-Control':'no-store',
     }});
   } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (message.startsWith('PDF:en kan inte skriva') || message.startsWith('”')) return Response.json({error:message},{status:400});
+    if (error instanceof DocumentTextError) return Response.json({error:error.message},{status:400});
     console.error('Transportdokument PDF could not be generated',error);
     return Response.json({error:'PDF:en kunde inte skapas. Försök igen.'},{status:500});
   }

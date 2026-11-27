@@ -1,11 +1,12 @@
 'use client';
 
-import {useRef, useState, type FormEvent, type PointerEvent} from 'react';
+import {useRef, useState, type FormEvent} from 'react';
 import {Download, Plus, Trash2} from 'lucide-react';
 import {GoogleAddressField, geocodeSwedishAddress, reverseGeocodePoint, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
-import {customReceiver, emptyParty, emptySignoff, municipalityFor, municipalityOptions, receiverOptions, wasteOptions,
-  type DocumentFields, type HubChoice, type Party, type Signoff, type StrokePoint, type Waste} from '@/lib/hub/transport-document/fields';
+import {elleholms, emptyParty, emptyLocation, emptyWaste, municipalityFor, municipalityOptions, receiverOptions,
+  type DocumentFields, type HubChoice, type Location, type Party, type Waste} from '@/lib/hub/transport-document/fields';
+import {suggestedWaste, wasteCodeAt} from '@/lib/hub/transport-document/waste-codes';
 import styles from './workspace.module.css';
 
 function HubField({label,options,value,onChange,onSelect,max}: {
@@ -26,7 +27,7 @@ function HubField({label,options,value,onChange,onSelect,max}: {
       </select>
     </label>}
     <label>{label}
-      <input value={value} maxLength={max} required onChange={event => {
+      <input value={value} maxLength={max} onChange={event => {
         setSelection('');
         onChange(event.target.value);
       }}/>
@@ -34,135 +35,98 @@ function HubField({label,options,value,onChange,onSelect,max}: {
   </div>;
 }
 
-function PartyFields({party,onChange,onMunicipality}: {
-  party: Party; onChange: (party: Party) => void; onMunicipality: (address: string, code: string) => void;
-}) {
-  const mapsKey = useGoogleMapsKey();
-  const [place,setPlace] = useState<{address: string; id?: string; point?: Point}>();
-  const [status,setStatus] = useState<{address: string; message: string; pending?: boolean}>();
-  const sequence = useRef(0);
-  const selected = place?.address === party.address ? place : undefined;
+function PartyFields({party,onChange}: {party: Party; onChange: (party: Party) => void}) {
+  return <div className={styles.grid}>
+    <label>Namn eller företagsnamn<input value={party.name} maxLength={110} required
+      onChange={event => onChange({...party,name:event.target.value})}/></label>
+    <label>Organisations-, person- eller skatteregistreringsnummer<input value={party.organisation} maxLength={30} required
+      onChange={event => onChange({...party,organisation:event.target.value})}/></label>
+    <label>Postadress<input value={party.address} maxLength={220} required
+      onChange={event => onChange({...party,address:event.target.value})}/></label>
+  </div>;
+}
 
-  async function lookup(address: string, point?: Point) {
-    if (!mapsKey || !address.trim()) return;
+function LocationFields({label,location,onChange,onMunicipality}: {
+  label: string; location: Location; onChange: (location: Location) => void;
+  onMunicipality: (address: string, code: string) => void;
+}) {
+  const key = useGoogleMapsKey();
+  const [place,setPlace] = useState<{value: string; id?: string; point?: Point}>();
+  const [status,setStatus] = useState<{value: string; text: string; pending?: boolean}>();
+  const sequence = useRef(0);
+  const selected = place?.value === location.value ? place : undefined;
+
+  async function lookup(value: string, point?: Point) {
+    if (!key || !value.trim()) return;
     const request = ++sequence.current;
-    setStatus({address,message:'Hämtar kommunkod…',pending:true});
+    setStatus({value,text:'Hämtar kommunkod…',pending:true});
     try {
-      const results = point ? await reverseGeocodePoint(mapsKey,point) : await geocodeSwedishAddress(mapsKey,address);
+      const results = point ? await reverseGeocodePoint(key,point) : await geocodeSwedishAddress(key,value);
       if (sequence.current !== request) return;
       const matches = results.filter(result => !result.partial_match && (point || result.types.some(type =>
         ['street_address','premise','subpremise','establishment','point_of_interest','postal_code','intersection'].includes(type))));
       const codes = [...new Set(matches.map(match => municipalityFor(match.address_components)).filter(Boolean))];
-      if (codes.length === 1) {
-        onMunicipality(address,codes[0]);
-        setStatus({address,message:'Kommunkod hämtad från Google och SCB.'});
-      } else {
-        setStatus({address,message:'Välj ett exakt adressförslag eller välj kommun själv.'});
-      }
+      if (codes.length === 1) onMunicipality(value,codes[0]);
+      setStatus({value,text:codes.length === 1 ? 'Kommunkod hämtad.' : 'Välj kommun i listan om koden behövs.'});
     } catch {
-      if (sequence.current === request) setStatus({address,message:'Kommunkoden kunde inte hämtas. Välj kommun i listan.'});
+      if (sequence.current === request) setStatus({value,text:'Kommunkoden kunde inte hämtas. Du kan välja kommun i listan.'});
     }
   }
 
-  return <div className={styles.grid}>
-    <label>Företag<input required value={party.name} onChange={event => onChange({...party,name:event.target.value})} maxLength={80}/></label>
-    <label>Organisationsnummer<input required value={party.organisation} onChange={event => onChange({...party,organisation:event.target.value})}
-      placeholder="XXXXXX-XXXX" maxLength={18}/></label>
+  return <fieldset className={styles.fieldset}>
+    <legend>{label}</legend>
     <div className={styles.address}>
-      <GoogleAddressField label="Postadress" value={party.address} placeId={selected?.id} point={selected?.point} autocomplete
-        onChange={(address,id,point) => {
+      <GoogleAddressField label={`Adress eller koordinater för ${label.toLowerCase()}`} value={location.value}
+        placeId={selected?.id} point={selected?.point} autocomplete placeholder="Sök adress eller ange latitud, longitud"
+        onChange={(value,id,point) => {
           sequence.current += 1;
           setStatus(undefined);
-          setPlace({address,id,point});
-          onChange({...party,address,municipality:address === party.address ? party.municipality : ''});
-          if (point || id) void lookup(address,point);
+          setPlace({value,id,point});
+          onChange({value,municipality:value === location.value ? location.municipality : ''});
+          if (point || id) void lookup(value,point);
         }}/>
-      {mapsKey && <button type="button" className="secondary" disabled={!party.address.trim() || (status?.address === party.address && status.pending)}
-        onClick={() => void lookup(party.address,selected?.point)}>Hämta kommunkod</button>}
-      {status?.address === party.address && <small role="status">{status.message}</small>}
+      {key && <button type="button" className="secondary" disabled={!location.value.trim() || (status?.value === location.value && status.pending)}
+        onClick={() => void lookup(location.value,selected?.point)}>Hämta kommunkod</button>}
+      {status?.value === location.value && <small role="status">{status.text}</small>}
     </div>
     <label>Kommun
-      <select value={party.municipality} required onChange={event => {
+      <select value={location.municipality} onChange={event => {
         sequence.current += 1;
         setStatus(undefined);
-        onChange({...party,municipality:event.target.value});
+        onChange({...location,municipality:event.target.value});
       }}>
-        <option value="">Välj kommun</option>
-        {municipalityOptions.map(([code,name]) => <option value={code} key={code}>{name} ({code})</option>)}
+        <option value="">Välj kommun vid behov</option>
+        {municipalityOptions.map(([code,name]) => <option key={code} value={code}>{name} ({code})</option>)}
       </select>
     </label>
-  </div>;
-}
-
-function SignoffFields({label,value,onChange}: {label: string; value: Signoff; onChange: (value: Signoff) => void}) {
-  const drawing = useRef<{id: number; box: DOMRect; completed: StrokePoint[][]; current: StrokePoint[]; count: number} | null>(null);
-
-  function addPoint(event: PointerEvent<SVGSVGElement>) {
-    const stroke = drawing.current;
-    if (!stroke || stroke.id !== event.pointerId || stroke.count >= 3500) return;
-    const {box} = stroke;
-    const clamp = (n: number) => Math.round(Math.max(0,Math.min(1,n)) * 10_000) / 10_000;
-    const point: StrokePoint = [clamp((event.clientX-box.left)/box.width),clamp((event.clientY-box.top)/box.height)];
-    const previous = stroke.current.at(-1);
-    if (previous?.[0] === point[0] && previous[1] === point[1]) return;
-    stroke.current = [...stroke.current,point];
-    stroke.count += 1;
-    onChange({...value,strokes:[...stroke.completed,stroke.current]});
-  }
-
-  return <fieldset className={styles.signoff}>
-    <legend>{label}</legend>
-    <div className={styles.grid}>
-      <label>Datum<input type="date" value={value.date} onChange={event => onChange({...value,date:event.target.value})}/></label>
-      <label>Namnförtydligande<input maxLength={90} value={value.name} onChange={event => onChange({...value,name:event.target.value})}/></label>
-    </div>
-    <p>Rita underskriften här eller skriv under den utskrivna PDF:en.</p>
-    <svg className={styles.signature} viewBox="0 0 500 100" preserveAspectRatio="none" role="img" aria-label={`Underskrift ${label.toLowerCase()}`}
-      onPointerDown={event => {
-        if (event.button !== 0 || drawing.current || value.strokes.length >= 80) return;
-        const count = value.strokes.reduce((sum,line) => sum + line.length,0);
-        if (count >= 3500) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        drawing.current = {id:event.pointerId,box:event.currentTarget.getBoundingClientRect(),completed:value.strokes,current:[],count};
-        addPoint(event);
-      }}
-      onPointerMove={addPoint}
-      onLostPointerCapture={event => {
-        if (drawing.current?.id === event.pointerId) drawing.current = null;
-      }}>
-      {value.strokes.map((stroke,index) => stroke.length === 1
-        ? <circle key={index} cx={stroke[0][0]*500} cy={stroke[0][1]*100} r="1.25" fill="currentColor"/>
-        : <polyline key={index} fill="none" stroke="currentColor" strokeWidth="2.5"
-          strokeLinecap="round" strokeLinejoin="round" points={stroke.map(([x,y]) => `${x*500},${y*100}`).join(' ')}/>)}
-    </svg>
-    <button type="button" className="secondary" disabled={!value.strokes.length}
-      onClick={() => onChange({...value,strokes:[]})}>Rensa underskrift</button>
   </fieldset>;
 }
 
 const packagingOptions = ['Flak','Container','Storsäck','Säck','Fat','Dunk','Pall','Löst'];
 
-function WasteFields({entry,onChange,onRemove}: {entry: Waste; onChange: (entry: Waste) => void; onRemove: () => void}) {
-  const [name,code] = wasteOptions[entry.row];
-  const change = <K extends keyof Omit<Waste,'row'>>(field: K, value: Waste[K]) => onChange({...entry,[field]:value});
-  return <fieldset className={styles.waste}>
-    <legend>{name} <span className={styles.code}>{code}</span></legend>
+function WasteFields({row,index,date,onChange,onRemove}: {row: Waste; index: number; date: string; onChange: (row: Waste) => void; onRemove?: () => void}) {
+  const validated = date && wasteCodeAt(row.code,date);
+  return <fieldset className={styles.fieldset}>
+    <legend>Avfallsrad {index+1}</legend>
     <div className={styles.grid}>
-      <label>Antal kollin<input value={entry.packages} inputMode="numeric" maxLength={18}
-        onChange={event => change('packages',event.target.value)}/></label>
-      <label>Emballage<input list="transport-packaging" value={entry.packaging} maxLength={28}
-        onChange={event => change('packaging',event.target.value)}/></label>
-      <label>Uppskattad vikt (kg)<input inputMode="decimal" value={entry.estimatedKg} maxLength={18}
-        onChange={event => change('estimatedKg',event.target.value)}/></label>
-      <label>Invägd vikt (kg)<input inputMode="decimal" value={entry.weighedKg} maxLength={18}
-        onChange={event => change('weighedKg',event.target.value)}/></label>
-      <label>ADR<select value={entry.adr} onChange={event => change('adr',event.target.value as Waste['adr'])}>
-        <option value="">Välj vid behov</option><option value="label">ADR-etikett</option><option value="none">Ej ADR</option>
-      </select></label>
-      {entry.adr === 'label' && <label>ADR-etikett<input required value={entry.adrLabel} maxLength={24}
-        onChange={event => change('adrLabel',event.target.value)}/></label>}
+      <label>Avfallskod<input value={row.code} maxLength={15} list="transport-waste-codes" required
+        onChange={event => {
+          const code = event.target.value;
+          const suggestion = suggestedWaste.find(([key]) => key === code);
+          const previousSuggestion = suggestedWaste.find(([key]) => key === row.code);
+          const useSuggestion = !row.name || row.name === previousSuggestion?.[1];
+          onChange({...row,code,name:useSuggestion ? suggestion?.[1] ?? '' : row.name});
+        }}/>
+        {row.code && date && !validated && <small>Kontrollera koden mot avfallsförteckningen för transportdatumet.</small>}
+      </label>
+      <label>Benämning<input value={row.name} maxLength={180} required onChange={event => onChange({...row,name:event.target.value})}/></label>
+      <label>Vikt (kg)<input value={row.kg} inputMode="decimal" maxLength={18} required onChange={event => onChange({...row,kg:event.target.value})}/></label>
+      <label>Antal kollin<input value={row.packages} inputMode="numeric" maxLength={10} onChange={event => onChange({...row,packages:event.target.value})}/></label>
+      <label>Emballage<input value={row.packaging} list="transport-packaging" maxLength={45} onChange={event => onChange({...row,packaging:event.target.value})}/></label>
     </div>
-    <button type="button" className="secondary" onClick={onRemove} aria-label={`Ta bort ${name}`}><Trash2 size={15}/> Ta bort</button>
+    {onRemove && <button type="button" className="secondary" onClick={onRemove} aria-label={`Ta bort avfallsrad ${index+1}`}>
+      <Trash2 size={15}/> Ta bort
+    </button>}
   </fieldset>;
 }
 
@@ -170,27 +134,18 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
   projects: HubChoice[]; vehicles: HubChoice[]; profileName: string; today: string; failed: boolean;
 }) {
   const [form,setForm] = useState<DocumentFields>(() => ({
-    createdBy:profileName,project:'',registration:'',
-    sender:{...emptyParty,name:'Elleholms Maskin AB',organisation:'556863-2383'},
-    receiver:emptyParty,receiverRow:-1,deliveryNumber:'',waste:[],
-    senderSignoff:{...emptySignoff,date:today,name:profileName},receiverSignoff:emptySignoff,
+    date:today,project:'',registration:'',carrier:elleholms,consignor:emptyParty,receiver:emptyParty,
+    origin:emptyLocation,destination:emptyLocation,deliveryNumber:'',adrReference:'',waste:[emptyWaste],
+    carrierSigner:'',consignorSigner:'',
   }));
-  const [wasteChoice,setWasteChoice] = useState('');
+  const [receiverId,setReceiverId] = useState('');
   const [exporting,setExporting] = useState(false);
-  const [feedback,setFeedback] = useState<{message: string; error?: boolean}>();
+  const [feedback,setFeedback] = useState<{text: string; error?: boolean}>();
+  const lastConsignor = useRef<Party>(emptyParty);
   const update = <K extends keyof DocumentFields>(key: K, value: DocumentFields[K]) =>
     setForm(draft => ({...draft,[key]:value}));
-  const changeMunicipality = (party: 'sender' | 'receiver') => (address: string, code: string) => setForm(draft =>
-    draft[party].address === address ? {...draft,[party]:{...draft[party],municipality:code}} : draft);
-
-  function addWaste() {
-    if (!wasteChoice) return;
-    const row = Number(wasteChoice);
-    const entry: Waste = {row,packages:'',packaging:'',estimatedKg:'',weighedKg:'',adr:'',adrLabel:''};
-    setForm(draft => draft.waste.some(item => item.row === row) ? draft :
-      {...draft,waste:[...draft.waste,entry].sort((a,b) => a.row-b.row)});
-    setWasteChoice('');
-  }
+  const setMunicipality = (field: 'origin' | 'destination') => (value: string, code: string) => setForm(draft =>
+    draft[field].value === value ? {...draft,[field]:{value,municipality:code}} : draft);
 
   async function download(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -207,89 +162,109 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Transportdokument-${form.project.trim().replace(/[^\p{L}\p{N}_-]+/gu,'-')}.pdf`;
+      const reg = form.registration.trim().replace(/[^A-Z0-9-]/gi,'');
+      link.download = ['Transportdokument',form.date,reg].filter(Boolean).join('-')+'.pdf';
       document.body.append(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url),30_000);
-      setFeedback({message:'PDF:en har skapats.'});
+      setFeedback({text:'PDF:en har laddats ner för utskrift och underskrift.'});
     } catch (error) {
-      setFeedback({error:true,message:error instanceof Error ? error.message : 'PDF:en kunde inte skapas.'});
+      setFeedback({error:true,text:error instanceof Error ? error.message : 'PDF:en kunde inte skapas.'});
     } finally {
       setExporting(false);
     }
   }
 
-  const selectedReceiver = receiverOptions[form.receiverRow];
   return <form className={`content ${styles.form}`} onSubmit={download}>
-    <section className="panel">
-      <h2>Projekt och avsändare</h2>
+    <section className={`panel ${styles.first}`}>
+      <h2>Körning</h2>
       {failed && <p role="status">Alla projekt eller fordon kunde inte hämtas från Humla. Du kan fylla i dem manuellt.</p>}
       <div className={styles.grid}>
-        <HubField label="Projektnummer" max={28} value={form.project} options={projects} onChange={value => update('project',value)}
+        <label>Transportdatum<input type="date" value={form.date} required onChange={event => update('date',event.target.value)}/></label>
+        <HubField label="Projekt" max={95} value={form.project} options={projects} onChange={value => update('project',value)}
           onSelect={choice => update('project',choice.value)}/>
         <HubField label="Registreringsnummer" max={24} value={form.registration} options={vehicles}
           onChange={value => update('registration',value)} onSelect={choice => update('registration',choice.value)}/>
-        <label>Dokument skapat av<input required maxLength={90} value={form.createdBy}
-          onChange={event => update('createdBy',event.target.value)}/></label>
       </div>
-      <PartyFields party={form.sender} onChange={value => update('sender',value)} onMunicipality={changeMunicipality('sender')}/>
     </section>
 
     <section className="panel">
-      <h2>Mottagare</h2>
-      <div className={styles.grid}>
-        <label>Mottagningsanläggning
-          <select value={form.receiverRow < 0 ? '' : form.receiverRow} required onChange={event => {
-            const row = event.target.value ? Number(event.target.value) : -1;
-            setForm(draft => ({...draft,receiverRow:row,deliveryNumber:'',receiver:receiverOptions[row] ?? emptyParty}));
-          }}>
-            <option value="">Välj mottagare</option>
-            {receiverOptions.map((option,index) => <option key={option.name} value={index}>{option.name}</option>)}
-            <option value={customReceiver}>Annan mottagare</option>
-          </select>
-        </label>
-        <label>Inleveransnummer<input maxLength={30} value={form.deliveryNumber}
-          onChange={event => update('deliveryNumber',event.target.value)}/></label>
-      </div>
-      {selectedReceiver && <dl className={styles.receiver}>
-        <div><dt>Postadress</dt><dd>{selectedReceiver.address}</dd></div>
-        <div><dt>Organisationsnummer</dt><dd>{selectedReceiver.organisation}</dd></div>
-        <div><dt>Kommunkod</dt><dd>{selectedReceiver.municipality}</dd></div>
-      </dl>}
-      {form.receiverRow === customReceiver && <PartyFields party={form.receiver} onChange={value => update('receiver',value)}
-        onMunicipality={changeMunicipality('receiver')}/>}
+      <h2>Parter</h2>
+      <fieldset className={styles.fieldset}>
+        <legend>Transportör</legend>
+        <PartyFields party={form.carrier} onChange={value => update('carrier',value)}/>
+      </fieldset>
+      <fieldset className={styles.fieldset}>
+        <legend>Lämnare</legend>
+        <label className={styles.checkbox}><input type="checkbox" checked={!form.consignor} onChange={event => {
+          if (form.consignor) lastConsignor.current = form.consignor;
+          update('consignor',event.target.checked ? null : lastConsignor.current);
+        }}/> Ingen separat lämnare, till exempel vid egen transport av eget avfall</label>
+        {form.consignor && <PartyFields party={form.consignor} onChange={value => update('consignor',value)}/>}
+      </fieldset>
+      <fieldset className={styles.fieldset}>
+        <legend>Slutlig mottagare</legend>
+        <div className={styles.grid}>
+          <label>Välj mottagare
+            <select value={receiverId} onChange={event => {
+              const id = event.target.value;
+              setReceiverId(id);
+              const option = id === '' ? undefined : receiverOptions[Number(id)];
+              if (option) {
+                const {municipality,...receiver} = option;
+                setForm(draft => ({...draft,receiver,destination:{value:receiver.address,municipality}}));
+              }
+            }}>
+              <option value="">Fyll i mottagaren själv</option>
+              {receiverOptions.map((option,index) => <option key={option.name} value={index}>{option.name}</option>)}
+            </select>
+          </label>
+          <label>Inleveransnummer<input value={form.deliveryNumber} maxLength={50} onChange={event => update('deliveryNumber',event.target.value)}/></label>
+        </div>
+        <PartyFields party={form.receiver} onChange={value => {setReceiverId('');update('receiver',value);}}/>
+      </fieldset>
     </section>
 
     <section className="panel">
-      <h2>Avfall</h2>
-      <div className={styles.addRow}>
-        <label>Avfallsslag
-          <select value={wasteChoice} onChange={event => setWasteChoice(event.target.value)}>
-            <option value="">Välj avfallsslag</option>
-            {wasteOptions.map(([name,code],index) => <option key={name} value={index}
-              disabled={form.waste.some(entry => entry.row === index)}>{name} ({code})</option>)}
-          </select>
-        </label>
-        <button type="button" className="secondary" onClick={addWaste} disabled={!wasteChoice}><Plus size={16}/> Lägg till</button>
+      <h2>Transportsträcka</h2>
+      <div className={styles.split}>
+        <LocationFields label="Hämtplats" location={form.origin} onChange={value => update('origin',value)} onMunicipality={setMunicipality('origin')}/>
+        <LocationFields label="Slutlig mottagningsplats" location={form.destination} onChange={value => update('destination',value)}
+          onMunicipality={setMunicipality('destination')}/>
       </div>
+    </section>
+
+    <section className="panel">
+      <h2>Avfall som transporteras</h2>
       <datalist id="transport-packaging">{packagingOptions.map(option => <option value={option} key={option}/>)}</datalist>
-      {form.waste.map(entry => <WasteFields key={entry.row} entry={entry}
-        onChange={value => setForm(draft => ({...draft,waste:draft.waste.map(item => item.row === entry.row ? value : item)}))}
-        onRemove={() => setForm(draft => ({...draft,waste:draft.waste.filter(item => item.row !== entry.row)}))}/>)}
+      <datalist id="transport-waste-codes">{suggestedWaste.map(([code,name]) => <option value={code} key={code}>{name}</option>)}</datalist>
+      {form.waste.map((row,index) => <WasteFields key={index} row={row} index={index} date={form.date}
+        onChange={value => update('waste',form.waste.map((item,i) => i === index ? value : item))}
+        onRemove={form.waste.length > 1 ? () => update('waste',form.waste.filter((_,i) => i !== index)) : undefined}/>)}
+      <button type="button" className={`secondary ${styles.fit}`} disabled={form.waste.length >= 100}
+        onClick={() => update('waste',[...form.waste,emptyWaste])}><Plus size={16}/> Lägg till avfallsrad</button>
+      <label className={styles.adr}>Referens till separat ADR-handling, om tillämpligt
+        <input value={form.adrReference} maxLength={70} onChange={event => update('adrReference',event.target.value)}/>
+      </label>
     </section>
 
     <section className="panel">
-      <h2>Underskrifter</h2>
-      <div className={styles.signoffs}>
-        <SignoffFields label="Lämnare" value={form.senderSignoff} onChange={value => update('senderSignoff',value)}/>
-        <SignoffFields label="Mottagare" value={form.receiverSignoff} onChange={value => update('receiverSignoff',value)}/>
+      <h2>Underskrifter före avfärd</h2>
+      <p>Skriv ut PDF:en och låt transportören och eventuell lämnare underteckna. Dokumentet ska följa med transporten.</p>
+      <div className={styles.grid}>
+        <label>Transportörens namnförtydligande<input value={form.carrierSigner} maxLength={100}
+          onChange={event => update('carrierSigner',event.target.value)}/></label>
+        {form.consignor && <label>Lämnarens namnförtydligande<input value={form.consignorSigner} maxLength={100}
+          onChange={event => update('consignorSigner',event.target.value)}/></label>}
       </div>
+      {profileName && !form.carrierSigner && <button type="button" className={`secondary ${styles.fit}`}
+        onClick={() => update('carrierSigner',profileName)}>Fyll i mitt namn som transportörens företrädare</button>}
     </section>
 
     <div className={styles.actions}>
-      <button type="submit" disabled={exporting}><Download size={17}/> {exporting ? 'Skapar PDF…' : 'Ladda ner PDF'}</button>
-      {feedback && <span role={feedback.error ? 'alert' : 'status'}>{feedback.message}</span>}
+      <button type="submit" disabled={exporting}><Download size={17}/> {exporting ? 'Skapar PDF…' : 'Ladda ner PDF för underskrift'}</button>
+      {feedback && <span role={feedback.error ? 'alert' : 'status'}>{feedback.text}</span>}
     </div>
   </form>;
 }
