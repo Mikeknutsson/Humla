@@ -110,6 +110,13 @@ function vehicleLoad(vehicle: Vehicle, profile: TonPriceDraft['profile']) {
   return {load: load !== null && gross !== null && load < gross ? load : null, gross};
 }
 
+export function quickReferenceLoad(draft: TonPriceDraft): number | null {
+  const vehicle = draft.vehicles.find(item => item.id === 'trailer');
+  if (!vehicle || draft.profile === 'reference' || vehicleLoad(vehicle,draft.profile).load !== null ||
+    number(vehicle.hourly,100000) === null) return null;
+  return vehicleLoad(vehicle,'reference').load;
+}
+
 export function calculateTonPrices(draft: TonPriceDraft) {
   const rounds = draft.rounds.map(round => ({id: round.id, result: calculateRound(round)}));
   const roundById = new Map(rounds.map(round => [round.id, round.result]));
