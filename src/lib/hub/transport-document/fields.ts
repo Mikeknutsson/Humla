@@ -16,7 +16,7 @@ export type Waste = {code: string; name: string; estimatedKg: string; weighedKg:
 
 export type DocumentFields = {
   date: string;
-  project: string;
+  workifyOrderNumber: string;
   registration: string;
   carrier: Party;
   consignor: Party | null;
