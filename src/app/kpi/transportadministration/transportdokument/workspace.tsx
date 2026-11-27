@@ -8,6 +8,7 @@ import {elleholms, emptyParty, emptyLocation, emptyWaste, municipalityFor, munic
   type DocumentFields, type HubChoice, type Location, type Party, type Waste} from '@/lib/hub/transport-document/fields';
 import {wasteChoices} from '@/lib/hub/transport-document/waste-options';
 import {SearchField, type Choice} from './search-field';
+import {loadConsignorDetails} from './actions';
 import styles from './workspace.module.css';
 
 function PartyFields({party,onChange,choices,onSelect}: {
@@ -135,10 +136,38 @@ export function DocumentWorkspace({vehicles,customers,customersFailed,profileNam
   const [feedback,setFeedback] = useState<{text: string; error?: boolean}>();
   const lastConsignor = useRef<Party>(emptyParty);
   const selectedCustomer = useRef('');
+  const lookupVersion = useRef(0);
+  const [lookup,setLookup] = useState<{name:string; description:string; source?:string}>();
   const update = <K extends keyof DocumentFields>(key: K, value: DocumentFields[K]) =>
     setForm(draft => ({...draft,[key]:value}));
   const setMunicipality = (field: 'origin' | 'destination') => (value: string, code: string) => setForm(draft =>
     draft[field].value === value ? {...draft,[field]:{value,municipality:code}} : draft);
+
+  async function chooseConsignor(name: string) {
+    const sameCustomer = selectedCustomer.current === name;
+    selectedCustomer.current = name;
+    setForm(draft => ({...draft,consignor:sameCustomer && draft.consignor
+      ? {...draft.consignor,name} : {...emptyParty,name}}));
+    const version = ++lookupVersion.current;
+    setLookup({name,description:'Hämtar kunduppgifter…'});
+    try {
+      const result = await loadConsignorDetails(name);
+      if (version !== lookupVersion.current) return;
+      if (result.status === 'found') {
+        setForm(draft => draft.consignor?.name === name ? {...draft,consignor:{
+          ...draft.consignor, organisation:draft.consignor.organisation || result.organisation,
+          address:draft.consignor.address || result.address,
+        }} : draft);
+        setLookup({name,description:result.organisation && result.address ? 'Kunduppgifter hämtade från Humla Hub.' :
+          'En kunduppgift hämtades från Humla Hub. Kontrollera det andra fältet.',source:result.source});
+      } else {
+        setLookup({name,description:result.status === 'missing' ? 'Kundposten saknar entydiga uppgifter. Fyll i fälten nedan.' :
+          'Kunduppgifterna kunde inte hämtas just nu.'});
+      }
+    } catch {
+      if (version === lookupVersion.current) setLookup({name,description:'Kunduppgifterna kunde inte hämtas just nu.'});
+    }
+  }
 
   async function download(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -199,18 +228,24 @@ export function DocumentWorkspace({vehicles,customers,customersFailed,profileNam
       <fieldset className={styles.fieldset}>
         <legend>Lämnare</legend>
         <label className={styles.checkbox}><input type="checkbox" checked={!form.consignor} onChange={event => {
+          lookupVersion.current += 1;
+          setLookup(undefined);
           if (form.consignor) lastConsignor.current = form.consignor;
           update('consignor',event.target.checked ? null : lastConsignor.current);
         }}/> Ingen separat lämnare, till exempel vid egen transport av eget avfall</label>
         {form.consignor && <>
           {customersFailed && <p role="status">Kundlistan från Workify kunde inte hämtas fullständigt. Du kan fylla i lämnaren manuellt.</p>}
-          <PartyFields party={form.consignor} choices={customerChoices} onChange={value => update('consignor',value)}
-            onSelect={({value}) => {
-              const sameCustomer = selectedCustomer.current === value;
-              selectedCustomer.current = value;
-              if (form.consignor && sameCustomer) update('consignor',{...form.consignor,name:value});
-              else update('consignor',{...emptyParty,name:value});
-            }}/>
+          {lookup?.name === form.consignor.name && <p role="status">{lookup.description}
+            {lookup.source && <> <a href={lookup.source} target="_blank" rel="noreferrer">Visa källa</a></>}
+          </p>}
+          <PartyFields party={form.consignor} choices={customerChoices} onChange={value => {
+            if (value.name !== form.consignor?.name) {
+              lookupVersion.current += 1;
+              selectedCustomer.current = '';
+              setLookup(undefined);
+            }
+            update('consignor',value);
+          }} onSelect={({value}) => void chooseConsignor(value)}/>
         </>}
       </fieldset>
       <fieldset className={styles.fieldset}>
