@@ -123,6 +123,13 @@ function roadEstimate(metrics?: RoadMetrics) {
 
 const roadFields = ['distanceMeters','durationMillis'];
 
+export async function reverseGeocodePoint(mapsKey: string, point: Point) {
+  await loadPlaces(mapsKey);
+  const {Geocoder} = await (window as GoogleWindow).google!.maps.importLibrary('geocoding');
+  const {results} = await new Geocoder().geocode({location:point});
+  return results;
+}
+
 export async function geocodeSwedishAddress(mapsKey: string, address: string, bounds?: Bounds) {
   await loadPlaces(mapsKey);
   const maps = (window as GoogleWindow).google?.maps;
