@@ -47,6 +47,8 @@ Deno.serve(async (request: Request) => {
   }
 
   if (input.action === "create") {
+    const role = input.role ?? "supervisor";
+    if (role !== "supervisor" && role !== "transport_admin") return fail(400, "validation");
     const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
     const name = typeof input.name === "string" ? input.name.trim() : "";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !name || name.length > 120) {
@@ -57,7 +59,7 @@ Deno.serve(async (request: Request) => {
       return fail(400, error?.code === "email_exists" || error?.code === "user_already_exists" ? "duplicate" : "create");
     }
     const membership = await admin.from("hub_tenant_members").insert({
-      tenant_id: tenantId, user_id: data.user.id, role: "supervisor", status: "active", display_name: name,
+      tenant_id: tenantId, user_id: data.user.id, role, status: "active", display_name: name,
     });
     if (membership.error) {
       const cleanup = await admin.auth.admin.deleteUser(data.user.id);
@@ -70,14 +72,14 @@ Deno.serve(async (request: Request) => {
   if (input.action !== "status" && input.action !== "reset" && input.action !== "confirm_email") return fail(400, "validation");
   if (typeof input.id !== "string" || !uuid.test(input.id)) return fail(400, "validation");
   const { data: member, error: memberError } = await admin.from("hub_tenant_members")
-    .select("user_id").eq("tenant_id", tenantId).eq("user_id", input.id).eq("role", "supervisor").maybeSingle();
+    .select("user_id,role").eq("tenant_id", tenantId).eq("user_id", input.id).in("role", ["supervisor","transport_admin"]).maybeSingle();
   if (memberError) return fail(503, "unavailable");
   if (!member) return fail(403, "access");
 
   if (input.action === "status") {
     if (input.status !== "active" && input.status !== "inactive") return fail(400, "validation");
     const { error } = await admin.from("hub_tenant_members").update({ status: input.status })
-      .eq("tenant_id", tenantId).eq("user_id", member.user_id).eq("role", "supervisor").select("user_id").single();
+      .eq("tenant_id", tenantId).eq("user_id", member.user_id).eq("role", member.role).select("user_id").single();
     return error ? fail(500, "update") : reply(200, { ok: true });
   }
 

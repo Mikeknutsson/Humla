@@ -32,6 +32,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
     return <main className="access-denied"><div><span>!</span><h1>Din session fungerar, men KPI-arbetsytan kunde inte öppnas</h1><p>Ingen aktiv KPI-arbetsyta kunde läsas för användaren.</p><a className="primary" href="/kpi/login?stay=1">Hantera KPI-sessionen</a></div></main>;
   }
   if (member.role === "worker") redirect("/chauffor");
+  if (member.role === "transport_admin") redirect("/kpi/transportadministration/transportdokument");
   if (member.role === "supervisor") redirect("/kpi/mina-enheter");
   const [{ data: tenant }, { data: canRead, error: readError }, { data: canManage, error: manageError }, { data: settings }] = await Promise.all([
     supabase.from("hub_tenants").select("name").eq("id", member.tenant_id).maybeSingle(),

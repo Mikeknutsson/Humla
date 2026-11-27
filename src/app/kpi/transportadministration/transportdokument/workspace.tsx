@@ -8,7 +8,8 @@ import {elleholms, emptyParty, emptyLocation, emptyWaste, municipalityFor, munic
   type DocumentFields, type HubChoice, type Location, type Party, type Waste} from '@/lib/hub/transport-document/fields';
 import {wasteChoices} from '@/lib/hub/transport-document/waste-options';
 import {SearchField, type Choice} from './search-field';
-import {loadConsignorDetails} from './actions';
+import {loadConsignorDetails, searchConsignorDetails} from './actions';
+import {searchableCompany, type CompanyWebDetails} from '@/lib/hub/transport-document/company-web-evidence';
 import styles from './workspace.module.css';
 
 function PartyFields({party,onChange,choices,onSelect}: {
@@ -137,19 +138,22 @@ export function DocumentWorkspace({vehicles,customers,customersFailed,profileNam
   const lastConsignor = useRef<Party>(emptyParty);
   const selectedCustomer = useRef('');
   const lookupVersion = useRef(0);
-  const [lookup,setLookup] = useState<{name:string; description:string; source?:string}>();
+  const [lookup,setLookup] = useState<{name:string; description:string; source?:string; web?:CompanyWebDetails; pending?:boolean}>();
+  const webLookups = useRef(new Map<string,Awaited<ReturnType<typeof searchConsignorDetails>>>());
+  const webDetails = lookup?.name === form.consignor?.name ? lookup?.web : undefined;
   const update = <K extends keyof DocumentFields>(key: K, value: DocumentFields[K]) =>
     setForm(draft => ({...draft,[key]:value}));
   const setMunicipality = (field: 'origin' | 'destination') => (value: string, code: string) => setForm(draft =>
     draft[field].value === value ? {...draft,[field]:{value,municipality:code}} : draft);
 
-  async function chooseConsignor(name: string) {
-    const sameCustomer = selectedCustomer.current === name;
+  async function chooseConsignor(name: string, keepEntered = false) {
+    name = name.trim();
+    const sameCustomer = keepEntered || selectedCustomer.current === name;
     selectedCustomer.current = name;
     setForm(draft => ({...draft,consignor:sameCustomer && draft.consignor
       ? {...draft.consignor,name} : {...emptyParty,name}}));
     const version = ++lookupVersion.current;
-    setLookup({name,description:'Hämtar kunduppgifter…'});
+    setLookup({name,description:'Hämtar kunduppgifter…',pending:true});
     try {
       const result = await loadConsignorDetails(name);
       if (version !== lookupVersion.current) return;
@@ -158,11 +162,28 @@ export function DocumentWorkspace({vehicles,customers,customersFailed,profileNam
           ...draft.consignor, organisation:draft.consignor.organisation || result.organisation,
           address:draft.consignor.address || result.address,
         }} : draft);
-        setLookup({name,description:result.organisation && result.address ? 'Kunduppgifter hämtade från Humla Hub.' :
-          'En kunduppgift hämtades från Humla Hub. Kontrollera det andra fältet.',source:result.source});
+        if (result.organisation && result.address) {
+          setLookup({name,description:'Kunduppgifter hämtade från Humla Hub.',source:result.source});
+          return;
+        }
+      } else if (result.status === 'unavailable') {
+        setLookup({name,description:'Kundregistret kunde inte nås just nu.'});
+        return;
+      }
+      if (!searchableCompany(name)) {
+        setLookup({name,description:'Fyll i de uppgifter som saknas.'});
+        return;
+      }
+      setLookup({name,description:'Söker företagsuppgifter på nätet…',pending:true});
+      const web = webLookups.current.get(name) ?? await searchConsignorDetails(name);
+      if (web.status === 'found' || web.status === 'missing') webLookups.current.set(name,web);
+      if (version !== lookupVersion.current) return;
+      const knownNumber = result.status === 'found' ? result.organisation.replace(/\D/g,'') : '';
+      if (web.status === 'found' && (!knownNumber || knownNumber === web.details.organisation.replace(/\D/g,''))) {
+        setLookup({name,description:'Företagsuppgifter hittade på nätet.',web:web.details});
       } else {
-        setLookup({name,description:result.status === 'missing' ? 'Kundposten saknar entydiga uppgifter. Fyll i fälten nedan.' :
-          'Kunduppgifterna kunde inte hämtas just nu.'});
+        setLookup({name,description:web.status === 'unavailable' ? 'Webbsökningen kunde inte nås just nu.' :
+          'Webbsökningen gav ingen entydig uppgift som stämmer med kundregistret.'});
       }
     } catch {
       if (version === lookupVersion.current) setLookup({name,description:'Kunduppgifterna kunde inte hämtas just nu.'});
@@ -238,6 +259,19 @@ export function DocumentWorkspace({vehicles,customers,customersFailed,profileNam
           {lookup?.name === form.consignor.name && <p role="status">{lookup.description}
             {lookup.source && <> <a href={lookup.source} target="_blank" rel="noreferrer">Visa källa</a></>}
           </p>}
+          {webDetails && <div>
+            <p>{webDetails.organisation} · {webDetails.address} <a href={webDetails.source} target="_blank" rel="noreferrer">Visa webbkällan</a></p>
+            <button type="button" className="secondary" onClick={() => {
+              setForm(draft => {
+                const party = draft.consignor;
+                if (!party || party.name !== lookup?.name ||
+                  (party.organisation && party.organisation.replace(/\D/g,'') !== webDetails.organisation.replace(/\D/g,''))) return draft;
+                return {...draft,consignor:{...party,organisation:party.organisation || webDetails.organisation,
+                  address:party.address || webDetails.address}};
+              });
+              setLookup({name:lookup?.name ?? '',description:'Kontrollera lämnaren före utskrift.',source:webDetails.source});
+            }}>Använd uppgifterna</button>
+          </div>}
           <PartyFields party={form.consignor} choices={customerChoices} onChange={value => {
             if (value.name !== form.consignor?.name) {
               lookupVersion.current += 1;
@@ -246,6 +280,9 @@ export function DocumentWorkspace({vehicles,customers,customersFailed,profileNam
             }
             update('consignor',value);
           }} onSelect={({value}) => void chooseConsignor(value)}/>
+          {form.consignor.name.trim() && (!form.consignor.organisation || !form.consignor.address) && !webDetails &&
+            <button type="button" className={`secondary ${styles.fit}`} disabled={lookup?.pending}
+              onClick={() => void chooseConsignor(form.consignor?.name ?? '',true)}>Sök företagsuppgifter</button>}
         </>}
       </fieldset>
       <fieldset className={styles.fieldset}>

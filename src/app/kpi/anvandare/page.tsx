@@ -21,7 +21,7 @@ const errors:Record<string,string> = {
   duplicate:"E-postadressen används redan av ett konto.",
   validation:"Kontrollera uppgifterna. Lösenordet behöver vara minst 12 tecken och högst 72 byte.",
   create:"Kontot kunde inte skapas.",
-  membership:"Arbetsledarkontot kunde inte knytas till arbetsytan.",
+  membership:"Kontot kunde inte knytas till arbetsytan.",
   update:"Kontostatusen kunde inte ändras.",
   reset:"Lösenordet kunde inte ändras.",
   confirm_email:"E-postadressen kunde inte bekräftas.",
@@ -49,10 +49,10 @@ async function changeAccount(action:string, success:string, fields:Record<string
   redirect("/kpi/anvandare?"+new URLSearchParams(result.error?{error:result.error}:{success}));
 }
 
-async function createForeman(formData:FormData) {
+async function createAccount(formData:FormData) {
   "use server";
   await changeAccount("create","created",{
-    name:formData.get("name"),email:formData.get("email"),password:formData.get("password"),
+    role:formData.get("role"),name:formData.get("name"),email:formData.get("email"),password:formData.get("password"),
   });
 }
 async function changeStatus(formData:FormData) {
@@ -71,7 +71,7 @@ async function resetPassword(_previous:PasswordResult, formData:FormData):Promis
     action:"reset",id:formData.get("id"),password:formData.get("password"),
   });
   if(result.error)return {success:false,message:errors[result.error]??errors.unavailable};
-  return {success:true,message:"Lösenordet har ändrats. Arbetsledaren kan logga in med det nya lösenordet."};
+  return {success:true,message:"Lösenordet har ändrats. Användaren kan logga in med det nya lösenordet."};
 }
 
 export default async function UsersPage({searchParams}:{searchParams:Promise<{error?:string;success?:string}>}) {
@@ -81,26 +81,30 @@ export default async function UsersPage({searchParams}:{searchParams:Promise<{er
   const members=(accounts.data?.members??[]) as Member[];
   return <div className="kpi-app"><main className="content" style={{maxWidth:950,margin:"0 auto",padding:24}}>
     <a href="/kpi/kontrollpanel">← Kontrollpanelen</a><h1>Användare & behörigheter</h1>
-    <p>Skapa arbetsledarkonton med e-postadress och lösenord. Kontona får rollen arbetsledare, inte administratör.</p>
+    <p>Skapa konton för arbetsledare eller transportadministration.</p>
     {accounts.error&&<p role="alert">Användarlistan kunde inte hämtas. Uppdatera sidan för att försöka igen.</p>}
     {params.error&&<p role="alert">{Object.hasOwn(errors,params.error)?errors[params.error]:"Åtgärden kunde inte genomföras."}</p>}
-    {params.success&&<p role="status">{params.success==="created"?"Arbetsledarkontot har skapats.":params.success==="email_confirmed"?"E-postadressen har bekräftats.":"Ändringen har sparats."}</p>}
-    <section className="panel"><h2>Skapa arbetsledare</h2><form action={createForeman} style={{display:"grid",gap:12,maxWidth:440}}>
+    {params.success&&<p role="status">{params.success==="created"?"Kontot har skapats.":params.success==="email_confirmed"?"E-postadressen har bekräftats.":"Ändringen har sparats."}</p>}
+    <section className="panel"><h2>Skapa konto</h2><form action={createAccount} style={{display:"grid",gap:12,maxWidth:440}}>
+      <label>Profil<select name="role" defaultValue="supervisor">
+        <option value="supervisor">Arbetsledare</option>
+        <option value="transport_admin">Transportadministration – transportdokument</option>
+      </select></label>
       <label>Namn<input name="name" required maxLength={120}/></label>
       <label>E-postadress<input name="email" type="email" autoComplete="off" required/></label>
       <label>Tillfälligt lösenord (minst 12 tecken)<input name="password" type="password" minLength={12} autoComplete="new-password" required/></label>
       <button className="primary">Skapa konto</button>
     </form></section>
     <section className="panel"><h2>Befintliga användare</h2>{(members??[]).map(m=><details key={m.user_id} style={{padding:"12px 0",borderBottom:"1px solid #8884"}}>
-      <summary><strong>{m.display_name??"Utan namn"}</strong> · {m.email??"E-post saknas"} · {m.role==="owner"?"Ägare":m.role==="supervisor"?"Arbetsledare":m.role} · {m.status==="active"?"Aktiv":"Spärrad"}</summary>
-      {m.role==="supervisor"&&<div style={{display:"grid",gap:12,padding:12}}>
+      <summary><strong>{m.display_name??"Utan namn"}</strong> · {m.email??"E-post saknas"} · {m.role==="owner"?"Ägare":m.role==="supervisor"?"Arbetsledare":m.role==="transport_admin"?"Transportadministration":m.role} · {m.status==="active"?"Aktiv":"Spärrad"}</summary>
+      {(m.role==="supervisor"||m.role==="transport_admin")&&<div style={{display:"grid",gap:12,padding:12}}>
         <form action={changeStatus}><input type="hidden" name="id" value={m.user_id}/><input type="hidden" name="status" value={m.status==="active"?"inactive":"active"}/><button>{m.status==="active"?"Spärra konto":"Aktivera konto"}</button></form>
         {m.email&&<div>
           <p>{m.emailConfirmed?"E-post bekräftad":"E-post väntar på bekräftelse"}</p>
           {!m.emailConfirmed&&<form action={confirmEmail}>
             <input type="hidden" name="id" value={m.user_id}/>
             <input type="hidden" name="email" value={m.email}/>
-            <p>Bekräfta adressen när du har kontrollerat att den tillhör arbetsledaren.</p>
+            <p>Bekräfta adressen när du har kontrollerat att den tillhör användaren.</p>
             <button type="submit" className="secondary">Bekräfta e-postadress</button>
           </form>}
         </div>}
