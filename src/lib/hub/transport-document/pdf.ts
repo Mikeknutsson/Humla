@@ -136,12 +136,16 @@ export async function renderTransportDocument(fields: DocumentFields) {
     party('SLUTLIG MOTTAGARE',fields.receiver)]);
 
   const packaging = fields.waste.some(row => row.packages || row.packaging);
-  const codeWidth = 95;
-  const weightWidth = 100;
-  const packagingWidth = packaging ? 114 : 0;
+  const codeWidth = 76;
+  const weightWidth = 90;
+  const packagingWidth = packaging ? 100 : 0;
   const xDescription = margin + codeWidth;
-  const xPackaging = width - margin - weightWidth - packagingWidth;
+  const xPackaging = width - margin - 2*weightWidth - packagingWidth;
   const right = width - margin - 10;
+
+  function rightAligned(value: string, edge: number, top: number, size: number, color = black) {
+    text(value,edge-bold.widthOfTextAtSize(value,size),top,size,bold,color);
+  }
 
   function tableHeader() {
     heading('Avfall som transporteras');
@@ -149,8 +153,8 @@ export async function renderTransportDocument(fields: DocumentFields) {
     text('Avfallskod',margin+10,y+7,9,bold,white);
     text('Benämning',xDescription,y+7,9,bold,white);
     if (packaging) text('Kollin / emballage',xPackaging,y+7,9,bold,white);
-    const weight = 'Vikt (kg)';
-    text(weight,right-bold.widthOfTextAtSize(weight,9),y+7,9,bold,white);
+    rightAligned('Uppskattad vikt (kg)',right-weightWidth,y+7,9,white);
+    rightAligned('Invägt kg',right,y+7,9,white);
     y += 24;
   }
 
@@ -171,8 +175,9 @@ export async function renderTransportDocument(fields: DocumentFields) {
     text(row.code,margin+10,y+8,10,bold);
     description.forEach((item,j) => text(item,xDescription,y+8+j*13,10));
     packs.forEach((item,j) => text(item,xPackaging,y+8+j*13,9));
-    const kg = formatKg.format(Number(row.kg));
-    text(kg,right-bold.widthOfTextAtSize(kg,10),y+8,10,bold);
+    if (row.estimatedKg) rightAligned(formatKg.format(Number(row.estimatedKg)),right-weightWidth,y+8,10);
+    if (row.weighedKg) rightAligned(formatKg.format(Number(row.weighedKg)),right,y+8,10);
+    else rule(right-64,y+21,64,grey);
     rule(margin,y+h,contentWidth);
     y += h;
   });
@@ -182,17 +187,33 @@ export async function renderTransportDocument(fields: DocumentFields) {
     ...(fields.consignor ? [{label:'Lämnare',name:fields.consignorSigner}] : [])];
   const gap = 20;
   const signWidth = (contentWidth-(signers.length-1)*gap) / signers.length;
-  room(101);
+  const signerLines = signers.map(({name}) => wrap(
+    name ? `Namnförtydligande  ${name}` : 'Namnförtydligande __________________________',normal,8,signWidth));
+  const signingHeight = 62 + Math.max(...signerLines.map(rows => rows.length))*10;
+  room(24 + signingHeight);
   heading('Underskrifter före avfärd');
-  signers.forEach(({label,name},i) => {
+  signers.forEach(({label},i) => {
     const x = margin+i*(signWidth+gap);
     text(label,x,y,10,bold);
     rule(x,y+42,signWidth,grey);
     text('Underskrift',x,y+47,8,normal,grey);
-    const nameLines = wrap(name ? `Namnförtydligande  ${name}` : 'Namnförtydligande __________________________',
-      normal,8,signWidth);
-    nameLines.forEach((row,j) => text(row,x,y+62+j*10,8,normal,grey));
+    signerLines[i].forEach((row,j) => text(row,x,y+62+j*10,8,normal,grey));
   });
+
+  y += signingHeight + 20;
+  room(85);
+  heading('Mottagningskvittens vid lossning (frivillig)');
+
+  const receiptFields = (labels: string[], top: number, writingHeight: number) => {
+    const fieldWidth = (contentWidth - (labels.length - 1)*gap) / labels.length;
+    labels.forEach((label,i) => {
+      const x = margin + i*(fieldWidth+gap);
+      text(label,x,top,8,bold,grey);
+      rule(x,top+writingHeight,fieldWidth,grey);
+    });
+  };
+  receiptFields(['Datum','Invägd totalvikt (kg)','Vågsedelsnummer'],y,24);
+  receiptFields(['Mottagarens underskrift','Namnförtydligande'],y+32,28);
 
   const pages = pdf.getPages();
   pages.forEach((p,i) => {
