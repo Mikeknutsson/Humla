@@ -1,92 +1,209 @@
-import {readFile} from 'node:fs/promises';
-import path from 'node:path';
-import {PDFDocument, StandardFonts, rgb, type PDFFont} from 'pdf-lib';
-import {customReceiver, receiverOptions, type DocumentFields, type Signoff} from './fields';
+import {randomUUID} from 'node:crypto';
+import {PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage} from 'pdf-lib';
+import {elleholmsLogoJpeg} from '../../kpi/internal-economy-logo';
+import {municipalityOptions, type DocumentFields, type Location, type Party} from './fields';
 
-// Coordinates in PDF points from the upper left of the original A4 template.
-const senderColumns = [36.3,78.3,193.1,353.6,416.4,474.6,560.5];
-const receiverColumns = [35,56,197.8,382.3,451.5,502.5,566.4];
-const receiverRows = [172.45,184.05,205.25,230.25,251.45,262.35,274.95,289.65];
-const wasteColumns = [213.6,232.7,290.4,347.1,418,467.6,517.2,559.8];
-const wasteRows = [327.45,344.75,360.95,375.35,394.25,408.85,422.35,437.35,459.15,478.05,496.15,
-  515.05,531.45,549.55,563.95,580.85,596.85,612.05,628.05,644.05,662.95,682.85];
+const width = 595.28;
+const height = 841.89;
+const margin = 38;
+const contentWidth = width - 2 * margin;
+const black = rgb(0.14,0.14,0.14);
+const grey = rgb(0.34,0.35,0.36);
+const line = rgb(0.83,0.83,0.82);
+const soft = rgb(0.96,0.96,0.95);
+const gold = rgb(0.98,0.77,0.12);
+const white = rgb(1,1,1);
+const limit = height - 67;
+const formatKg = new Intl.NumberFormat('sv-SE',{maximumFractionDigits:3});
+const municipalities = new Map(municipalityOptions);
 
-const templatePath = path.join(process.cwd(),'src/lib/hub/transport-document/transport-document-template.pdf');
+export class DocumentTextError extends Error {}
+
+function wrap(value: string, font: PDFFont, size: number, available: number) {
+  try { font.encodeText(value); } catch {
+    throw new DocumentTextError(`PDF:en kan inte skriva alla tecken i ”${value.slice(0,40)}”. Kontrollera fältet.`);
+  }
+  const rows: string[] = [];
+  let row = '';
+  for (let word of value.split(' ')) {
+    if (font.widthOfTextAtSize(row ? row+' '+word : word,size) <= available) {
+      row = row ? row+' '+word : word;
+      continue;
+    }
+    if (row) rows.push(row);
+    while (font.widthOfTextAtSize(word,size) > available) {
+      let end = 1;
+      while (end < word.length && font.widthOfTextAtSize(word.slice(0,end+1),size) <= available) end += 1;
+      rows.push(word.slice(0,end));
+      word = word.slice(end);
+    }
+    row = word;
+  }
+  if (row) rows.push(row);
+  return rows;
+}
 
 export async function renderTransportDocument(fields: DocumentFields) {
-  const pdf = await PDFDocument.load(await readFile(templatePath));
-  const page = pdf.getPage(0);
-  const height = page.getHeight();
-  const [normal,italic,bold] = await Promise.all([
-    pdf.embedFont(StandardFonts.TimesRoman),
-    pdf.embedFont(StandardFonts.TimesRomanItalic),
-    pdf.embedFont(StandardFonts.TimesRomanBold),
+  const pdf = await PDFDocument.create();
+  const [normal,bold,logo] = await Promise.all([
+    pdf.embedFont(StandardFonts.Helvetica),
+    pdf.embedFont(StandardFonts.HelveticaBold),
+    pdf.embedJpg('data:image/jpeg;base64,' + elleholmsLogoJpeg),
   ]);
+  const hazardous = fields.waste.some(row => row.code.endsWith('*'));
+  const subtitle = hazardous ? 'Farligt avfall' : 'Avfall';
+  const documentId = randomUUID().replaceAll('-','').slice(0,12).toUpperCase();
+  let page: PDFPage;
+  let y = 0;
 
-  function cell(value: string, x1: number, x2: number, y1: number, y2: number,
-    font: PDFFont, size = 8, align: 'left' | 'center' | 'right' = 'left', multiline = false) {
+  function text(value: string, x: number, top: number, size: number, font = normal, color = black) {
     if (!value) return;
-    const inset = align === 'left' ? 5.3 : 2;
-    const width = x2 - x1 - inset - 2;
-    // Standard PDF Times fonts use WinAnsi. Report unsupported input instead of dropping letters.
-    try { font.encodeText(value); } catch {
-      throw new Error(`PDF:en kan inte skriva alla tecken i ”${value.slice(0,45)}”. Kontrollera fältet.`);
+    page.drawText(value,{x,y:height-top-size,size,font,color});
+  }
+  function box(x: number, top: number, w: number, h: number, color = soft) {
+    page.drawRectangle({x,y:height-top-h,width:w,height:h,color});
+  }
+  function rule(x: number, top: number, w: number, color = line, thickness = 0.8) {
+    page.drawLine({start:{x,y:height-top},end:{x:x+w,y:height-top},thickness,color});
+  }
+
+  function newPage(first = false) {
+    page = pdf.addPage([width,height]);
+    const logoWidth = first ? 148 : 113;
+    const mark = logo.scale(logoWidth / logo.width);
+    page.drawImage(logo,{x:margin,y:height-30-mark.height,width:mark.width,height:mark.height});
+    const dateX = width-margin-104;
+    text('TRANSPORTDATUM',dateX,32,8,bold,grey);
+    text(fields.date,dateX,45,14,bold);
+    text(`Dokument ${documentId}`,dateX,63,7,normal,grey);
+    box(margin,first ? 84 : 74,contentWidth,3,gold);
+    if (first) {
+      text('Transportdokument',margin,99,30,bold);
+      text(subtitle,margin,137,13,normal,grey);
+      y = 164;
+    } else {
+      text(`Transportdokument för ${subtitle.toLocaleLowerCase('sv')} – fortsättning`,margin,90,14,bold);
+      y = 116;
     }
-    const measure = (line: string) => font.widthOfTextAtSize(line,size);
-    let lines = [value];
-    const fits = () => lines.length * (size + 0.8) <= y2 - y1 - 0.8 && lines.every(line => measure(line) <= width);
-    if (multiline && !fits()) {
-      const words = value.split(' ');
-      for (let split = 1; split < words.length; split++) {
-        const pair = [words.slice(0,split).join(' '),words.slice(split).join(' ')];
-        if (Math.max(...pair.map(measure)) < Math.max(...lines.map(measure))) lines = pair;
-      }
-    }
-    while (!fits() && size > 5.5) size -= 0.25;
-    if (!fits()) throw new Error(`”${value.slice(0,45)}” får inte plats i PDF-mallen. Korta fältet och försök igen.`);
-    const lineHeight = size + 0.8;
-    lines.forEach((line,index) => {
-      const x = align === 'center' ? (x1 + x2 - measure(line)) / 2 :
-        align === 'right' ? x2 - measure(line) - 2 : x1 + inset;
-      const center = (y1 + y2) / 2 + (index - (lines.length - 1) / 2) * lineHeight;
-      page.drawText(line,{x,y:height-center-size*0.26,size,font});
+  }
+
+  function room(amount: number) {
+    if (y + amount > limit) newPage();
+  }
+
+  function heading(label: string) {
+    text(label,margin,y,15,bold);
+    y += 24;
+  }
+
+  function cardGrid(title: string, cards: {label: string; lines: [string, boolean][]}[]) {
+    const gap = 8;
+    const column = (contentWidth - (cards.length-1)*gap) / cards.length;
+    const layouts = cards.map(card => card.lines.flatMap(([value,heading]) =>
+      wrap(value,heading ? bold : normal,heading ? 10 : 9,column-22).map(row => ({row,heading}))));
+    const h = 38 + Math.max(...layouts.map(rows => rows.length * 13));
+    room(h + 24);
+    heading(title);
+    layouts.forEach((rows,i) => {
+      const x = margin + i*(column+gap);
+      box(x,y,column,h);
+      text(cards[i].label,x+11,y+9,8,bold,grey);
+      rows.forEach(({row,heading},j) => text(row,x+11,y+24+j*13,heading ? 10 : 9,heading ? bold : normal));
     });
+    y += h + 17;
   }
 
-  cell(fields.createdBy, 270,561.4,53,66,normal,8,'right');
-  const {sender} = fields;
-  [fields.project,sender.name,sender.address,sender.organisation,sender.municipality,fields.registration].forEach((value,i) => {
-    cell(value,senderColumns[i],senderColumns[i+1],118.65,143.85,italic,8,'left',true);
+  const place = (label: string, location: Location): Parameters<typeof cardGrid>[1][number] => ({
+    label,lines:[[location.value,true], ...(location.municipality
+      ? [[`${municipalities.get(location.municipality)} (${location.municipality})`,false] as [string, boolean]] : [])],
+  });
+  const party = (label: string, value: Party): Parameters<typeof cardGrid>[1][number] => ({
+    label,lines:[[value.name,true],[value.address,false],[value.organisation,false]],
   });
 
-  const lastRow = receiverOptions.length - 1;
-  const receiver = fields.receiverRow === customReceiver ? fields.receiver : receiverOptions[lastRow];
-  [receiver.name,receiver.address,receiver.organisation,receiver.municipality].forEach((value,i) => {
-    cell(value,receiverColumns[i+1],receiverColumns[i+2],receiverRows[lastRow],receiverRows[lastRow+1],
-      i === 3 ? normal : italic, i === 3 ? 8 : 9,i === 3 ? 'center' : 'left', i < 2);
-  });
-  const selectedRow = Math.min(fields.receiverRow,lastRow);
-  cell('X',receiverColumns[0],receiverColumns[1],receiverRows[selectedRow],receiverRows[selectedRow+1],normal,10,'center');
-  cell(fields.deliveryNumber,receiverColumns[5],receiverColumns[6],receiverRows[selectedRow],receiverRows[selectedRow+1],normal,8,'center');
-
-  for (const entry of fields.waste) {
-    const values = ['X',entry.packages,entry.packaging,entry.estimatedKg && `${entry.estimatedKg} kg`,
-      entry.weighedKg,entry.adrLabel,entry.adr === 'none' ? 'X' : ''];
-    values.forEach((value,i) => cell(value,wasteColumns[i],wasteColumns[i+1],wasteRows[entry.row],wasteRows[entry.row+1],bold,8,'center'));
+  newPage(true);
+  const references: [string,string][] = [['Projekt',fields.project],['Fordon',fields.registration],
+    ['Inleveransnummer',fields.deliveryNumber],['ADR-handlingens referens',fields.adrReference]];
+  const visibleReferences = references.filter(([,value]) => value);
+  if (visibleReferences.length) {
+    const rows = wrap(visibleReferences.map(([label,value]) => `${label} ${value}`).join('  |  '),normal,9,contentWidth);
+    rows.forEach((row,i) => text(row,margin,y+i*13,9,normal,grey));
+    y += rows.length*13 + 11;
   }
 
-  function sign({date,name,strokes}: Signoff, top: number, bottom: number) {
-    cell(date,177.3,248.1,top,bottom,bold,10);
-    cell(name,403.8,559.3,top,bottom,bold,8,'left',true);
-    for (const stroke of strokes) {
-      const points = stroke.map(([x,y]) => ({x:252 + x * 147,y:height - top - 2 - y * (bottom - top - 4)}));
-      points.forEach((end,index) => {
-        if (index) page.drawLine({start:points[index-1],end,thickness:0.85,color:rgb(0.12,0.17,0.36)});
-        else page.drawCircle({x:end.x,y:end.y,size:0.42,color:rgb(0.12,0.17,0.36)});
-      });
+  cardGrid('Transportsträcka',[place('HÄMTPLATS',fields.origin),place('SLUTLIG MOTTAGNINGSPLATS',fields.destination)]);
+  cardGrid('Parter',[party('TRANSPORTÖR',fields.carrier),...(fields.consignor ? [party('LÄMNARE',fields.consignor)] : []),
+    party('SLUTLIG MOTTAGARE',fields.receiver)]);
+
+  const packaging = fields.waste.some(row => row.packages || row.packaging);
+  const codeWidth = 95;
+  const weightWidth = 100;
+  const packagingWidth = packaging ? 114 : 0;
+  const xDescription = margin + codeWidth;
+  const xPackaging = width - margin - weightWidth - packagingWidth;
+  const right = width - margin - 10;
+
+  function tableHeader() {
+    heading('Avfall som transporteras');
+    box(margin,y,contentWidth,24,black);
+    text('Avfallskod',margin+10,y+7,9,bold,white);
+    text('Benämning',xDescription,y+7,9,bold,white);
+    if (packaging) text('Kollin / emballage',xPackaging,y+7,9,bold,white);
+    const weight = 'Vikt (kg)';
+    text(weight,right-bold.widthOfTextAtSize(weight,9),y+7,9,bold,white);
+    y += 24;
+  }
+
+  const waste = fields.waste.map(row => {
+    const description = wrap(row.name,normal,10,xPackaging-xDescription-12);
+    const packageLabel = [row.packages ? `${row.packages} kollin` : '',row.packaging].filter(Boolean).join(' / ');
+    const packs = packaging && packageLabel ? wrap(packageLabel,normal,9,packagingWidth-12) : [];
+    return {row,description,packs,h:Math.max(29,Math.max(description.length,packs.length)*13+12)};
+  });
+  room(48+waste[0].h);
+  tableHeader();
+  waste.forEach(({row,description,packs,h},i) => {
+    if (y+h > limit) {
+      newPage();
+      tableHeader();
     }
-  }
-  sign(fields.senderSignoff,707.95,736.05);
-  sign(fields.receiverSignoff,736.05,770.25);
+    if (i%2 === 0) box(margin,y,contentWidth,h);
+    text(row.code,margin+10,y+8,10,bold);
+    description.forEach((item,j) => text(item,xDescription,y+8+j*13,10));
+    packs.forEach((item,j) => text(item,xPackaging,y+8+j*13,9));
+    const kg = formatKg.format(Number(row.kg));
+    text(kg,right-bold.widthOfTextAtSize(kg,10),y+8,10,bold);
+    rule(margin,y+h,contentWidth);
+    y += h;
+  });
+
+  y += 20;
+  const signers = [{label:'Transportör',name:fields.carrierSigner},
+    ...(fields.consignor ? [{label:'Lämnare',name:fields.consignorSigner}] : [])];
+  const gap = 20;
+  const signWidth = (contentWidth-(signers.length-1)*gap) / signers.length;
+  room(101);
+  heading('Underskrifter före avfärd');
+  signers.forEach(({label,name},i) => {
+    const x = margin+i*(signWidth+gap);
+    text(label,x,y,10,bold);
+    rule(x,y+42,signWidth,grey);
+    text('Underskrift',x,y+47,8,normal,grey);
+    const nameLines = wrap(name ? `Namnförtydligande  ${name}` : 'Namnförtydligande __________________________',
+      normal,8,signWidth);
+    nameLines.forEach((row,j) => text(row,x,y+62+j*10,8,normal,grey));
+  });
+
+  const pages = pdf.getPages();
+  pages.forEach((p,i) => {
+    page = p;
+    rule(margin,height-53,contentWidth);
+    text('Elleholms Maskin AB  |  Karlshamnsvägen 329, 294 93 Sölvesborg',margin,height-41,8,normal,grey);
+    text(hazardous ? '6 kap. 19 § avfallsförordningen (2020:614) och NFS 2022:2' : 'Transportdokument',margin,height-29,7,normal,grey);
+    const number = `${i+1} / ${pages.length}`;
+    text(number,width-margin-normal.widthOfTextAtSize(number,8),height-41,8,normal,grey);
+  });
+  pdf.setTitle('Transportdokument – Elleholms Maskin AB');
+  pdf.setAuthor('Elleholms Maskin AB');
   return pdf.save();
 }

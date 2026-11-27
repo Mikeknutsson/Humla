@@ -4,23 +4,31 @@
   max-width: 1180px;
 }
 
-.form section {
+.form section,
+.fieldset {
   display: grid;
-  gap: 18px;
+  gap: 16px;
+}
+
+.form .first {
+  border-top: 4px solid #f5bd1c;
 }
 
 .form h2,
-.form p,
-.form dl {
+.form p {
   margin: 0;
 }
 
 .grid,
-.signoffs {
+.split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
   align-items: start;
   gap: 16px;
+}
+
+.split {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
 }
 
 .form label,
@@ -31,11 +39,22 @@
   min-width: 0;
 }
 
-.form input,
+.form input:not([type='checkbox']),
 .form select {
   width: 100%;
   min-width: 0;
   min-height: 42px;
+}
+
+.form .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form .checkbox input {
+  width: auto;
+  min-width: auto;
 }
 
 .address {
@@ -47,39 +66,7 @@
   min-width: 0;
 }
 
-.receiver {
-  display: flex;
-  gap: 12px 26px;
-  flex-wrap: wrap;
-}
-
-.receiver dt,
-.code {
-  font-size: .85rem;
-  font-weight: 600;
-}
-
-.receiver dd {
-  margin: 5px 0 0;
-}
-
-.addRow,
-.actions {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.addRow label {
-  flex: 1 1 260px;
-  max-width: 520px;
-}
-
-.waste,
-.signoff {
-  display: grid;
-  gap: 12px;
+.fieldset {
   min-width: 0;
   margin: 0;
   padding: 14px;
@@ -87,34 +74,24 @@
   border-radius: 10px;
 }
 
-.waste legend,
-.signoff legend {
+.fieldset legend {
   padding: 0 6px;
   font-weight: 700;
 }
 
-.signoffs {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-}
-
-.waste button,
-.signoff button {
+.fieldset button,
+.fit {
   justify-self: start;
 }
 
-.signature {
-  box-sizing: border-box;
-  width: 100%;
-  height: 85px;
-  color: #1f2b5c;
-  background: white;
-  border: 1px dashed #96a1b3;
-  border-radius: 5px;
-  touch-action: none;
-  cursor: crosshair;
+.adr {
+  max-width: 440px;
 }
 
 .actions {
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   padding-bottom: 24px;
 }
