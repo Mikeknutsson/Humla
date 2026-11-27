@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {Calculator, ExternalLink, Plus, Trash2} from 'lucide-react';
-import {defaultOfferTerms, initialTonPriceDraft, newMaterial, newRound, pukavikStartAddress, zeroStartLeg, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
+import {defaultOfferTerms, initialTonPriceDraft, newMaterial, newRound, pukavikStartAddress, quickReferenceLoad, zeroStartLeg, type calculateTonPrices, type Material, type Round, type TonPriceDraft, type Vehicle} from '@/lib/hub/ton-price';
 import {GoogleAddressField, googleRoadEstimate} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {materialPriceBankPath} from '@/app/_components/kpi-transport-administration-nav';
@@ -205,11 +205,11 @@ function projectQuoteGroups(revision?: OfferRevision): ProjectQuoteGroup[] {
   return [{destination:{address},settings:{}}];
 }
 
-function ProjectQuote({group, sites, rates, workifyPrices, draft, date, revision, refresh, onApply, onUseReference, onQuoteChange}: {
+function ProjectQuote({group, sites, rates, workifyPrices, draft, date, revision, refresh, onApply, onQuoteChange}: {
   group: ProjectQuoteGroup; sites: MaterialSite[]; rates: SiteRate[]; workifyPrices: WorkifyOfferPrice[];
   draft: TonPriceDraft; date: string; revision?: OfferRevision; refresh: number;
-  onApply: Parameters<typeof QuarryComparisonWorkspace>[0]['onApply'];
-  onUseReference: () => void; onQuoteChange: (kind: SiteRate['kind'], state: QuarryJobState) => void;
+  onApply?: Parameters<typeof QuarryComparisonWorkspace>[0]['onApply'];
+  onQuoteChange: (kind: SiteRate['kind'], state: QuarryJobState) => void;
 }) {
   const [destination,setDestination] = useState(group.destination);
   const [committed,setCommitted] = useState(group.destination.address);
@@ -237,7 +237,7 @@ function ProjectQuote({group, sites, rates, workifyPrices, draft, date, revision
       {jobKinds.map(kind => <QuarryComparisonWorkspace key={kind} kind={kind} sites={sites} rates={rates}
         workifyPrices={workifyPrices} draft={draft} date={date} revision={revision} saved={group.settings[kind]}
         destination={destination} addressConfirmed={addressConfirmed} refresh={refresh}
-        onQuoteChange={state => onQuoteChange(kind,state)} onApply={onApply} onUseReference={onUseReference}/>)}
+        onQuoteChange={state => onQuoteChange(kind,state)} onApply={onApply}/>)}
     </div>
   </section>;
 }
@@ -255,6 +255,8 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
       customer:revision?.customer ?? '',project:revision?.project ?? ''};
   });
   const canSave = !revision || Boolean(snapshot) || reviewed;
+  const referenceLoad = quickReferenceLoad(draft);
+  const quickDraft: TonPriceDraft = referenceLoad === null ? draft : {...draft,profile:'reference'};
   const quoted = revision?.materials ?? [];
   const [groups] = useState(() => projectQuoteGroups(revision));
   const [jobStates,setJobStates] = useState<Record<string,QuarryJobState>>({});
@@ -375,10 +377,16 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
       </>}
     </section>}
     {bank && snapshot?.mode !== 'advanced' && <>
+      {referenceLoad !== null && <section className="panel" aria-label="Viktunderlag för tonpriset">
+        <p role="status">Viktuppgifter för {draft.profile.toUpperCase()} saknas eller är ogiltiga. Tonpriset som visas är preliminärt och använder Excel-last på {referenceLoad.toLocaleString('sv-SE')} ton för bil + kärra.</p>
+        <button type="button" className="secondary" onClick={() => change({profile:'reference'})}>
+          Använd Excel-last i offerten
+        </button>
+      </section>}
       {groups.map((group,index) => <ProjectQuote key={index} group={group} sites={bank.sites} rates={activeRates}
-        workifyPrices={workifyPrices} draft={draft} date={draft.priceDate || today} revision={revision} refresh={refresh}
+        workifyPrices={workifyPrices} draft={quickDraft} date={draft.priceDate || today} revision={revision} refresh={refresh}
         onQuoteChange={(kind,state) => setJobStates(previous => ({...previous,[index+'-'+kind]:state}))}
-        onApply={useCheapest} onUseReference={() => change({profile:'reference'})}/>)}
+        onApply={referenceLoad === null ? useCheapest : undefined}/>)}
       {groups.map((_,index) => {
         const delivery = jobStates[index+'-purchase']?.comparison;
         const tipping = jobStates[index+'-tip']?.comparison;
@@ -400,8 +408,9 @@ export default function TonPriceWorkspace({draftKey, bank, workifyPrices, today,
             </div>
           </details>
           {jobs.length !== included.length && <p role="status">Kontrollera att alla uppdrag med valda material har ett offertpris.</p>}
+          {referenceLoad !== null && <p>Välj Excel-last ovan eller fyll i lastvikt och totalvikt innan du sparar offerten.</p>}
           <OfferDownloads key={JSON.stringify([jobs,draft.customer,draft.project,draft.validity,draft.terms,draft.priceDate])}
-            disabled={!jobs.length || jobs.length !== included.length || !canSave} supplement={Boolean(revision)}
+            disabled={!jobs.length || jobs.length !== included.length || !canSave || referenceLoad !== null} supplement={Boolean(revision)}
             onRetry={() => setRefresh(value => value+1)}
             create={() => downloadQuarryOffer(draft.priceDate || today,jobs,draft,
               {customer:draft.customer,project:draft.project,validity:draft.validity,terms:draft.terms},revision?.id)}/>

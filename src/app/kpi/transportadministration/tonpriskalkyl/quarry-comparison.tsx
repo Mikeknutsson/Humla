@@ -73,11 +73,10 @@ export function ReturnLoadFields({value, rates, onChange}: {
 export type RatedMaterial = {material: string; option: Option};
 export type QuarryJobState = {comparison?: RatedMaterial[];selected: boolean; job?: QuarryOfferJob};
 
-export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onUseReference,
+export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply,
   revision, saved, kind, destination, addressConfirmed, refresh, onQuoteChange}: {
-  sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
+  sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply?:(options: Option[]) => void;
   workifyPrices: WorkifyOfferPrice[];
-  onUseReference: () => void;
   revision?: OfferRevision; saved?: QuarryOfferSettings; kind: SiteRate['kind']; refresh: number;
   destination: ProjectLocation; addressConfirmed: boolean;
   onQuoteChange:(state: QuarryJobState) => void;
@@ -431,8 +430,6 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
           </tr>;
         })}</tbody>
       </table></div>
-      {draft.profile !== 'reference' && result.some(row => !row.options.length && row.problem.includes('viktunderlag')) &&
-        <button type="button" className="secondary" onClick={onUseReference}>Beräkna med Excel-lasten</button>}
       {returnLoad && result.some(row => !row.options.length && row.problem.startsWith('Kontrollera returlastens')) &&
         <button type="button" className="secondary" onClick={() => setReturnLoad(undefined)}>Beräkna utan returlast</button>}
       {result.some(row => row.missing.length > 0) && <p role="status">Visa jämförelsen nedan för att se vilka platser som inte kunde beräknas.</p>}
@@ -458,7 +455,7 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
             <td>{offerMoney.format(option.total)}</td><td>{option.rate.source}</td></tr>)}</tbody></table></div>
       </details>}
     </section>)}
-    {winners.length > 0 && <button type="button" className={styles.primary} disabled={applied === inputKey}
+    {onApply && winners.length > 0 && <button type="button" className={styles.primary} disabled={applied === inputKey}
       onClick={() => {onApply(winners);setApplied(inputKey);}}>{applied === inputKey ? 'Tillagt i kalkylen' : 'Använd valda platser i avancerad kalkyl'}</button>}
     </details>}
   </section>;
