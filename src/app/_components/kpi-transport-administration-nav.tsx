@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {Calculator, ChevronRight, ClipboardCheck, Database, PackageCheck, Scale, Truck} from 'lucide-react';
+import {Calculator, ChevronRight, ClipboardCheck, Database, FileText, PackageCheck, Scale, Truck} from 'lucide-react';
 import styles from './kpi-followup-nav.module.css';
 
 export const settlementPath = '/kpi/transportadministration/avrakningskontroll';
@@ -12,15 +12,21 @@ export const materialPriceBankPath = '/kpi/transportadministration/prisbank';
 
 export const deliveryCheckPath = '/kpi/transportadministration/leveranskontroll';
 
-export type TransportAdministrationPage = boolean | 'material' | 'ton-price' | 'price-bank' | 'delivery-check';
+export const transportDocumentPath = '/kpi/transportadministration/transportdokument';
+
+export type TransportAdministrationPage = boolean | 'material' | 'ton-price' | 'price-bank' | 'delivery-check' | 'transport-document';
 
 export function KpiTransportAdministrationNav({active = false, onNavigate}: {
   active?: TransportAdministrationPage;
   onNavigate?: () => void;
 }) {
   return <details className={styles.followup} open={!!active}>
-    <summary><Truck size={18}/>Transportadministration<ChevronRight size={16} className={styles.chevron}/></summary>
+    <summary><Truck size={18}/>Transportledning<ChevronRight size={16} className={styles.chevron}/></summary>
     <div className={styles.links}>
+      <Link href={transportDocumentPath} prefetch={false} className={active === 'transport-document' ? 'active' : undefined}
+        aria-current={active === 'transport-document' ? 'page' : undefined} onClick={onNavigate}>
+        <FileText size={16}/>Transportdokument
+      </Link>
       <Link href={settlementPath} prefetch={false} className={active === true ? 'active' : undefined}
         aria-current={active === true ? 'page' : undefined} onClick={onNavigate}>
         <ClipboardCheck size={16}/>Avräkningskontroll

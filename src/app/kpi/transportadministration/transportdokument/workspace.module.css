@@ -1,0 +1,120 @@
+.form {
+  display: grid;
+  gap: 16px;
+  max-width: 1180px;
+}
+
+.form section {
+  display: grid;
+  gap: 18px;
+}
+
+.form h2,
+.form p,
+.form dl {
+  margin: 0;
+}
+
+.grid,
+.signoffs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.form label,
+.stack,
+.address {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.form input,
+.form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+}
+
+.address {
+  justify-items: start;
+}
+
+.address > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.receiver {
+  display: flex;
+  gap: 12px 26px;
+  flex-wrap: wrap;
+}
+
+.receiver dt,
+.code {
+  font-size: .85rem;
+  font-weight: 600;
+}
+
+.receiver dd {
+  margin: 5px 0 0;
+}
+
+.addRow,
+.actions {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.addRow label {
+  flex: 1 1 260px;
+  max-width: 520px;
+}
+
+.waste,
+.signoff {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line, #d1d5db);
+  border-radius: 10px;
+}
+
+.waste legend,
+.signoff legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.signoffs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}
+
+.waste button,
+.signoff button {
+  justify-self: start;
+}
+
+.signature {
+  box-sizing: border-box;
+  width: 100%;
+  height: 85px;
+  color: #1f2b5c;
+  background: white;
+  border: 1px dashed #96a1b3;
+  border-radius: 5px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.actions {
+  align-items: center;
+  padding-bottom: 24px;
+}
