@@ -3,29 +3,21 @@ import type {transportDocumentAccess} from './access';
 import type {HubChoice} from './fields';
 
 type Access = Extract<Awaited<ReturnType<typeof transportDocumentAccess>>, {status:'ready'}>;
-type HubObject = {id: string; data: Record<string,unknown> | null};
-
-function field(data: HubObject['data'], ...keys: string[]) {
-  for (const key of keys) {
-    const value = data?.[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number') return String(value);
-  }
-  return '';
-}
+type Truck = {id: string; registration: string | null; name: string | null};
 
 async function truckObjects({db,tenantId}: Access) {
-  const result: HubObject[] = [];
+  const result: Truck[] = [];
   const batch = 500;
   for (let offset = 0; ; offset += batch) {
-    const response = await db.from('hub_objects').select('id,data').eq('tenant_id',tenantId)
-      .eq('object_type','Vehicle').eq('status','active').eq('data->>vehicle_type','Lastbil').order('id').range(offset,offset+batch-1);
+    const response = await db.rpc('hub_transport_document_trucks',{p_tenant:tenantId})
+      .order('id').range(offset,offset+batch-1);
     if (response.error) {
       console.error('Transportdokument could not read trucks',response.error.code);
       return {result,failed:true};
     }
-    result.push(...response.data);
-    if (response.data.length < batch) return {result,failed:false};
+    const page = (response.data ?? []) as Truck[];
+    result.push(...page);
+    if (page.length < batch) return {result,failed:false};
   }
 }
 
@@ -47,10 +39,9 @@ async function workifyCustomers({db,tenantId}: Access) {
 
 export async function readTransportDocumentChoices(access: Access) {
   const [vehicleData,customerData] = await Promise.all([truckObjects(access),workifyCustomers(access)]);
-  const vehicles = vehicleData.result.flatMap(({id,data}): HubChoice[] => {
-    const value = field(data,'registration_number').replace(/[\s-]/g,'').toUpperCase();
+  const vehicles = vehicleData.result.flatMap(({id,registration,name}): HubChoice[] => {
+    const value = (registration ?? '').replace(/[\s-]/g,'').toUpperCase();
     if (!/^[A-Z]{3}\d{2}[\dA-Z]$/.test(value)) return [];
-    const name = field(data,'vehicle_name','name','description');
     return [{id,value,label:[value,name && name !== value ? name : ''].filter(Boolean).join(' – ')}];
   }).sort((a,b) => a.label.localeCompare(b.label,'sv'));
   return {vehicles,customers:customerData.names,customersFailed:customerData.failed,vehiclesFailed:vehicleData.failed};
