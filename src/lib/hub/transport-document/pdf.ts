@@ -122,7 +122,7 @@ export async function renderTransportDocument(fields: DocumentFields) {
   });
 
   newPage(true);
-  const references: [string,string][] = [['Projekt',fields.project],['Fordon',fields.registration],
+  const references: [string,string][] = [['Ordernummer Workify',fields.workifyOrderNumber],['Fordon',fields.registration],
     ['Inleveransnummer',fields.deliveryNumber],['ADR-handlingens referens',fields.adrReference]];
   const visibleReferences = references.filter(([,value]) => value);
   if (visibleReferences.length) {

@@ -32,7 +32,6 @@
 }
 
 .form label,
-.stack,
 .address {
   display: grid;
   gap: 6px;
@@ -94,4 +93,81 @@
   flex-wrap: wrap;
   gap: 12px;
   padding-bottom: 24px;
+}
+
+.picker {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.searchControl {
+  position: relative;
+  display: flex;
+}
+
+.searchControl input {
+  padding-right: 40px;
+}
+
+.searchControl > button {
+  position: absolute;
+  inset: 1px 1px 1px auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+.searchOptions {
+  position: absolute;
+  z-index: 12;
+  top: 100%;
+  inset-inline: 0;
+  max-height: 270px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-top: 4px;
+  border: 1px solid #ccd2dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #202630;
+  box-shadow: 0 6px 20px #1a233326;
+}
+
+.searchOptions button {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: inherit;
+  box-shadow: none;
+  text-align: left;
+  white-space: normal;
+}
+
+.searchOptions button:hover,
+.searchOptions button[aria-selected='true'] {
+  background: #fff0bf;
+}
+
+.optionGroup {
+  position: sticky;
+  top: 0;
+  padding: 5px 11px;
+  background: #f3f4f6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.searchOptions p {
+  padding: 9px 11px;
 }

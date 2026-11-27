@@ -70,7 +70,8 @@ export function parseTransportDocument(value: unknown): DocumentFields {
   const consignor = data.consignor === null ? null : party(data.consignor,'lämnaren');
   return {
     date,consignor,carrier:party(data.carrier,'transportören'),receiver:party(data.receiver,'mottagaren'),
-    project:text(data.project,95,'projektet'),registration:text(data.registration,24,'registreringsnumret').toUpperCase(),
+    workifyOrderNumber:text(data.workifyOrderNumber ?? '',50,'Workifys ordernummer'),
+    registration:text(data.registration,24,'registreringsnumret').toUpperCase(),
     origin:location(data.origin,'hämtplatsen'),destination:location(data.destination,'den slutliga mottagningsplatsen'),
     deliveryNumber:text(data.deliveryNumber,50,'inleveransnumret'),adrReference:text(data.adrReference,70,'ADR-referensen'),
     waste:data.waste.map((row,index) => wasteItem(row,date,index)),carrierSigner:text(data.carrierSigner,100,'transportörens namnförtydligande'),

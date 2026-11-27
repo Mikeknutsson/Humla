@@ -1,50 +1,38 @@
 'use client';
 
-import {useRef, useState, type FormEvent} from 'react';
+import {useMemo, useRef, useState, type FormEvent} from 'react';
 import {Download, Plus, Trash2} from 'lucide-react';
 import {GoogleAddressField, geocodeSwedishAddress, reverseGeocodePoint, type Point} from '@/app/_components/google-address-field';
 import {useGoogleMapsKey} from '@/app/_components/google-maps-provider';
 import {elleholms, emptyParty, emptyLocation, emptyWaste, municipalityFor, municipalityOptions, receiverOptions,
   type DocumentFields, type HubChoice, type Location, type Party, type Waste} from '@/lib/hub/transport-document/fields';
-import {suggestedWaste, wasteCodeAt} from '@/lib/hub/transport-document/waste-codes';
+import {wasteChoices} from '@/lib/hub/transport-document/waste-options';
+import {SearchField, type Choice} from './search-field';
 import styles from './workspace.module.css';
 
-function HubField({label,options,value,onChange,onSelect,max}: {
-  label: string; options: HubChoice[]; value: string; onChange: (value: string) => void;
-  onSelect: (option: HubChoice) => void; max: number;
+function PartyFields({party,onChange,choices,onSelect}: {
+  party: Party; onChange: (party: Party) => void; choices?: readonly Choice[]; onSelect?: (choice: Choice) => void;
 }) {
-  const [selection,setSelection] = useState('');
-  return <div className={styles.stack}>
-    {options.length > 0 && <label>{label} från Humla
-      <select value={selection} onChange={event => {
-        const id = event.target.value;
-        setSelection(id);
-        const choice = options.find(option => option.id === id);
-        if (choice) onSelect(choice);
-      }}>
-        <option value="">Välj eller fyll i manuellt</option>
-        {options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-      </select>
-    </label>}
-    <label>{label}
-      <input value={value} maxLength={max} onChange={event => {
-        setSelection('');
-        onChange(event.target.value);
-      }}/>
-    </label>
-  </div>;
-}
-
-function PartyFields({party,onChange}: {party: Party; onChange: (party: Party) => void}) {
   return <div className={styles.grid}>
-    <label>Namn eller företagsnamn<input value={party.name} maxLength={110} required
-      onChange={event => onChange({...party,name:event.target.value})}/></label>
+    {choices?.length ? <SearchField label="Namn eller företagsnamn" value={party.name} choices={choices}
+      placeholder="Sök eller skriv företagsnamn" maxLength={110} required
+      onChange={name => onChange({...party,name})}
+      onSelect={onSelect ?? (choice => onChange({...party,name:choice.value}))}/> :
+      <label>Namn eller företagsnamn<input value={party.name} maxLength={110} required
+        onChange={event => onChange({...party,name:event.target.value})}/></label>}
     <label>Organisations-, person- eller skatteregistreringsnummer<input value={party.organisation} maxLength={30} required
       onChange={event => onChange({...party,organisation:event.target.value})}/></label>
     <label>Postadress<input value={party.address} maxLength={220} required
       onChange={event => onChange({...party,address:event.target.value})}/></label>
   </div>;
 }
+
+const municipalities = municipalityOptions.map(([code,name]) => ({value:code,label:`${name} (${code})`}));
+const municipalityLabels = new Map(municipalities.map(({value,label}) => [value,label]));
+const facilities = receiverOptions.map(receiver => ({
+  value:receiver.name,label:receiver.name,keywords:`${receiver.address} ${receiver.organisation}`,
+}));
+const packaging = ['Flak','Container','Storsäck','Säck','Fat','Dunk','Pall','Löst'].map(value => ({value,label:value}));
 
 function LocationFields({label,location,onChange,onMunicipality}: {
   label: string; location: Location; onChange: (location: Location) => void;
@@ -89,43 +77,42 @@ function LocationFields({label,location,onChange,onMunicipality}: {
         onClick={() => void lookup(location.value,selected?.point)}>Hämta kommunkod</button>}
       {status?.value === location.value && <small role="status">{status.text}</small>}
     </div>
-    <label>Kommun
-      <select value={location.municipality} onChange={event => {
+    <SearchField label="Kommun" choices={[{value:'',label:'Ingen kommun vald'},...municipalities]}
+      value={municipalityLabels.get(location.municipality) ?? ''} placeholder="Sök kommun eller kommunkod"
+      onSelect={({value}) => {
         sequence.current += 1;
         setStatus(undefined);
-        onChange({...location,municipality:event.target.value});
-      }}>
-        <option value="">Välj kommun vid behov</option>
-        {municipalityOptions.map(([code,name]) => <option key={code} value={code}>{name} ({code})</option>)}
-      </select>
-    </label>
+        onChange({...location,municipality:value});
+      }}/>
   </fieldset>;
 }
 
-const packagingOptions = ['Flak','Container','Storsäck','Säck','Fat','Dunk','Pall','Löst'];
+type WasteChoice = ReturnType<typeof wasteChoices>[number];
 
-function WasteFields({row,index,date,onChange,onRemove}: {row: Waste; index: number; date: string; onChange: (row: Waste) => void; onRemove?: () => void}) {
-  const validated = date && wasteCodeAt(row.code,date);
+function WasteFields({row,index,choices,onChange,onRemove}: {
+  row: Waste; index: number; choices: WasteChoice[]; onChange: (row: Waste) => void; onRemove?: () => void;
+}) {
   return <fieldset className={styles.fieldset}>
     <legend>Avfallsrad {index+1}</legend>
     <div className={styles.grid}>
-      <label>Avfallskod<input value={row.code} maxLength={15} list="transport-waste-codes" required
-        onChange={event => {
-          const code = event.target.value;
-          const suggestion = suggestedWaste.find(([key]) => key === code);
-          const previousSuggestion = suggestedWaste.find(([key]) => key === row.code);
-          const useSuggestion = !row.name || row.name === previousSuggestion?.[1];
-          onChange({...row,code,name:useSuggestion ? suggestion?.[1] ?? '' : row.name});
-        }}/>
-        {row.code && date && !validated && <small>Kontrollera koden mot avfallsförteckningen för transportdatumet.</small>}
-      </label>
+      <div>
+        <SearchField label="Avfallskod" value={row.code} choices={choices} required
+          placeholder="Sök avfallskod eller material" onSelect={choice => {
+            const oldName = choices.find(option => option.value === row.code)?.name;
+            onChange({...row,code:choice.value,name:!row.name || row.name === oldName ? choice.name : row.name});
+          }}/>
+        {row.code && !choices.some(choice => choice.value === row.code) &&
+          <small>Välj en avfallskod som gäller på transportdatumet.</small>}
+      </div>
       <label>Benämning<input value={row.name} maxLength={180} required onChange={event => onChange({...row,name:event.target.value})}/></label>
       <label>Uppskattad vikt (kg)<input value={row.estimatedKg} inputMode="decimal" maxLength={18}
         onChange={event => onChange({...row,estimatedKg:event.target.value})}/></label>
       <label>Invägt kg<input value={row.weighedKg} inputMode="decimal" maxLength={18}
         onChange={event => onChange({...row,weighedKg:event.target.value})}/></label>
       <label>Antal kollin<input value={row.packages} inputMode="numeric" maxLength={10} onChange={event => onChange({...row,packages:event.target.value})}/></label>
-      <label>Emballage<input value={row.packaging} list="transport-packaging" maxLength={45} onChange={event => onChange({...row,packaging:event.target.value})}/></label>
+      <SearchField label="Emballage" value={row.packaging} choices={packaging} maxLength={45}
+        onChange={value => onChange({...row,packaging:value})}
+        onSelect={({value}) => onChange({...row,packaging:value})}/>
     </div>
     {onRemove && <button type="button" className="secondary" onClick={onRemove} aria-label={`Ta bort avfallsrad ${index+1}`}>
       <Trash2 size={15}/> Ta bort
@@ -133,18 +120,21 @@ function WasteFields({row,index,date,onChange,onRemove}: {row: Waste; index: num
   </fieldset>;
 }
 
-export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: {
-  projects: HubChoice[]; vehicles: HubChoice[]; profileName: string; today: string; failed: boolean;
+export function DocumentWorkspace({vehicles,customers,customersFailed,profileName,today,vehiclesFailed}: {
+  vehicles: HubChoice[]; customers: string[]; customersFailed: boolean;
+  profileName: string; today: string; vehiclesFailed: boolean;
 }) {
   const [form,setForm] = useState<DocumentFields>(() => ({
-    date:today,project:'',registration:'',carrier:elleholms,consignor:emptyParty,receiver:emptyParty,
+    date:today,workifyOrderNumber:'',registration:'',carrier:elleholms,consignor:emptyParty,receiver:emptyParty,
     origin:emptyLocation,destination:emptyLocation,deliveryNumber:'',adrReference:'',waste:[emptyWaste],
     carrierSigner:'',consignorSigner:'',
   }));
-  const [receiverId,setReceiverId] = useState('');
+  const customerChoices = useMemo(() => customers.map(name => ({value:name,label:name})),[customers]);
+  const codes = useMemo(() => wasteChoices(form.date),[form.date]);
   const [exporting,setExporting] = useState(false);
   const [feedback,setFeedback] = useState<{text: string; error?: boolean}>();
   const lastConsignor = useRef<Party>(emptyParty);
+  const selectedCustomer = useRef('');
   const update = <K extends keyof DocumentFields>(key: K, value: DocumentFields[K]) =>
     setForm(draft => ({...draft,[key]:value}));
   const setMunicipality = (field: 'origin' | 'destination') => (value: string, code: string) => setForm(draft =>
@@ -182,13 +172,21 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
   return <form className={`content ${styles.form}`} onSubmit={download}>
     <section className={`panel ${styles.first}`}>
       <h2>Körning</h2>
-      {failed && <p role="status">Alla projekt eller fordon kunde inte hämtas från Humla. Du kan fylla i dem manuellt.</p>}
+      {vehiclesFailed && <p role="status">Lastbilslistan kunde inte hämtas fullständigt. Du kan skriva registreringsnumret manuellt.</p>}
       <div className={styles.grid}>
         <label>Transportdatum<input type="date" value={form.date} required onChange={event => update('date',event.target.value)}/></label>
-        <HubField label="Projekt" max={95} value={form.project} options={projects} onChange={value => update('project',value)}
-          onSelect={choice => update('project',choice.value)}/>
-        <HubField label="Registreringsnummer" max={24} value={form.registration} options={vehicles}
-          onChange={value => update('registration',value)} onSelect={choice => update('registration',choice.value)}/>
+        <label>Ordernummer Workify<input value={form.workifyOrderNumber} maxLength={50}
+          onChange={event => {
+            const workifyOrderNumber = event.target.value;
+            setForm(draft => ({
+              ...draft,workifyOrderNumber,
+              deliveryNumber:draft.deliveryNumber && draft.deliveryNumber !== draft.workifyOrderNumber
+                ? draft.deliveryNumber : workifyOrderNumber,
+            }));
+          }}/></label>
+        <SearchField label="Registreringsnummer" maxLength={24} value={form.registration} choices={vehicles}
+          placeholder="Sök lastbil eller skriv registreringsnummer" onChange={value => update('registration',value)}
+          onSelect={({value}) => update('registration',value)}/>
       </div>
     </section>
 
@@ -204,28 +202,28 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
           if (form.consignor) lastConsignor.current = form.consignor;
           update('consignor',event.target.checked ? null : lastConsignor.current);
         }}/> Ingen separat lämnare, till exempel vid egen transport av eget avfall</label>
-        {form.consignor && <PartyFields party={form.consignor} onChange={value => update('consignor',value)}/>}
+        {form.consignor && <>
+          {customersFailed && <p role="status">Kundlistan från Workify kunde inte hämtas fullständigt. Du kan fylla i lämnaren manuellt.</p>}
+          <PartyFields party={form.consignor} choices={customerChoices} onChange={value => update('consignor',value)}
+            onSelect={({value}) => {
+              const sameCustomer = selectedCustomer.current === value;
+              selectedCustomer.current = value;
+              if (form.consignor && sameCustomer) update('consignor',{...form.consignor,name:value});
+              else update('consignor',{...emptyParty,name:value});
+            }}/>
+        </>}
       </fieldset>
       <fieldset className={styles.fieldset}>
         <legend>Slutlig mottagare</legend>
-        <div className={styles.grid}>
-          <label>Välj mottagare
-            <select value={receiverId} onChange={event => {
-              const id = event.target.value;
-              setReceiverId(id);
-              const option = id === '' ? undefined : receiverOptions[Number(id)];
-              if (option) {
-                const {municipality,...receiver} = option;
-                setForm(draft => ({...draft,receiver,destination:{value:receiver.address,municipality}}));
-              }
-            }}>
-              <option value="">Fyll i mottagaren själv</option>
-              {receiverOptions.map((option,index) => <option key={option.name} value={index}>{option.name}</option>)}
-            </select>
-          </label>
-          <label>Inleveransnummer<input value={form.deliveryNumber} maxLength={50} onChange={event => update('deliveryNumber',event.target.value)}/></label>
-        </div>
-        <PartyFields party={form.receiver} onChange={value => {setReceiverId('');update('receiver',value);}}/>
+        <PartyFields party={form.receiver} choices={facilities} onChange={value => update('receiver',value)}
+          onSelect={({value}) => {
+            const option = receiverOptions.find(receiver => receiver.name === value);
+            if (!option) return;
+            const {municipality,...receiver} = option;
+            setForm(draft => ({...draft,receiver,destination:{value:receiver.address,municipality}}));
+          }}/>
+        <label className={styles.adr}>Inleveransnummer<input value={form.deliveryNumber} maxLength={50}
+          onChange={event => update('deliveryNumber',event.target.value)}/></label>
       </fieldset>
     </section>
 
@@ -241,9 +239,7 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
     <section className="panel">
       <h2>Avfall som transporteras</h2>
       <p>Ange uppskattad eller invägd vikt för varje avfallsrad. Du kan fylla i båda om vikterna är kända.</p>
-      <datalist id="transport-packaging">{packagingOptions.map(option => <option value={option} key={option}/>)}</datalist>
-      <datalist id="transport-waste-codes">{suggestedWaste.map(([code,name]) => <option value={code} key={code}>{name}</option>)}</datalist>
-      {form.waste.map((row,index) => <WasteFields key={index} row={row} index={index} date={form.date}
+      {form.waste.map((row,index) => <WasteFields key={index} row={row} index={index} choices={codes}
         onChange={value => update('waste',form.waste.map((item,i) => i === index ? value : item))}
         onRemove={form.waste.length > 1 ? () => update('waste',form.waste.filter((_,i) => i !== index)) : undefined}/>)}
       <button type="button" className={`secondary ${styles.fit}`} disabled={form.waste.length >= 100}

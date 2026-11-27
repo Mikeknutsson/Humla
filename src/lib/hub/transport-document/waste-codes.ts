@@ -43,13 +43,9 @@ export function wasteCodeAt(code: string, date: string) {
   }
 }
 
-export const suggestedWaste = [
-  ['17 05 03*','Jord och sten med farliga ämnen'],
-  ['17 05 04','Övrig jord och sten'],
-  ['17 06 05*','Byggmaterial med asbest'],
-  ['17 02 04*','Trä, glas eller plast med farliga ämnen'],
-  ['17 03 01*','Bitumenblandning med stenkolstjära'],
-  ['17 09 02*','Bygg- och rivningsavfall med PCB'],
-  ['15 02 02*','Förorenade absorbenter och torkdukar'],
-  ['20 01 21*','Lysrör och annat kvicksilverhaltigt avfall'],
-] as const;
+export function availableWasteCodes(date: string) {
+  const active = date >= '2026-12-09'
+    ? [...codes].filter(code => !removed.has(code)).concat([...added])
+    : [...codes];
+  return active.sort().map(code => code.replace(/^(\d{2})(\d{2})/,'$1 $2 '));
+}
