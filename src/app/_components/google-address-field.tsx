@@ -415,7 +415,7 @@ export function GoogleAddressField({label, value, placeId, point, onChange, onCo
   }
   return <div className={className}>
     {autocomplete && mapsKey && !searchUnavailable ? <InlinePlaceSearch mapsKey={mapsKey} label={label} value={value} placeholder={placeholder}
-      onChange={(address,id,point) => {if (address.trim()) setOpen(true);onChange(address,id,point);}} onUnavailable={() => setSearchUnavailable(true)}/> :
+      onChange={onChange} onUnavailable={() => setSearchUnavailable(true)}/> :
     <label>{label}<input value={value} placeholder={placeholder} maxLength={240} onBlur={event => onCommit?.(event.currentTarget.value)}
       onKeyDown={event => {
         if (event.key === 'Enter' && onCommit) {
@@ -423,8 +423,7 @@ export function GoogleAddressField({label, value, placeId, point, onChange, onCo
           onCommit(event.currentTarget.value);
         }
       }} onChange={event => {
-      if (autocomplete && event.target.value.trim()) setOpen(true);
-      else if (!autocomplete) setOpen(false);
+      if (!autocomplete) setOpen(false);
       onChange(event.target.value);
     }}/></label>}
     {searchUnavailable && <small role="status">Adressförslagen är tillfälligt otillgängliga. Skriv in adressen eller välj på kartan.</small>}

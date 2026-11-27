@@ -20,6 +20,20 @@ export const testProjectAddress = 'Exempelvägen 1, Ronneby (fiktiv testadress)'
 const emptyLeg: Leg = {miles:'',driveMinutes:''};
 const directions = [['outbound','Till projektet'],['inbound','Tillbaka till täkten']] as const;
 
+const routeTimeoutMs = 10_000;
+
+async function withRouteTimeout<T>(request: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_,reject) => {
+      timer = setTimeout(() => reject(new Error('Google Routes timeout')),routeTimeoutMs);
+    });
+    return await Promise.race([request,timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function directionsUrl(site: MaterialSite, destination: ProjectLocation, isTipping: boolean) {
   const endpoint = destination.point ? `${destination.point.lat},${destination.point.lng}` : destination.address;
   const address = site.address || site.name;
@@ -60,12 +74,12 @@ export type RatedMaterial = {material: string; option: Option};
 export type QuarryJobState = {comparison?: RatedMaterial[];selected: boolean; job?: QuarryOfferJob};
 
 export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, draft, date, onApply, onUseReference,
-  revision, saved, kind, destination, addressConfirmed, onConfirmAddress, refresh, onQuoteChange}: {
+  revision, saved, kind, destination, addressConfirmed, refresh, onQuoteChange}: {
   sites: MaterialSite[]; rates: SiteRate[]; draft: TonPriceDraft; date: string; onApply:(options: Option[]) => void;
   workifyPrices: WorkifyOfferPrice[];
   onUseReference: () => void;
   revision?: OfferRevision; saved?: QuarryOfferSettings; kind: SiteRate['kind']; refresh: number;
-  destination: ProjectLocation; addressConfirmed: boolean; onConfirmAddress: () => void;
+  destination: ProjectLocation; addressConfirmed: boolean;
   onQuoteChange:(state: QuarryJobState) => void;
 }) {
   const mapsKey = useGoogleMapsKey();
@@ -184,11 +198,11 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
           for (let start = 0; start < entries.length; start += 49) {
             const batch = entries.slice(start,start+49);
             const quarries = batch.map(([, quarry]) => quarry);
-            const matrix = direction === 'outbound' ? googleRouteMatrix(mapsKey,quarries,destination) :
-              googleReturnRouteMatrix(mapsKey,destination,quarries);
+            const matrix = withRouteTimeout(direction === 'outbound' ? googleRouteMatrix(mapsKey,quarries,destination) :
+              googleReturnRouteMatrix(mapsKey,destination,quarries));
             batch.forEach(([route, quarry], index) => {
-              const fallback = () => direction === 'outbound' ? googleRoadEstimate(mapsKey,quarry,destination) :
-                googleRoadEstimate(mapsKey,destination,quarry);
+              const fallback = () => withRouteTimeout(direction === 'outbound' ? googleRoadEstimate(mapsKey,quarry,destination) :
+                googleRoadEstimate(mapsKey,destination,quarry));
               routes.current.set(route,matrix.then(estimates => estimates[index] ?? fallback(),fallback));
             });
           }
@@ -217,9 +231,9 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
         const entries = [...pending];
         for (let index = 0; index < entries.length; index += 49) {
           const batch = entries.slice(index,index+49);
-          const matrix = googleReturnRouteMatrix(mapsKey,depotLocation,batch.map(([,target]) => target));
+          const matrix = withRouteTimeout(googleReturnRouteMatrix(mapsKey,depotLocation,batch.map(([,target]) => target)));
           batch.forEach(([route,target],position) => {
-            const fallback = () => googleRoadEstimate(mapsKey,depotLocation,target);
+            const fallback = () => withRouteTimeout(googleRoadEstimate(mapsKey,depotLocation,target));
             routes.current.set(route,matrix.then(estimates => estimates[position] ?? fallback(),fallback));
           });
         }
@@ -346,14 +360,12 @@ export default function QuarryComparisonWorkspace({sites, rates, workifyPrices, 
           </div>;
         })}
       </details>}
-      {hasAddress && materials.length > 0 && routesAvailable && !addressConfirmed &&
-        <button type="button" className={styles.primary} onClick={onConfirmAddress}>Beräkna pris</button>}
     </fieldset>
     <div className={styles.progress} role="status">
       {!materials.length ? null : !hasAddress ? 'Ange projektadress för att beräkna priset.' :
         !candidates.length ? 'Prisbanken saknar en plats med tonpris för de valda materialen på prisdatumet.' :
         !routesAvailable ? 'Ange körsträcka för minst en plats för att räkna fram priset.' :
-        !addressConfirmed ? 'Välj ett adressförslag, sätt en kartnål eller klicka på Beräkna pris.' :
+        !addressConfirmed ? 'Bekräfta projektadressen med Beräkna pris ovan eller välj ett adressförslag.' :
         busy ? (isTipping ? 'Jämför tippavgift och frakt med bil + kärra…' : 'Jämför materialpris och frakt med bil + kärra…') : null}
     </div>
     {current?.error && <div className={styles.actions}><p role="alert">{current.error}</p>
