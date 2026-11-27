@@ -10,7 +10,22 @@ import styles from './workspace.module.css';
 
 const decimals = new Intl.NumberFormat('sv-SE',{maximumFractionDigits:2});
 
-export default function CombinedTrip({delivery,tipping,hourly}: {delivery: RatedMaterial[]; tipping: RatedMaterial[]; hourly: number}) {
+export default function CombinedTripSection({delivery,tipping,hourly}: {
+  delivery?: RatedMaterial[]; tipping?: RatedMaterial[]; hourly:number;
+}) {
+  const [open,setOpen] = useState(false);
+  const ready = delivery?.length && tipping?.length;
+
+  if (!open && !ready) return null;
+  return <details className={styles.card} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>Jämför samkörning med bil + kärra</summary>
+    {ready
+      ? <CombinedTrip key={JSON.stringify([delivery,tipping])} delivery={delivery} tipping={tipping} hourly={hourly}/>
+      : <p role="status">Samkörning kräver ett beräknat alternativ för både leverans och bortkörning.</p>}
+  </details>;
+}
+
+function CombinedTrip({delivery,tipping,hourly}: {delivery: RatedMaterial[]; tipping: RatedMaterial[]; hourly: number}) {
   const [source,setSource] = useState(0);
   const [target,setTarget] = useState(0);
   const [route,setRoute] = useState<Awaited<ReturnType<typeof googleRoadEstimate>>>();
@@ -35,8 +50,7 @@ export default function CombinedTrip({delivery,tipping,hourly}: {delivery: Rated
       setBusy(false);
     }
   }
-  return <details className={styles.card}>
-    <summary>Jämför samkörning med bil + kärra</summary>
+  return <>
     <div className={styles.grid}>
       <label className={styles.field}>Leverans
         <select disabled={busy} value={source} onChange={event => {setSource(Number(event.target.value));setRoute(undefined);setError('');}}>
@@ -67,5 +81,5 @@ export default function CombinedTrip({delivery,tipping,hourly}: {delivery: Rated
       <p>Skillnad vid samkörning (separat minus samkörning) {decimals.format(comparison.miles.saved)} mil · {decimals.format(comparison.minutes.saved/60)} timmar · {offerMoney.format(comparison.minutes.saved/60*hourly)} kr.</p>
       <small>Jämförelsen är ett internt kalkylunderlag. Offertpriset bygger på separata körningar.</small>
     </div>}
-  </details>;
+  </>;
 }
