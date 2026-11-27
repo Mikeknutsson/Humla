@@ -120,7 +120,10 @@ function WasteFields({row,index,date,onChange,onRemove}: {row: Waste; index: num
         {row.code && date && !validated && <small>Kontrollera koden mot avfallsförteckningen för transportdatumet.</small>}
       </label>
       <label>Benämning<input value={row.name} maxLength={180} required onChange={event => onChange({...row,name:event.target.value})}/></label>
-      <label>Vikt (kg)<input value={row.kg} inputMode="decimal" maxLength={18} required onChange={event => onChange({...row,kg:event.target.value})}/></label>
+      <label>Uppskattad vikt (kg)<input value={row.estimatedKg} inputMode="decimal" maxLength={18}
+        onChange={event => onChange({...row,estimatedKg:event.target.value})}/></label>
+      <label>Invägt kg<input value={row.weighedKg} inputMode="decimal" maxLength={18}
+        onChange={event => onChange({...row,weighedKg:event.target.value})}/></label>
       <label>Antal kollin<input value={row.packages} inputMode="numeric" maxLength={10} onChange={event => onChange({...row,packages:event.target.value})}/></label>
       <label>Emballage<input value={row.packaging} list="transport-packaging" maxLength={45} onChange={event => onChange({...row,packaging:event.target.value})}/></label>
     </div>
@@ -237,6 +240,7 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
 
     <section className="panel">
       <h2>Avfall som transporteras</h2>
+      <p>Ange uppskattad eller invägd vikt för varje avfallsrad. Du kan fylla i båda om vikterna är kända.</p>
       <datalist id="transport-packaging">{packagingOptions.map(option => <option value={option} key={option}/>)}</datalist>
       <datalist id="transport-waste-codes">{suggestedWaste.map(([code,name]) => <option value={code} key={code}>{name}</option>)}</datalist>
       {form.waste.map((row,index) => <WasteFields key={index} row={row} index={index} date={form.date}
@@ -252,6 +256,7 @@ export function DocumentWorkspace({projects,vehicles,profileName,today,failed}: 
     <section className="panel">
       <h2>Underskrifter före avfärd</h2>
       <p>Skriv ut PDF:en och låt transportören och eventuell lämnare underteckna. Dokumentet ska följa med transporten.</p>
+      <p>PDF:en har även en frivillig mottagningskvittens som fylls i vid lossning.</p>
       <div className={styles.grid}>
         <label>Transportörens namnförtydligande<input value={form.carrierSigner} maxLength={100}
           onChange={event => update('carrierSigner',event.target.value)}/></label>

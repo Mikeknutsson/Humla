@@ -12,7 +12,7 @@ export const receiverOptions = [
 
 export type Party = {name: string; address: string; organisation: string};
 export type Location = {value: string; municipality: string};
-export type Waste = {code: string; name: string; kg: string; packages: string; packaging: string};
+export type Waste = {code: string; name: string; estimatedKg: string; weighedKg: string; packages: string; packaging: string};
 
 export type DocumentFields = {
   date: string;
@@ -39,7 +39,7 @@ export const elleholms: Party = {
 };
 export const emptyParty: Party = {name:'', address:'', organisation:''};
 export const emptyLocation: Location = {value:'', municipality:''};
-export const emptyWaste: Waste = {code:'',name:'',kg:'',packages:'',packaging:''};
+export const emptyWaste: Waste = {code:'',name:'',estimatedKg:'',weighedKg:'',packages:'',packaging:''};
 
 // Codes and names from SCB, Län och kommuner i kodnummerordning 2026.
 export const municipalityOptions = Object.entries(municipalities)

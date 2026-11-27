@@ -39,18 +39,26 @@ function location(value: unknown, label: string): Location {
   return {value:address,municipality};
 }
 
+function weight(value: unknown, label: string) {
+  const kg = text(value,18,label).replace(/ /g,'').replace(',','.');
+  if (kg && (!/^\d{1,10}(?:\.\d{1,3})?$/.test(kg) || Number(kg) <= 0)) {
+    throw new Error(`Ange ${label} i kg.`);
+  }
+  return kg;
+}
+
 function wasteItem(value: unknown, date: string, index: number): Waste {
   const row = record(value);
   const label = `avfallsrad ${index+1}`;
   const code = wasteCodeAt(text(row.code,15,`avfallskoden på ${label}`,true),date);
   if (!code) throw new Error(`Avfallskoden på ${label} saknas i avfallsförteckningen för transportdatumet.`);
-  const kg = text(row.kg,18,`vikten på ${label}`,true).replace(/ /g,'').replace(',','.');
-  if (!/^\d{1,10}(?:\.\d{1,3})?$/.test(kg) || Number(kg) <= 0) {
-    throw new Error(`Ange vikten i kg på ${label}.`);
-  }
+  const estimatedKg = weight(row.estimatedKg ?? '',`uppskattad vikt på ${label}`);
+  const weighedKg = weight(row.weighedKg ?? '',`invägd vikt på ${label}`);
+  if (!estimatedKg && !weighedKg) throw new Error(`Ange uppskattad eller invägd vikt på ${label}.`);
   const packages = text(row.packages,10,`antal kollin på ${label}`);
   if (packages && (!/^\d+$/.test(packages) || Number(packages) <= 0)) throw new Error(`Kontrollera antal kollin på ${label}.`);
-  return {code,kg,packages,name:text(row.name,180,`benämningen på ${label}`,true),packaging:text(row.packaging,45,`emballaget på ${label}`)};
+  return {code,estimatedKg,weighedKg,packages,
+    name:text(row.name,180,`benämningen på ${label}`,true),packaging:text(row.packaging,45,`emballaget på ${label}`)};
 }
 
 export function parseTransportDocument(value: unknown): DocumentFields {
