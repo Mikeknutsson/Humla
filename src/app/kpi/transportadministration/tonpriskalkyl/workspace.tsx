@@ -214,6 +214,8 @@ function ProjectQuote({group, sites, rates, workifyPrices, draft, date, revision
   const [destination,setDestination] = useState(group.destination);
   const [committed,setCommitted] = useState(group.destination.address);
   const mapsKey = useGoogleMapsKey();
+  const hasAddress = Boolean(destination.address.trim());
+  const addressConfirmed = hasAddress && committed === destination.address;
   return <section className={`panel ${styles.quickFlow}`}>
     <h2>Leverans och bortkörning</h2>
     <GoogleAddressField label="Projektadress" value={destination.address} placeId={destination.id} point={destination.point}
@@ -222,6 +224,11 @@ function ProjectQuote({group, sites, rates, workifyPrices, draft, date, revision
         setDestination({address,id,point});
         setCommitted(id || point || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(address) ? address : '');
       }} onCommit={setCommitted}/>
+    {hasAddress && !addressConfirmed && <div className={styles.actions}>
+      <button type="button" className={styles.primary}
+        onClick={() => setCommitted(destination.address)}>Beräkna pris</button>
+      <small>Välj ett adressförslag eller beräkna med den adress du har skrivit.</small>
+    </div>}
     {!mapsKey && !destination.address && <button type="button" className="secondary" onClick={() => {
       setDestination({address:testProjectAddress});
       setCommitted(testProjectAddress);
@@ -229,8 +236,7 @@ function ProjectQuote({group, sites, rates, workifyPrices, draft, date, revision
     <div className={styles.projectMaterials}>
       {jobKinds.map(kind => <QuarryComparisonWorkspace key={kind} kind={kind} sites={sites} rates={rates}
         workifyPrices={workifyPrices} draft={draft} date={date} revision={revision} saved={group.settings[kind]}
-        destination={destination} addressConfirmed={Boolean(destination.address.trim()) && committed === destination.address}
-        onConfirmAddress={() => setCommitted(destination.address)} refresh={refresh}
+        destination={destination} addressConfirmed={addressConfirmed} refresh={refresh}
         onQuoteChange={state => onQuoteChange(kind,state)} onApply={onApply} onUseReference={onUseReference}/>)}
     </div>
   </section>;
